@@ -18,9 +18,11 @@ backend/
 ## 🗄️ Database Tables
 
 ### 1. **users** (user.py)
+
 Main authentication and profile table.
 
 **Columns:**
+
 - `id` - Primary key
 - `full_name` - User's full name
 - `email` - Unique email for login
@@ -28,11 +30,13 @@ Main authentication and profile table.
 - `updated_at` - Timestamp
 
 **Relationships:**
+
 - One user → Many devices (for push notifications)
 - One user → Many relationships (as guardian)
 - One user → Many relationships (as ward/dependent)
 
 **Use Cases:**
+
 - Personal Safety Mode users
 - Guardian Mode users
 - Dependent Mode users (children/elderly)
@@ -40,9 +44,11 @@ Main authentication and profile table.
 ---
 
 ### 2. **devices** (device.py)
+
 Stores FCM/APNs tokens for push notifications.
 
 **Columns:**
+
 - `id` - Primary key
 - `user_id` - Foreign key to users
 - `device_token` - Unique FCM/APNs token
@@ -52,6 +58,7 @@ Stores FCM/APNs tokens for push notifications.
 - `updated_at` - Timestamp
 
 **Use Cases:**
+
 - Send SOS alerts to emergency contacts
 - Guardian notifications for dependent events
 - Geofence entry/exit alerts
@@ -60,9 +67,11 @@ Stores FCM/APNs tokens for push notifications.
 ---
 
 ### 3. **relationships** (guardian.py)
+
 Links guardian users to their wards (dependents).
 
 **Columns:**
+
 - `id` - Primary key
 - `guardian_id` - Foreign key to users (guardian)
 - `ward_id` - Foreign key to users (dependent)
@@ -70,6 +79,7 @@ Links guardian users to their wards (dependents).
 - `updated_at` - Timestamp
 
 **Use Cases:**
+
 - Parent monitoring child's location
 - Family member watching elderly relative
 - Guardian accessing ward's safety data
@@ -78,15 +88,18 @@ Links guardian users to their wards (dependents).
 ---
 
 ### 4. **guardian_circles** (guardian.py)
+
 Groups for organizing multiple guardians.
 
 **Columns:**
+
 - `id` - Primary key
 - `circle_name` - Name of the circle
 - `created_at` - Timestamp
 - `updated_at` - Timestamp
 
 **Use Cases:**
+
 - Family guardian groups
 - Caregiver teams for elderly
 - Multiple guardians collaborating
@@ -94,9 +107,11 @@ Groups for organizing multiple guardians.
 ---
 
 ### 5. **members** (guardian.py)
+
 Membership in guardian circles.
 
 **Columns:**
+
 - `id` - Primary key
 - `guardian_id` - Foreign key to users
 - `circle_id` - Foreign key to guardian_circles
@@ -104,6 +119,7 @@ Membership in guardian circles.
 - `updated_at` - Timestamp
 
 **Use Cases:**
+
 - Add guardians to a circle
 - Multi-guardian collaborative monitoring
 - Team-based dependent care
@@ -171,6 +187,7 @@ User (Ward/Dependent)
 ```
 
 **Example Scenario:**
+
 1. Parent (User #1) creates account
 2. Parent adds device token (Device #1) for notifications
 3. Parent adds child (User #2) as dependent
@@ -186,30 +203,37 @@ User (Ward/Dependent)
 When you're ready to add emergency features, create these models:
 
 ### **SOSEvent**
+
 - Tracks SOS button presses
 - Links to user, location, and trigger type (manual/motion/voice/geofence)
 
 ### **EmergencyContact**
+
 - User's designated emergency contacts
 - Receives notifications on SOS trigger
 
 ### **LocationLog**
+
 - GPS tracking history
 - Offline queue for sync when online
 
 ### **Geofence**
+
 - Geofence boundaries (home, school, etc.)
 - Radius and coordinates
 
 ### **GeofenceEvent**
+
 - Entry/exit events
 - Triggers notifications to guardians
 
 ### **EvidenceMedia**
+
 - Audio/video recordings during SOS
 - Automatic evidence collection
 
 ### **ThreatDetection**
+
 - AI motion detection events
 - Voice activation triggers
 
@@ -225,28 +249,13 @@ from models import User, Device, Relationship
 app = FastAPI()
 
 # Create a user
-@app.post("/users")
-def create_user(name: str, email: str, db: Session = Depends(get_db)):
-    user = User(full_name=name, email=email)
-    db.add(user)
-    db.commit()
-    return {"id": user.id, "email": user.email}
+
 
 # Link device to user
-@app.post("/devices")
-def register_device(user_id: int, token: str, platform: str, db: Session = Depends(get_db)):
-    device = Device(user_id=user_id, device_token=token, platform=platform)
-    db.add(device)
-    db.commit()
-    return {"id": device.id}
+
 
 # Create guardian-ward relationship
-@app.post("/relationships")
-def create_relationship(guardian_id: int, ward_id: int, db: Session = Depends(get_db)):
-    relationship = Relationship(guardian_id=guardian_id, ward_id=ward_id)
-    db.add(relationship)
-    db.commit()
-    return {"id": relationship.id}
+
 ```
 
 ---
@@ -284,5 +293,3 @@ def create_relationship(guardian_id: int, ward_id: int, db: Session = Depends(ge
 - Show how it supports offline-first design
 - Demonstrate guardian protection features
 - Highlight scalability for future features
-
-Good luck with your Final Year Project! 🚀
