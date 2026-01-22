@@ -2,7 +2,6 @@
 Authentication utilities and dependencies
 Password hashing, JWT token generation, and user authentication
 """
-
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
@@ -13,6 +12,8 @@ from sqlalchemy.orm import Session
 import os
 from dotenv import load_dotenv
 from passlib.context import CryptContext
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+import jwt
 import hashlib
 
 load_dotenv()
@@ -29,7 +30,10 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
 # OAuth2 scheme for token extraction
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+# oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+
+bearer_scheme = HTTPBearer()
+
 
 
 def hash_password(password: str) -> str:
@@ -87,33 +91,35 @@ def decode_access_token(token: str) -> Optional[dict]:
         return None
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends()):
-    """
-    Dependency to get current authenticated user from JWT token
-    This will be used in protected endpoints
-    
-    Usage in routes:
-        @app.get("/protected")
-        def protected_route(current_user = Depends(get_current_user)):
-            return {"user": current_user}
-    """
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    
-    payload = decode_access_token(token)
-    if payload is None:
-        raise credentials_exception
-    
-    user_id: int = payload.get("sub")
-    if user_id is None:
-        raise credentials_exception
-    
-    # TODO: Get user from database using user_id
-    # For now, return the payload
-    return payload
+from database.connection import get_db
+from models.user import User
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    db: Session = Depends(get_db)
+):
+    token = credentials.credentials
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = int(payload.get("sub"))
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found"
+            )
+        return user 
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token expired"
+        )
+    except jwt.InvalidTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token"
+        )
+
 
 
 def generate_verification_code() -> str:
