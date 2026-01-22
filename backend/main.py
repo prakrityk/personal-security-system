@@ -5,6 +5,8 @@ Personal Security System Backend
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from api.routes import auth  
+
 
 # Create FastAPI app
 app = FastAPI(
@@ -45,6 +47,8 @@ def health_check():
 # app.include_router(users.router, prefix="/api/users", tags=["Users"])
 # app.include_router(roles.router, prefix="/api/roles", tags=["Roles"])
 
+# Include routers
+app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 
 if __name__ == "__main__":
     import uvicorn
