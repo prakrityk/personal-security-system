@@ -52,15 +52,22 @@ class _LoginScreenState extends State<LoginScreen> {
       // Success message with user name
       _showSuccess("Welcome back, ${response.user.fullName}!");
 
-      // Navigate to next screen
-      // Using pushReplacement to prevent going back to login
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const RoleIntentScreen()),
-      );
+      // ✅ Check if user has roles assigned
+      // ✅ Navigate based on role status
+      if (response.user.hasRole) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const HomeScreen()),
+        );
+      } else {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const RoleIntentScreen()),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
-      
+
       // Show error message
       _showError(e.toString().replaceAll('Exception: ', ''));
     } finally {
@@ -116,10 +123,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 40),
 
                     AppTextField(
-                      label: "Phone or Email",
-                      hint: "98XXXXXXXX or email",
+                      label: "Phone",
+                      hint: "+977XXXXXXXX",
                       controller: _emailOrPhoneController,
-                      enabled: !_isLoading, // Disable when loading
+                      enabled: !_isLoading,
                     ),
 
                     const SizedBox(height: 16),
@@ -128,7 +135,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       label: "Password",
                       obscureText: true,
                       controller: _passwordController,
-                      enabled: !_isLoading, // Disable when loading
+                      enabled: !_isLoading,
                     ),
 
                     const SizedBox(height: 12),
@@ -136,9 +143,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton(
-                        onPressed: _isLoading ? null : () {
-                          // TODO: Navigate to forgot password screen
-                        },
+                        onPressed: _isLoading
+                            ? null
+                            : () {
+                                // TODO: Navigate to forgot password screen
+                              },
                         child: Text(
                           "Forgot password?",
                           style: AppTextStyles.caption.copyWith(
@@ -159,19 +168,22 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(width: 4),
                         GestureDetector(
-                          onTap: _isLoading ? null : () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const LetsGetStartedScreen(),
-                              ),
-                            );
-                          },
+                          onTap: _isLoading
+                              ? null
+                              : () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          const LetsGetStartedScreen(),
+                                    ),
+                                  );
+                                },
                           child: Text(
                             "Sign up",
                             style: AppTextStyles.bodySmall.copyWith(
-                              color: _isLoading 
-                                  ? Colors.grey 
+                              color: _isLoading
+                                  ? Colors.grey
                                   : AppColors.primaryGreen,
                               fontWeight: FontWeight.w600,
                             ),
@@ -194,6 +206,21 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ✅ Placeholder Home Screen - Replace with your actual home screen
+class HomeScreen extends StatelessWidget {
+  const HomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Home')),
+      body: const Center(
+        child: Text('Welcome to Home Screen!', style: TextStyle(fontSize: 24)),
       ),
     );
   }
