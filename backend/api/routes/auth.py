@@ -283,5 +283,5 @@ def select_role(
 # Current user (placeholder)
 # ----------------------
 @router.get("/me", response_model=UserResponse)
-async def get_current_user_info():
-    raise HTTPException(status_code=501, detail="Endpoint not yet implemented")
+async def get_current_user_info(current_user: User = Depends(get_current_user)):
+    return current_user
