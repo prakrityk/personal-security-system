@@ -31,6 +31,10 @@ try:
     from models.user_roles import UserRole
     from models.role import Role
 
+    from models.otp import OTP
+
+
+
     print("\n✅ Successfully created 2 tables!")
     print("   - users")
     print("   - user_roles")
