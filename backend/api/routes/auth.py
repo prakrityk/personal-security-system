@@ -3,6 +3,7 @@ Authentication routes
 Handles user registration, login, and phone verification
 """
 
+from typing import List, Optional  
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
@@ -20,7 +21,8 @@ from api.schemas.auth import (
     PhoneCheckResponse,
     PhoneVerificationRequest,
     PhoneVerificationConfirm,
-    RoleInfo
+    RoleInfo,
+    RoleSelectRequest,
 )
 
 # Models
@@ -33,7 +35,8 @@ from models.otp import OTP
 from api.dependencies.auth import (
     hash_password,
     verify_password,
-    create_access_token
+    create_access_token,
+    get_current_user  
 )
 
 # DB
@@ -222,6 +225,58 @@ async def check_email(email: str, db: Session = Depends(get_db)):
     if existing_user:
         return EmailCheckResponse(available=False, message="Email already taken")
     return EmailCheckResponse(available=True, message="Email is available")
+
+
+@router.get("/roles")
+def get_roles(
+    current_user: User = Depends(get_current_user),  
+    db: Session = Depends(get_db)
+):
+   
+    roles = db.query(Role).all()
+    return [
+        {
+            "id": role.id,
+            "role_name": role.role_name,
+            "role_description": role.role_description
+        }
+        for role in roles
+    ]
+
+@router.post("/select-role")
+def select_role(
+    request: RoleSelectRequest,
+    current_user: User = Depends(get_current_user),  
+    db: Session = Depends(get_db)
+):
+
+    user_id = current_user.id
+
+    role = db.query(Role).filter(Role.id == request.role_id).first()
+    if not role:
+        raise HTTPException(status_code=404, detail="Role not found")
+    
+
+    existing = db.query(UserRole).filter(
+        UserRole.user_id == user_id,
+        UserRole.role_id == role.id
+    ).first()
+
+    if existing:
+        return {"message": f"Role '{role.role_name}' already assigned to user."}
+
+    user_role = UserRole(user_id=user_id, role_id=role.id)
+    db.add(user_role)
+    db.commit()
+    db.refresh(user_role)
+
+    return {
+        "message": f"User '{current_user.full_name}' selected role '{role.role_name}'.",
+        "selected_role": {
+            "role_id": role.id,
+            "role_name": role.role_name
+        }
+    }
 
 
 # ----------------------
