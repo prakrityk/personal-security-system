@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:safety_app/core/widgets/animated_bottom_button.dart';
 import 'package:safety_app/core/widgets/app_text_field.dart';
 import 'package:safety_app/core/widgets/avatar_picker.dart';
+import 'package:safety_app/features/auth/screens/login_screen.dart';
 import 'package:safety_app/features/intent/screens/role_intent_screen.dart';
 import 'package:safety_app/core/widgets/onboarding_progress_indicator.dart';
 import 'package:safety_app/models/auth_response_model.dart';
@@ -105,7 +106,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       // 4️⃣ Navigate to role selection or home
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => const RoleIntentScreen()),
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
         (route) => false,
       );
     } catch (e) {
