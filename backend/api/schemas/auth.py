@@ -132,3 +132,7 @@ class PhoneCheckResponse(BaseModel):
     """Response for phone_number availability check"""
     available: bool
     message: str
+
+
+class RoleSelectRequest(BaseModel):
+    role_id: int
