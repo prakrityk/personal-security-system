@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:safety_app/core/widgets/animated_bottom_button.dart';
 import 'package:safety_app/features/dependent/screens/dependent_type_selection_screen.dart';
 import 'package:safety_app/features/guardian/screens/guardian_setup_choice_screen.dart';
@@ -8,6 +9,7 @@ import 'package:safety_app/services/auth_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/intent_card.dart';
+import 'package:safety_app/routes/app_router.dart';
 
 enum UserIntent { personal, guardian, dependent }
 
@@ -50,53 +52,91 @@ class _RoleIntentScreenState extends State<RoleIntentScreen> {
     }
   }
 
-  RoleInfo _getRoleForIntent(UserIntent intent) {
-    switch (intent) {
-      case UserIntent.personal:
-        return _roles.firstWhere((r) => r.roleName == "global_user");
-      case UserIntent.guardian:
-        return _roles.firstWhere((r) => r.roleName == "guardian");
-      case UserIntent.dependent:
-        return _roles.firstWhere((r) => r.roleName == "dependent");
+  /// Get role for a specific intent
+  RoleInfo? _getRoleForIntent(UserIntent intent) {
+    try {
+      switch (intent) {
+        case UserIntent.personal:
+          return _roles.firstWhere((r) => r.roleName == "global_user");
+        case UserIntent.guardian:
+          return _roles.firstWhere((r) => r.roleName == "guardian");
+        case UserIntent.dependent:
+          // ❌ DON'T assign role here for dependent
+          // User needs to choose child/elderly on next screen
+          return null;
+      }
+    } catch (e) {
+      print('Error finding role: $e');
+      return null;
     }
   }
 
   Future<void> _navigateBasedOnIntent(UserIntent intent) async {
+    // ✅ For dependent, just navigate without assigning role
+    if (intent == UserIntent.dependent) {
+      _navigateToNextScreen(intent);
+      return;
+    }
+
+    // ✅ For personal and guardian, assign role first
     setState(() => _isLoading = true);
 
     try {
       final role = _getRoleForIntent(intent);
 
-      // ✅ Assign role in backend
-      await _authService.selectRole(role.id);
-
-      Widget nextScreen;
-      switch (intent) {
-        case UserIntent.personal:
-          nextScreen = const PersonalOnboardingScreen();
-          break;
-        case UserIntent.guardian:
-          nextScreen = const GuardianSetupChoiceScreen();
-          break;
-        case UserIntent.dependent:
-          nextScreen = const DependentTypeSelectionScreen();
-          break;
+      if (role == null) {
+        throw Exception('Role not found for selected intent');
       }
 
+      // Assign role in backend
+      await _authService.selectRole(role.id);
+
       if (!mounted) return;
 
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => nextScreen),
-      );
+      _navigateToNextScreen(intent);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Failed to select role")));
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to select role: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
       setState(() => _isLoading = false);
     }
   }
+
+  /// Navigate to appropriate screen based on intent
+  // void _navigateToNextScreen(UserIntent intent) {
+  //   switch (intent) {
+  //     case UserIntent.personal:
+  //       context.go('/personal-onboarding');
+  //       break;
+  //     case UserIntent.guardian:
+  //       context.push('/guardian-setup');
+  //       break;
+  //     case UserIntent.dependent:
+  //       // ✅ Navigate to dependent type selection
+  //       // Role will be assigned there (child or elderly)
+  //       context.push('/dependent-type-selection');
+  //       break;
+  //   }
+  // }
+
+void _navigateToNextScreen(UserIntent intent) {
+  switch (intent) {
+    case UserIntent.personal:
+      context.go(AppRouter.personalOnboarding);
+      break;
+    case UserIntent.guardian:
+      context.push(AppRouter.guardianSetup);
+      break;
+    case UserIntent.dependent:
+      context.push(AppRouter.dependentTypeSelection);
+      break;
+  }
+}
 
   @override
   Widget build(BuildContext context) {
