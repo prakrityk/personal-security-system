@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';  // ✅ Add this import
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/animated_bottom_button.dart';
 import '../../../core/widgets/intent_card.dart';
-import 'guardian_add_dependent_screen.dart';
-
+import 'package:safety_app/routes/app_router.dart';
 enum GuardianSetupType { primary, collaborator }
 
 class GuardianSetupChoiceScreen extends StatefulWidget {
@@ -21,22 +21,16 @@ class _GuardianSetupChoiceScreenState extends State<GuardianSetupChoiceScreen> {
   void _continue() {
     if (_selectedType == null) return;
 
-    late Widget nextScreen;
-
+    // ✅ Updated navigation with GoRouter
     switch (_selectedType!) {
       case GuardianSetupType.primary:
-        nextScreen = const GuardianAddDependentScreen();
+        context.push('/guardian-add-dependent');
         break;
 
       case GuardianSetupType.collaborator:
-        nextScreen = const GuardianCollaboratorLinkScreen();
+        context.push(AppRouter.guardianCollaborator);
         break;
     }
-
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => nextScreen),
-    );
   }
 
   @override
@@ -122,7 +116,7 @@ class _GuardianSetupChoiceScreenState extends State<GuardianSetupChoiceScreen> {
   }
 }
 
-/// 🔹 Placeholder — collaborator flow (scan / paste code)
+/// 🔹 Placeholder – collaborator flow (scan / paste code)
 class GuardianCollaboratorLinkScreen extends StatelessWidget {
   const GuardianCollaboratorLinkScreen({super.key});
 

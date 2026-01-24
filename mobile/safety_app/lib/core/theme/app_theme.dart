@@ -1,3 +1,5 @@
+// lib/core/theme/app_theme.dart
+
 import 'package:flutter/material.dart';
 import 'app_colors.dart';
 import 'app_text_styles.dart';
@@ -148,19 +150,19 @@ class AppTheme {
     ),
   );
 
-  // Dark Theme
+  // Dark Theme - Enhanced contrast
   static ThemeData darkTheme = ThemeData(
     useMaterial3: true,
     brightness: Brightness.dark,
 
     // Color Scheme
     colorScheme: const ColorScheme.dark(
-      primary: AppColors.secondaryGreen,
-      secondary: AppColors.primaryGreen,
-      tertiary: AppColors.darkAccentGreen1,
+      primary: AppColors.darkAccentGreen1,
+      secondary: AppColors.secondaryGreen,
+      tertiary: AppColors.darkAccentGreen2,
       error: AppColors.sosRed,
       surface: AppColors.darkSurface,
-      onPrimary: Colors.white,
+      onPrimary: AppColors.darkBackground,
       onSecondary: Colors.white,
       onSurface: AppColors.darkOnSurface,
       onError: Colors.white,
@@ -183,7 +185,6 @@ class AppTheme {
     cardTheme: CardThemeData(
       color: AppColors.darkSurface,
       elevation: 4,
-      // ignore: deprecated_member_use
       shadowColor: Colors.black.withOpacity(0.3),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     ),
@@ -191,12 +192,14 @@ class AppTheme {
     // Elevated Button
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
-        backgroundColor: AppColors.secondaryGreen,
-        foregroundColor: Colors.white,
+        backgroundColor: AppColors.darkAccentGreen1,
+        foregroundColor: AppColors.darkBackground,
         elevation: 3,
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        textStyle: AppTextStyles.button,
+        textStyle: AppTextStyles.button.copyWith(
+          color: AppColors.darkBackground,
+        ),
       ),
     ),
 
@@ -234,7 +237,10 @@ class AppTheme {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: AppColors.secondaryGreen, width: 2),
+        borderSide: const BorderSide(
+          color: AppColors.darkAccentGreen1,
+          width: 2,
+        ),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
@@ -250,10 +256,10 @@ class AppTheme {
       thickness: 1,
     ),
 
-    // Icon
-    iconTheme: const IconThemeData(color: AppColors.darkAccentGreen1, size: 24),
+    // Icon - Enhanced visibility
+    iconTheme: const IconThemeData(color: AppColors.darkIconActive, size: 24),
 
-    // Text Theme
+    // Text Theme - Enhanced readability
     textTheme: TextTheme(
       displayLarge: AppTextStyles.h1.copyWith(
         color: AppColors.darkOnBackground,
