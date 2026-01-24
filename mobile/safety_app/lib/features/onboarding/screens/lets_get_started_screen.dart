@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:lottie/lottie.dart';
 import 'package:safety_app/core/widgets/animated_bottom_button.dart';
 import 'package:safety_app/core/widgets/onboarding_progress_indicator.dart';
-import 'package:safety_app/features/auth/screens/phone_number_screen.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 
@@ -92,16 +92,7 @@ class _LetsGetStartedScreenState extends State<LetsGetStartedScreen>
   }
 
   void _navigateNext() {
-    Navigator.push(
-      context,
-      PageRouteBuilder(
-        pageBuilder: (_, animation, __) => const PhoneNumberScreen(),
-        transitionsBuilder: (_, animation, __, child) {
-          return FadeTransition(opacity: animation, child: child);
-        },
-        transitionDuration: const Duration(milliseconds: 1000),
-      ),
-    );
+    context.push('/phone-number');
   }
 
   @override
@@ -127,7 +118,7 @@ class _LetsGetStartedScreenState extends State<LetsGetStartedScreen>
                     fit: BoxFit.contain,
                   ),
                   const SizedBox(height: 40),
-                  
+
                   // Animated text
                   SizedBox(
                     height: 100,
@@ -198,7 +189,7 @@ class _LetsGetStartedScreenState extends State<LetsGetStartedScreen>
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
               child: AnimatedBottomButton(
                 label: "Let's Get Started",
-                usePositioned: false, // Changed to false
+                usePositioned: false,
                 onPressed: _navigateNext,
               ),
             ),

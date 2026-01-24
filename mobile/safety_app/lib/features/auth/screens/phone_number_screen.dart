@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:safety_app/core/widgets/animated_bottom_button.dart';
 import 'package:safety_app/core/widgets/app_text_field.dart';
 import 'package:safety_app/core/widgets/onboarding_progress_indicator.dart';
 import 'package:safety_app/services/auth_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
-import 'otp_verification_screen.dart';
 
 class PhoneNumberScreen extends StatefulWidget {
   const PhoneNumberScreen({super.key});
@@ -58,12 +58,7 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
       _showSuccess(response.message);
 
       // Navigate to OTP screen with phone number
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => OtpVerificationScreen(phoneNumber: phone),
-        ),
-      );
+      context.push('/otp-verification', extra: phone);
     } catch (e) {
       if (!mounted) return;
       _showError(e.toString().replaceAll('Exception: ', ''));
@@ -107,7 +102,6 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
           children: [
             Expanded(
               child: SingleChildScrollView(
-                // Added ScrollView
                 child: Padding(
                   padding: const EdgeInsets.all(24),
                   child: Column(
