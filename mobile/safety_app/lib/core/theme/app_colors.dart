@@ -1,3 +1,5 @@
+// lib/core/theme/app_colors.dart
+
 import 'package:flutter/material.dart';
 
 /// App Color Palette
@@ -13,7 +15,7 @@ class AppColors {
   static const Color accentGreen2 = Color(0xFFE3DE61);
 
   // Critical Action Color
-  static const Color sosRed = Color(0xFFAA2B1D);
+  static const Color sosRed = Color.fromARGB(255, 167, 67, 55);
 
   // Light Mode Colors
   static const Color lightBackground = Color(0xFFFAFAFA);
@@ -23,17 +25,21 @@ class AppColors {
   static const Color lightDivider = Color(0xFFE0E0E0);
   static const Color lightHint = Color(0xFF9E9E9E);
 
-  // Dark Mode Colors
-  static const Color darkBackground = Color(0xFF1A1F1D);
-  static const Color darkSurface = Color(0xFF232A27);
-  static const Color darkOnBackground = Color(0xFFE8E8E8);
-  static const Color darkOnSurface = Color(0xFFD4D4D4);
-  static const Color darkDivider = Color(0xFF3A3A3A);
-  static const Color darkHint = Color(0xFF757575);
+  // Dark Mode Colors - Enhanced contrast
+  static const Color darkBackground = Color(0xFF121614);
+  static const Color darkSurface = Color(0xFF1E2623);
+  static const Color darkOnBackground = Color(0xFFF0F0F0);
+  static const Color darkOnSurface = Color(0xFFE8E8E8);
+  static const Color darkDivider = Color(0xFF3E4340);
+  static const Color darkHint = Color(0xFF9E9E9E);
 
-  // Accent colors for dark mode (muted)
-  static const Color darkAccentGreen1 = Color(0xFF7A9454);
-  static const Color darkAccentGreen2 = Color(0xFFC4BF50);
+  // Accent colors for dark mode - Brighter for better visibility
+  static const Color darkAccentGreen1 = Color(0xFFAACA7A);
+  static const Color darkAccentGreen2 = Color(0xFFEBE875);
+
+  // Enhanced icon colors for dark mode
+  static const Color darkIconActive = Color(0xFFAACA7A);
+  static const Color darkIconInactive = Color(0xFF7A8A75);
 
   // Status Colors
   static const Color success = Color(0xFF4CAF50);
