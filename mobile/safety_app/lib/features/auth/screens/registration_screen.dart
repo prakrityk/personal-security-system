@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:safety_app/core/widgets/animated_bottom_button.dart';
 import 'package:safety_app/core/widgets/app_text_field.dart';
 import 'package:safety_app/core/widgets/avatar_picker.dart';
@@ -104,11 +105,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       _showSuccess("Account created successfully!");
 
       // 4️⃣ Navigate to role selection or home
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
-        (route) => false,
-      );
+      context.go('/login');
     } catch (e) {
       if (!mounted) return;
       _showError(e.toString().replaceAll('Exception: ', ''));

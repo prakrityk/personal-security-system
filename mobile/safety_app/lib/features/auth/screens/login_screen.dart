@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:safety_app/core/widgets/animated_bottom_button.dart';
 import 'package:safety_app/core/widgets/app_text_field.dart';
-import 'package:safety_app/features/intent/screens/role_intent_screen.dart';
-import 'package:safety_app/features/onboarding/screens/lets_get_started_screen.dart';
 import 'package:safety_app/services/auth_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -52,18 +51,12 @@ class _LoginScreenState extends State<LoginScreen> {
       // Success message with user name
       _showSuccess("Welcome back, ${response.user.fullName}!");
 
-      // ✅ Check if user has roles assigned
-      // ✅ Navigate based on role status
+      // Check if user has roles assigned
+      // Navigate based on role status
       if (response.user.hasRole) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
-        );
+        context.go('/home');
       } else {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const RoleIntentScreen()),
-        );
+        context.go('/role-intent');
       }
     } catch (e) {
       if (!mounted) return;
@@ -171,13 +164,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           onTap: _isLoading
                               ? null
                               : () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) =>
-                                          const LetsGetStartedScreen(),
-                                    ),
-                                  );
+                                  context.push('/lets-get-started');
                                 },
                           child: Text(
                             "Sign up",
@@ -211,17 +198,4 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-// ✅ Placeholder Home Screen - Replace with your actual home screen
-class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Home')),
-      body: const Center(
-        child: Text('Welcome to Home Screen!', style: TextStyle(fontSize: 24)),
-      ),
-    );
-  }
-}
