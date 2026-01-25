@@ -2,7 +2,7 @@ from sqlalchemy import  Integer,Column,ForeignKey, String, DateTime
 from sqlalchemy.sql import func
 from models.base import Base
 
-class pendingDependent(Base):
+class PendingDependent(Base):
     __tablename__="pending_dependent"
 
     id=Column(Integer, primary_key=True, index=True)
