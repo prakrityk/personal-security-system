@@ -21,6 +21,11 @@ class Role(Base):
         back_populates="role",
         cascade="all, delete-orphan"
     )
+    users = relationship(
+        "User",
+        secondary="user_roles",
+        back_populates="roles"
+    )
 
     def __repr__(self):
         return f"<Role {self.role_name}>"

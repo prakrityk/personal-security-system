@@ -73,9 +73,9 @@ class UserLogin(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
-                "email": "john.doe@example.com",
-                "password": "securepass123"
-            }
+        "email":"eee@gmail.com",
+     "password": "SecurePass123!"
+        }
         }
 
 
@@ -136,3 +136,22 @@ class PhoneCheckResponse(BaseModel):
 
 class RoleSelectRequest(BaseModel):
     role_id: int
+
+
+class TokenResponse(BaseModel):
+    """Response with both access and refresh tokens"""
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    expires_in: int  # seconds until access token expires
+
+
+class RefreshTokenRequest(BaseModel):
+    """Request to refresh access token"""
+    refresh_token: str
+
+
+class UserWithTokens(BaseModel):
+    """User response with both tokens"""
+    user: UserResponse
+    tokens: TokenResponse
