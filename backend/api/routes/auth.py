@@ -216,6 +216,10 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
         OTP.phone_number == user_data.phone_number,
         OTP.is_verified == True
     ).order_by(OTP.created_at.desc()).first()
+    
+    print("Checking OTP for phone:", user_data.phone_number)
+    print("OTP record found:", otp_verified)
+
 
     if not otp_verified:
         raise HTTPException(

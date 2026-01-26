@@ -5,7 +5,7 @@ Stores QR tokens for linking guardians and dependents
 
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean
 from sqlalchemy.orm import relationship
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import uuid
 from models.base import Base
 
@@ -57,7 +57,7 @@ class QRInvitation(Base):
 
     def is_expired(self):
         """Check if QR code has expired"""
-        return datetime.utcnow() > self.expires_at
+        return datetime.now(timezone.utc) > self.expires_at
 
     def can_be_scanned(self):
         """Check if QR code can still be scanned"""
