@@ -268,6 +268,64 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
         "message": "Email verification OTP sent"
     }
 
+from datetime import datetime, timezone
+
+@router.post("/verify-email")
+async def verify_email(email: str, otp: str, db: Session = Depends(get_db)):
+
+    pending = db.query(PendingUser).filter(
+        PendingUser.email == email
+    ).order_by(PendingUser.created_at.desc()).first()
+
+    if not pending:
+        raise HTTPException(
+            status_code=404,
+            detail="No pending registration found for this email"
+        )
+
+    # Expiry: 10 minutes
+    if pending.created_at < datetime.now(timezone.utc) - timedelta(minutes=10):
+        raise HTTPException(
+            status_code=400,
+            detail="OTP expired"
+        )
+
+    # Max attempts
+    if pending.otp_attempts >= 3:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many attempts. Please register again."
+        )
+
+    # Wrong OTP
+    if pending.email_otp != otp:
+        pending.otp_attempts += 1
+        db.commit()
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid OTP"
+        )
+
+    # ✅ OTP correct → Create real user
+    user = User(
+        full_name=pending.full_name,
+        email=pending.email,
+        phone_number=pending.phone_number,
+        hashed_password=pending.hashed_password,
+        email_verified=True,
+        phone_verified=True,
+        is_active=True
+    )
+
+    db.add(user)
+    db.delete(pending)
+    db.commit()
+
+    return {
+        "success": True,
+        "message": "Email verified. Account created successfully"
+    }
+
 
 # ================================================
 # SECTION 3: LOGIN
