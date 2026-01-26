@@ -39,10 +39,7 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
       body: Stack(
         children: [
           // Main Content
-          IndexedStack(
-            index: _currentIndex,
-            children: _screens,
-          ),
+          IndexedStack(index: _currentIndex, children: _screens),
 
           // Floating Bottom Navigation
           Positioned(
