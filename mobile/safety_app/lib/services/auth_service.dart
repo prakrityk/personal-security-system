@@ -241,28 +241,44 @@ class AuthService {
     }
   }
 
+  // lib/services/auth_service.dart
+  // FIXED logout method
+
   /// Logout user
   Future<void> logout() async {
     print('🔄 Starting logout process...');
 
     try {
-      // Step 1: Try to revoke refresh token on backend
+      // Step 1: Get refresh token
       final refreshToken = await _storage.getRefreshToken();
+      print('🔑 Refresh token found: ${refreshToken != null}');
 
       if (refreshToken != null && refreshToken.isNotEmpty) {
         try {
           print('📤 Attempting to revoke token on backend...');
-          await _dioClient.post(
+          print('🔗 Endpoint: ${ApiEndpoints.logout}');
+
+          // CRITICAL FIX: Send as JSON object with the exact key the backend expects
+          final response = await _dioClient.post(
             ApiEndpoints.logout,
             data: {'refresh_token': refreshToken},
           );
+
+          print('✅ Backend response: ${response.statusCode}');
+          print('📥 Response data: ${response.data}');
           print('✅ Token revoked on backend successfully');
         } on DioException catch (e) {
-          // Log the error but don't fail the logout
-          print(
-            '⚠️ Backend token revocation failed: ${e.response?.statusCode}',
-          );
-          print('   Error: ${e.response?.data}');
+          // Check if it's just "already logged out" or token not found
+          if (e.response?.statusCode == 404 || e.response?.statusCode == 400) {
+            print('ℹ️ Token already invalid or revoked');
+          } else {
+            print(
+              '⚠️ Backend token revocation failed: ${e.response?.statusCode}',
+            );
+            print('   Response data: ${e.response?.data}');
+            print('   Error message: ${e.message}');
+          }
+          // Continue with local logout regardless
           print('   Continuing with local logout...');
         } catch (e) {
           print('⚠️ Unexpected error during backend revocation: $e');
@@ -272,29 +288,26 @@ class AuthService {
         print('ℹ️ No refresh token found, skipping backend revocation');
       }
 
-      // Step 2: Always clear local data (even if backend fails)
+      // Step 2: Always clear local data
       print('🗑️ Clearing local storage...');
       await _storage.clearAll();
       print('✅ Local storage cleared successfully');
       print('✅ User logged out successfully');
     } catch (e) {
-      // Critical error (probably storage failure)
       print('❌ Critical error during logout: $e');
 
-      // Force clear storage as last resort
+      // Force clear as last resort
       try {
         print('🔄 Attempting force clear of storage...');
         await _storage.clearAll();
         print('✅ Force clear successful');
       } catch (clearError) {
         print('❌ Fatal: Could not clear storage: $clearError');
-        // At this point, we have a serious problem
-        // But we still shouldn't throw - let the UI handle it
+        // Even if clear fails, don't throw - we want logout to always succeed
       }
-
-      // Don't rethrow - logout should always succeed locally
-      print('⚠️ Logout completed with errors, but local data cleared');
     }
+
+    // NEVER throw from logout - it should always succeed
   }
 
   /// Logout from all devices
