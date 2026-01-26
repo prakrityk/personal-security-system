@@ -26,6 +26,8 @@ load_dotenv(dotenv_path=env_path)
 # Now import models
 try:
     from models.base import Base
+    # models/__init__.py
+
     from models.user import User
     from models.role import Role
     from models.user_roles import UserRole
