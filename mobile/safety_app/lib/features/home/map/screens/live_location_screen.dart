@@ -1,3 +1,5 @@
+// lib/features/home/live_location_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:safety_app/core/theme/app_colors.dart';
 import 'package:safety_app/core/theme/app_text_styles.dart';
@@ -8,6 +10,7 @@ class LiveLocationScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
     // Static map image URL
     const mapImageUrl =
         'https://cdn.mos.cms.futurecdn.net/jz58vQg4pyzq9LuhSGTPSk.jpg.webp';
@@ -78,7 +81,7 @@ class LiveLocationScreen extends StatelessWidget {
         // User Markers
         ...users.map((user) => _buildUserMarker(context, user)),
 
-        // Floating Header (on top of map)
+        // Consistent Header (same style as other tabs)
         Positioned(
           top: 0,
           left: 0,
@@ -98,64 +101,52 @@ class LiveLocationScreen extends StatelessWidget {
             child: SafeArea(
               bottom: false,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: (isDark
-                            ? AppColors.darkSurface
-                            : AppColors.lightSurface)
-                        .withOpacity(0.95),
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.2),
-                        blurRadius: 20,
-                        offset: const Offset(0, 4),
+                padding: const EdgeInsets.all(20),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryGreen.withOpacity(0.9),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryGreen.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Icon(
-                          Icons.map,
-                          color: AppColors.primaryGreen,
-                          size: 24,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Live Locations',
-                              style: AppTextStyles.labelLarge.copyWith(
-                                color: isDark
-                                    ? AppColors.darkOnSurface
-                                    : AppColors.lightOnSurface,
-                                fontWeight: FontWeight.w700,
-                              ),
+                      child: Icon(Icons.map, color: Colors.white, size: 28),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Live Locations',
+                            style: AppTextStyles.h3.copyWith(
+                              color: Colors.white,
+                              shadows: [
+                                Shadow(
+                                  color: Colors.black.withOpacity(0.5),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
                             ),
-                            Text(
-                              'Track family members in real-time',
-                              style: AppTextStyles.caption.copyWith(
-                                color: isDark
-                                    ? AppColors.darkHint
-                                    : AppColors.lightHint,
-                              ),
+                          ),
+                          Text(
+                            'Track family members in real-time',
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: Colors.white.withOpacity(0.9),
+                              shadows: [
+                                Shadow(
+                                  color: Colors.black.withOpacity(0.5),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -168,9 +159,10 @@ class LiveLocationScreen extends StatelessWidget {
   Widget _buildUserMarker(BuildContext context, UserMarker user) {
     final size = MediaQuery.of(context).size;
 
-    // Use primary green for current user, secondary for others
-    final markerColor =
-        user.isCurrentUser ? AppColors.sosRed : AppColors.primaryGreen;
+    // Use SOS red for current user, primary green for others
+    final markerColor = user.isCurrentUser
+        ? AppColors.sosRed
+        : AppColors.primaryGreen;
 
     return Positioned(
       left: size.width * user.position.dx - 25,
@@ -197,10 +189,7 @@ class LiveLocationScreen extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: markerColor,
-                border: Border.all(
-                  color: Colors.white,
-                  width: 3,
-                ),
+                border: Border.all(color: Colors.white, width: 3),
                 boxShadow: [
                   BoxShadow(
                     color: markerColor.withOpacity(0.4),
@@ -211,23 +200,13 @@ class LiveLocationScreen extends StatelessWidget {
               ),
               child: user.avatarUrl != null
                   ? ClipOval(
-                      child: Image.network(
-                        user.avatarUrl!,
-                        fit: BoxFit.cover,
-                      ),
+                      child: Image.network(user.avatarUrl!, fit: BoxFit.cover),
                     )
-                  : Icon(
-                      Icons.person,
-                      color: Colors.white,
-                      size: 28,
-                    ),
+                  : Icon(Icons.person, color: Colors.white, size: 28),
             ),
             const SizedBox(height: 4),
             Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 10,
-                vertical: 5,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
                 color: markerColor,
                 borderRadius: BorderRadius.circular(12),
