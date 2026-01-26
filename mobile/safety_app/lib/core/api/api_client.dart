@@ -2,21 +2,21 @@ import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ApiClient {
-  static const String baseUrl = 'http://localhost:5000/api'; // Change to your backend URL
-  late final Dio _dio;
+  static const String baseUrl = 'http://192.168.21.102:8000/api';
+  final Dio _dio; // REMOVED 'late' keyword
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
-  ApiClient() {
-    _dio = Dio(
-      BaseOptions(
-        baseUrl: baseUrl,
-        connectTimeout: const Duration(seconds: 30),
-        receiveTimeout: const Duration(seconds: 30),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-      ),
+  // Initialize _dio in the initializer list
+  ApiClient() : _dio = Dio() {
+    // Configure Dio after initialization
+    _dio.options = BaseOptions(
+      baseUrl: baseUrl,
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 30),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
     );
 
     // Add interceptors
@@ -37,7 +37,6 @@ class ApiClient {
           // Handle 401 Unauthorized - token expired
           if (error.response?.statusCode == 401) {
             await _secureStorage.delete(key: 'auth_token');
-            // You can add navigation to login screen here
           }
           return handler.next(error);
         },

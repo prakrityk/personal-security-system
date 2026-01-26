@@ -36,5 +36,11 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan"
     )
+    roles = relationship(
+        "Role",
+        secondary="user_roles",
+        back_populates="users"
+    )
+
     def __repr__(self):
         return f"<User(id={self.id}, email={self.email}, full_name={self.full_name})>"

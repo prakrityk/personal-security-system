@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
-import 'package:safety_app/features/auth/screens/login_screen.dart';
+import 'package:go_router/go_router.dart';
 import '../core/theme/app_colors.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -20,17 +20,7 @@ class _SplashScreenState extends State<SplashScreen> {
   _navigateToHome() async {
     await Future.delayed(const Duration(seconds: 6));
     if (mounted) {
-      Navigator.pushReplacement(
-        context,
-        PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) =>
-              const LoginScreen(),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            return FadeTransition(opacity: animation, child: child);
-          },
-          transitionDuration: const Duration(milliseconds: 500),
-        ),
-      );
+      context.go('/login');
     }
   }
 
@@ -44,7 +34,7 @@ class _SplashScreenState extends State<SplashScreen> {
           : AppColors.lightBackground,
       body: Center(
         child: Lottie.asset(
-          'assets/lottie/splash.json', // Place your lottie file here
+          'assets/lottie/splash.json',
           width: 250,
           height: 250,
           fit: BoxFit.contain,
