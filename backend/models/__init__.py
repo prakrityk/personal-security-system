@@ -6,5 +6,7 @@ from models.base import Base
 from models.user import User
 from models.user_roles import UserRole
 from models.role import Role
+from models.pending_user import PendingUser  
 
-__all__ = ["Base", "User", "Role", "UserRole"]
+__all__ = ["Base", "User", "Role", "UserRole", "PendingUser"]
+
