@@ -34,6 +34,9 @@ class AppRouter {
 
   static final GoRouter router = GoRouter(
     initialLocation: splash,
+    redirect: (context, state) {
+      return null; // No global redirects for now
+    },
     routes: [
       // ==================== AUTH FLOW ====================
 

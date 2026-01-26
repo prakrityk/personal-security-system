@@ -365,22 +365,46 @@ async def refresh_access_token(request: RefreshTokenRequest, db: Session = Depen
         expires_in=1800
     )
 
+# In api/routes/auth.py
+# api/routes/auth.py
+# FIXED logout endpoint
 
 @router.post("/logout")
 async def logout(
     request: RefreshTokenRequest,
-    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Logout user by revoking the refresh token
+    NOTE: Does NOT require current_user - token might be invalid
     """
-    revoke_refresh_token(request.refresh_token, db)
-    
-    return {
-        "success": True,
-        "message": "Logged out successfully"
-    }
+    try:
+        print(f"🔄 Logout request received")
+        print(f"📦 Refresh token: {request.refresh_token[:20]}..." if request.refresh_token else "❌ No token")
+        
+        # Try to revoke the token
+        result = revoke_refresh_token(request.refresh_token, db)
+        
+        if result:
+            print("✅ Token revoked successfully")
+            return {
+                "success": True,
+                "message": "Logged out successfully"
+            }
+        else:
+            # Token not found or already revoked - still return success
+            print("ℹ️ Token not found or already revoked")
+            return {
+                "success": True,
+                "message": "Already logged out"
+            }
+    except Exception as e:
+        print(f"❌ Logout error: {e}")
+        # Always return success for logout - don't fail the user
+        return {
+            "success": True,
+            "message": "Logged out"
+        }
 
 
 @router.post("/logout-all")
@@ -391,12 +415,20 @@ async def logout_all_devices(
     """
     Logout from all devices by revoking all refresh tokens for the user
     """
-    revoke_all_user_tokens(current_user.id, db)
-    
-    return {
-        "success": True,
-        "message": "Logged out from all devices successfully"
-    }
+    try:
+        revoke_all_user_tokens(current_user.id, db)
+        
+        return {
+            "success": True,
+            "message": "Logged out from all devices successfully"
+        }
+    except Exception as e:
+        print(f"❌ Logout-all error: {e}")
+        # Still return success
+        return {
+            "success": True,
+            "message": "Logged out from all devices"
+        }
 
 
 # ================================================
