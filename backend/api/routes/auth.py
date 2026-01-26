@@ -212,7 +212,6 @@ async def check_phone(phone_number: str, db: Session = Depends(get_db)):
 async def register(user_data: UserRegister, db: Session = Depends(get_db)):
 
     """
-    Register a new user with refresh token
     Only allows registration if phone number is verified
     """
 
