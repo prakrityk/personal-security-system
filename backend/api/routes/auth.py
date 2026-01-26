@@ -4,6 +4,8 @@ Handles user registration, login, phone verification, and token management
 """
 from datetime import timedelta
 from sqlalchemy.sql import func
+from datetime import datetime, timezone
+
 from typing import List, Optional  
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -31,6 +33,7 @@ from api.schemas.auth import (
 
 # Models
 from models.user import User
+from models.pending_user import PendingUser
 from models.role import Role
 from models.user_roles import UserRole
 from models.otp import OTP
@@ -152,7 +155,8 @@ async def verify_phone(
         )
 
     # Expiry check (5 minutes)
-    if otp.created_at < func.now() - timedelta(minutes=5):
+    if otp.created_at < datetime.now(timezone.utc) - timedelta(minutes=5):
+
         raise HTTPException(
             status_code=400,
             detail="OTP expired"
@@ -204,14 +208,15 @@ async def check_phone(phone_number: str, db: Session = Depends(get_db)):
 # SECTION 2: REGISTRATION
 # ================================================
 
-@router.post("/register", response_model=UserWithTokens, status_code=status.HTTP_201_CREATED)
+@router.post("/register", status_code=status.HTTP_200_OK)
 async def register(user_data: UserRegister, db: Session = Depends(get_db)):
+
     """
     Register a new user with refresh token
     Only allows registration if phone number is verified
     """
 
-    # Check if phone is verified
+   # 1. Check phone verified (unchanged)
     otp_verified = db.query(OTP).filter(
         OTP.phone_number == user_data.phone_number,
         OTP.is_verified == True
@@ -227,62 +232,45 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
             detail="Phone number not verified. Please verify before registering."
         )
 
-    # Check email uniqueness
+    # 2. If user already exists → must login
     if db.query(User).filter(User.email == user_data.email).first():
         raise HTTPException(
             status_code=400,
-            detail="Email already registered"
+            detail="Email already registered. Please login."
         )
 
-    # Check phone uniqueness
-    if db.query(User).filter(User.phone_number == user_data.phone_number).first():
-        raise HTTPException(
-            status_code=400,
-            detail="Phone number already registered"
+    # 3. Generate email OTP
+    email_otp = str(random.randint(100000, 999999))
+
+    # 4. Check if pending already exists
+    pending = db.query(PendingUser).filter(
+        PendingUser.email == user_data.email
+    ).order_by(PendingUser.created_at.desc()).first()
+
+    if pending:
+        # resend OTP
+        pending.email_otp = email_otp
+        pending.otp_attempts = 0
+        db.commit()
+    else:
+        # create new pending
+        pending = PendingUser(
+            full_name=user_data.full_name,
+            email=user_data.email,
+            phone_number=user_data.phone_number,
+            hashed_password=hash_password(user_data.password),
+            email_otp=email_otp
         )
+        db.add(pending)
+        db.commit()
 
-    # Hash password
-    hashed_password = hash_password(user_data.password)
+    # simulate email sending
+    print(f"📧 Email OTP for {user_data.email}: {email_otp}")
 
-    # Create user
-    new_user = User(
-        email=user_data.email,
-        hashed_password=hashed_password,
-        full_name=user_data.full_name,
-        phone_number=user_data.phone_number,
-        phone_verified=True   
-
-    )
-
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-
-    # Create access token
-    access_token = create_access_token(data={"sub": str(new_user.id), "email": new_user.email})
-
-    # Create refresh token
-    refresh_token_obj = create_refresh_token(user_id=new_user.id, db=db)
-
-    # Prepare user response
-    user_response = UserResponse(
-        id=new_user.id,
-        email=new_user.email,
-        full_name=new_user.full_name,
-        phone_number=new_user.phone_number,
-        roles=[]
-    )
-
-    # Prepare tokens response
-    tokens = TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token_obj.token,
-        token_type="bearer",
-        expires_in=1800  # 30 minutes in seconds
-    )
-
-    # Return user with tokens
-    return UserWithTokens(user=user_response, tokens=tokens)
+    return {
+        "success": True,
+        "message": "Email verification OTP sent"
+    }
 
 
 # ================================================
