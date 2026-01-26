@@ -30,9 +30,6 @@ class _HomeAppBarState extends ConsumerState<HomeAppBar> {
   bool _isThemeExpanded = false;
 
   void _showAccountMenu(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final userAsync = ref.read(authStateProvider);
-
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -43,6 +40,9 @@ class _HomeAppBarState extends ConsumerState<HomeAppBar> {
             builder: (context, ref, child) {
               final themeMode = ref.watch(themeModeProvider);
               final userState = ref.watch(authStateProvider);
+
+              // Get current theme from context (updates immediately)
+              final isDark = Theme.of(context).brightness == Brightness.dark;
 
               final user = userState.value;
               final userName = user?.fullName ?? 'Guest';
@@ -159,8 +159,8 @@ class _HomeAppBarState extends ConsumerState<HomeAppBar> {
                               children: [
                                 Container(
                                   padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 6,
+                                    horizontal: 10,
+                                    vertical: 4,
                                   ),
                                   decoration: BoxDecoration(
                                     color:
@@ -184,7 +184,7 @@ class _HomeAppBarState extends ConsumerState<HomeAppBar> {
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 8),
+                                const SizedBox(width: 6),
                                 Icon(
                                   _isThemeExpanded
                                       ? Icons.expand_less
@@ -309,12 +309,12 @@ class _HomeAppBarState extends ConsumerState<HomeAppBar> {
                       width: double.infinity,
                       child: ElevatedButton.icon(
                         onPressed: () async {
-                          Navigator.pop(bottomSheetContext);
+                          Navigator.pop(bottomSheetContext); // Close menu
 
                           // Show confirmation dialog
                           final confirm = await showDialog<bool>(
                             context: context,
-                            builder: (context) => AlertDialog(
+                            builder: (dialogContext) => AlertDialog(
                               title: Text('Logout', style: AppTextStyles.h4),
                               content: Text(
                                 'Are you sure you want to logout?',
@@ -323,11 +323,12 @@ class _HomeAppBarState extends ConsumerState<HomeAppBar> {
                               actions: [
                                 TextButton(
                                   onPressed: () =>
-                                      Navigator.pop(context, false),
+                                      Navigator.pop(dialogContext, false),
                                   child: const Text('Cancel'),
                                 ),
                                 ElevatedButton(
-                                  onPressed: () => Navigator.pop(context, true),
+                                  onPressed: () =>
+                                      Navigator.pop(dialogContext, true),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: AppColors.sosRed,
                                   ),
@@ -338,15 +339,61 @@ class _HomeAppBarState extends ConsumerState<HomeAppBar> {
                           );
 
                           if (confirm == true && context.mounted) {
-                            // Perform logout
+                            // Show loading dialog
+                            showDialog(
+                              context: context,
+                              barrierDismissible: false,
+                              builder: (loadingContext) {
+                                final dialogIsDark =
+                                    Theme.of(loadingContext).brightness ==
+                                    Brightness.dark;
+                                return Center(
+                                  child: Container(
+                                    padding: const EdgeInsets.all(24),
+                                    decoration: BoxDecoration(
+                                      color: dialogIsDark
+                                          ? AppColors.darkSurface
+                                          : AppColors.lightSurface,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const CircularProgressIndicator(),
+                                        const SizedBox(height: 16),
+                                        Text(
+                                          'Logging out...',
+                                          style: AppTextStyles.bodyMedium,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
+
+                            // Perform logout (now guaranteed to succeed)
                             await ref.read(authStateProvider.notifier).logout();
 
                             if (context.mounted) {
+                              // Close loading dialog
+                              Navigator.pop(context);
+
+                              // Navigate to login - use pushReplacement to clear history
                               context.go(AppRouter.login);
+
+                              // Optional: Show success message
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Logged out successfully'),
+                                  backgroundColor: AppColors.primaryGreen,
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
                             }
                           }
                         },
-                        icon: const Icon(Icons.logout),
+
                         label: const Text('Logout'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.sosRed,
@@ -377,7 +424,10 @@ class _HomeAppBarState extends ConsumerState<HomeAppBar> {
     final userRole = user?.hasRole == true ? user?.displayRole : null;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 18,
+        vertical: 8,
+      ), //always this
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
         boxShadow: [
@@ -405,10 +455,10 @@ class _HomeAppBarState extends ConsumerState<HomeAppBar> {
                       color: isDark
                           ? AppColors.darkAccentGreen1
                           : AppColors.primaryGreen,
-                      size: 26,
+                      size: 28,
                     ),
                   ),
-                  const SizedBox(width: 9),
+                  const SizedBox(width: 10),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -450,8 +500,8 @@ class _HomeAppBarState extends ConsumerState<HomeAppBar> {
                 ),
                 if (widget.notificationCount > 0)
                   Positioned(
-                    right: 7,
-                    top: 7,
+                    right: 8,
+                    top: 8,
                     child: Container(
                       padding: const EdgeInsets.all(4),
                       decoration: const BoxDecoration(
