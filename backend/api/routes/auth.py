@@ -4,6 +4,8 @@ Handles user registration, login, phone verification, and token management
 """
 from datetime import timedelta
 from sqlalchemy.sql import func
+from datetime import datetime, timezone
+
 from typing import List, Optional  
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -153,7 +155,8 @@ async def verify_phone(
         )
 
     # Expiry check (5 minutes)
-    if otp.created_at < func.now() - timedelta(minutes=5):
+    if otp.created_at < datetime.now(timezone.utc) - timedelta(minutes=5):
+
         raise HTTPException(
             status_code=400,
             detail="OTP expired"
