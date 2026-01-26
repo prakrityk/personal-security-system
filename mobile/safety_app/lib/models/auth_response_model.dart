@@ -41,21 +41,57 @@ class AuthResponseModel {
   final TokenModel token;
 
   AuthResponseModel({required this.user, required this.token});
+  // lib/models/auth_response_model.dart
 
   factory AuthResponseModel.fromJson(Map<String, dynamic> json) {
-    // Handle both 'token' and 'tokens' keys from backend
-    final tokenData = json['token'] ?? json['tokens'];
+    print('🔍 Parsing AuthResponseModel...');
+    print('📦 Raw JSON: $json');
+    print('📋 JSON Keys: ${json.keys.toList()}');
 
-    if (tokenData == null) {
-      throw Exception('No token data found in response');
+    // Check if user exists
+    if (!json.containsKey('user')) {
+      print('❌ ERROR: Missing "user" key in response');
+      throw Exception('Server response missing "user" field');
     }
 
+    final userData = json['user'];
+    print('👤 User data type: ${userData.runtimeType}');
+
+    if (userData == null) {
+      print('❌ ERROR: User data is NULL');
+      throw Exception('Server returned null user data');
+    }
+
+    if (userData is! Map<String, dynamic>) {
+      print('❌ ERROR: User data is not a Map');
+      throw Exception(
+        'Invalid user data format: expected Map, got ${userData.runtimeType}',
+      );
+    }
+
+    // ⚠️ FIX: Handle both 'token' (singular) AND 'tokens' (plural)
+    final tokenData = json['tokens'] ?? json['token'];
+    print('🔑 Token data type: ${tokenData.runtimeType}');
+
+    if (tokenData == null) {
+      print('❌ ERROR: No token data found');
+      throw Exception('No token/tokens data found in response');
+    }
+
+    if (tokenData is! Map<String, dynamic>) {
+      print('❌ ERROR: Token data is not a Map');
+      throw Exception(
+        'Invalid token data format: expected Map, got ${tokenData.runtimeType}',
+      );
+    }
+
+    print('✅ Valid user and token data - proceeding to parse models');
+
     return AuthResponseModel(
-      user: UserModel.fromJson(json['user'] as Map<String, dynamic>),
-      token: TokenModel.fromJson(tokenData as Map<String, dynamic>),
+      user: UserModel.fromJson(userData),
+      token: TokenModel.fromJson(tokenData),
     );
   }
-
   Map<String, dynamic> toJson() {
     return {'user': user.toJson(), 'token': token.toJson()};
   }

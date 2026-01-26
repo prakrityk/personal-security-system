@@ -1,5 +1,5 @@
 // lib/features/home/widgets/home_app_bar.dart
-
+// COMPLETE FIX - Proper context management for logout
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -30,6 +30,9 @@ class _HomeAppBarState extends ConsumerState<HomeAppBar> {
   bool _isThemeExpanded = false;
 
   void _showAccountMenu(BuildContext context) {
+    // Capture the ref at the beginning while context is valid
+    final authNotifier = ref.read(authStateProvider.notifier);
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -40,8 +43,6 @@ class _HomeAppBarState extends ConsumerState<HomeAppBar> {
             builder: (context, ref, child) {
               final themeMode = ref.watch(themeModeProvider);
               final userState = ref.watch(authStateProvider);
-
-              // Get current theme from context (updates immediately)
               final isDark = Theme.of(context).brightness == Brightness.dark;
 
               final user = userState.value;
@@ -210,7 +211,6 @@ class _HomeAppBarState extends ConsumerState<HomeAppBar> {
                                   ? AppColors.darkDivider
                                   : AppColors.lightDivider,
                             ),
-                            // Light Mode
                             ListTile(
                               contentPadding: const EdgeInsets.only(
                                 left: 72,
@@ -239,7 +239,6 @@ class _HomeAppBarState extends ConsumerState<HomeAppBar> {
                                     .setThemeMode(ThemeMode.light);
                               },
                             ),
-                            // Dark Mode
                             ListTile(
                               contentPadding: const EdgeInsets.only(
                                 left: 72,
@@ -268,7 +267,6 @@ class _HomeAppBarState extends ConsumerState<HomeAppBar> {
                                     .setThemeMode(ThemeMode.dark);
                               },
                             ),
-                            // System Default
                             ListTile(
                               contentPadding: const EdgeInsets.only(
                                 left: 72,
@@ -304,96 +302,30 @@ class _HomeAppBarState extends ConsumerState<HomeAppBar> {
 
                     const SizedBox(height: 16),
 
-                    // Logout Button
+                    // Logout Button - FIXED VERSION
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
-                        onPressed: () async {
-                          Navigator.pop(bottomSheetContext); // Close menu
+                        onPressed: () {
+                          print('🔘 Logout button pressed');
 
-                          // Show confirmation dialog
-                          final confirm = await showDialog<bool>(
-                            context: context,
-                            builder: (dialogContext) => AlertDialog(
-                              title: Text('Logout', style: AppTextStyles.h4),
-                              content: Text(
-                                'Are you sure you want to logout?',
-                                style: AppTextStyles.bodyMedium,
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () =>
-                                      Navigator.pop(dialogContext, false),
-                                  child: const Text('Cancel'),
-                                ),
-                                ElevatedButton(
-                                  onPressed: () =>
-                                      Navigator.pop(dialogContext, true),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppColors.sosRed,
-                                  ),
-                                  child: const Text('Logout'),
-                                ),
-                              ],
-                            ),
-                          );
+                          // CRITICAL FIX: Close bottom sheet FIRST and get the parent context
+                          // Get the navigator context before closing
+                          final navigatorContext = Navigator.of(context);
 
-                          if (confirm == true && context.mounted) {
-                            // Show loading dialog
-                            showDialog(
-                              context: context,
-                              barrierDismissible: false,
-                              builder: (loadingContext) {
-                                final dialogIsDark =
-                                    Theme.of(loadingContext).brightness ==
-                                    Brightness.dark;
-                                return Center(
-                                  child: Container(
-                                    padding: const EdgeInsets.all(24),
-                                    decoration: BoxDecoration(
-                                      color: dialogIsDark
-                                          ? AppColors.darkSurface
-                                          : AppColors.lightSurface,
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const CircularProgressIndicator(),
-                                        const SizedBox(height: 16),
-                                        Text(
-                                          'Logging out...',
-                                          style: AppTextStyles.bodyMedium,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              },
-                            );
+                          // Close the bottom sheet
+                          navigatorContext.pop();
 
-                            // Perform logout (now guaranteed to succeed)
-                            await ref.read(authStateProvider.notifier).logout();
-
-                            if (context.mounted) {
-                              // Close loading dialog
-                              Navigator.pop(context);
-
-                              // Navigate to login - use pushReplacement to clear history
-                              context.go(AppRouter.login);
-
-                              // Optional: Show success message
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Logged out successfully'),
-                                  backgroundColor: AppColors.primaryGreen,
-                                  duration: Duration(seconds: 2),
-                                ),
-                              );
+                          // THEN trigger logout with a stable context
+                          // Use addPostFrameCallback to ensure sheet is fully closed
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            // Use the root context from the widget tree
+                            if (mounted) {
+                              _handleLogout(this.context, authNotifier);
                             }
-                          }
+                          });
                         },
-
+                        icon: const Icon(Icons.logout),
                         label: const Text('Logout'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.sosRed,
@@ -414,6 +346,210 @@ class _HomeAppBarState extends ConsumerState<HomeAppBar> {
     );
   }
 
+  // COMPLETELY REWRITTEN: Handle logout with proper context management
+  Future<void> _handleLogout(
+    BuildContext context,
+    AuthStateNotifier authNotifier,
+  ) async {
+    print('📋 Handling logout with stable context');
+    print('🔍 Context mounted: ${context.mounted}');
+
+    if (!context.mounted) {
+      print('⚠️ Context not mounted at start');
+      return;
+    }
+
+    // Show confirmation dialog
+    final confirm = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        final dialogIsDark =
+            Theme.of(dialogContext).brightness == Brightness.dark;
+        return AlertDialog(
+          backgroundColor: dialogIsDark
+              ? AppColors.darkSurface
+              : AppColors.lightSurface,
+          title: Text(
+            'Logout',
+            style: AppTextStyles.h4.copyWith(
+              color: dialogIsDark
+                  ? AppColors.darkOnSurface
+                  : AppColors.lightOnSurface,
+            ),
+          ),
+          content: Text(
+            'Are you sure you want to logout?',
+            style: AppTextStyles.bodyMedium.copyWith(
+              color: dialogIsDark
+                  ? AppColors.darkOnSurface
+                  : AppColors.lightOnSurface,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(
+                'Cancel',
+                style: TextStyle(
+                  color: dialogIsDark
+                      ? AppColors.darkHint
+                      : AppColors.lightHint,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                print('✅ Logout confirmed');
+                Navigator.of(dialogContext).pop(true);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.sosRed,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Logout'),
+            ),
+          ],
+        );
+      },
+    );
+
+    print('📊 Confirm result: $confirm');
+
+    if (confirm != true) {
+      print('❌ Logout cancelled by user');
+      return;
+    }
+
+    // CRITICAL: Check context again after dialog
+    if (!context.mounted) {
+      print('⚠️ Context no longer mounted after confirmation');
+      // Still perform logout but without UI updates
+      try {
+        await authNotifier.logout();
+      } catch (e) {
+        print('❌ Silent logout error: $e');
+      }
+      return;
+    }
+
+    print('🚀 Starting logout process...');
+    print('🔍 Context still mounted: ${context.mounted}');
+
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (loadingContext) {
+        final dialogIsDark =
+            Theme.of(loadingContext).brightness == Brightness.dark;
+        return PopScope(
+          canPop: false,
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: dialogIsDark
+                    ? AppColors.darkSurface
+                    : AppColors.lightSurface,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(
+                    color: dialogIsDark
+                        ? AppColors.darkAccentGreen1
+                        : AppColors.primaryGreen,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Logging out...',
+                    style: AppTextStyles.bodyMedium.copyWith(
+                      color: dialogIsDark
+                          ? AppColors.darkOnSurface
+                          : AppColors.lightOnSurface,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    try {
+      print('🔄 Calling logout...');
+
+      // Perform logout
+      await authNotifier.logout();
+
+      print('✅ Logout completed');
+
+      // Check context before UI operations
+      if (!context.mounted) {
+        print('⚠️ Context unmounted after logout - skipping UI updates');
+        return;
+      }
+
+      // Close loading dialog
+      Navigator.of(context).pop();
+
+      print('🧭 Navigating to login...');
+
+      // Navigate to login
+      context.go(AppRouter.login);
+
+      print('✅ Navigation completed');
+
+      // Wait a bit before showing snackbar
+      await Future.delayed(const Duration(milliseconds: 200));
+
+      if (context.mounted) {
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Logged out successfully'),
+            backgroundColor: AppColors.primaryGreen,
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e, stackTrace) {
+      print('❌ Logout error: $e');
+      print('Stack trace: $stackTrace');
+
+      if (!context.mounted) {
+        print('⚠️ Context unmounted during error handling');
+        return;
+      }
+
+      // Close loading dialog
+      Navigator.of(context).pop();
+
+      // Navigate to login anyway
+      context.go(AppRouter.login);
+
+      print('✅ Navigated to login despite error');
+
+      // Wait before showing error
+      await Future.delayed(const Duration(milliseconds: 200));
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Logged out: ${e.toString()}'),
+            backgroundColor: AppColors.sosRed,
+            duration: const Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -424,10 +560,7 @@ class _HomeAppBarState extends ConsumerState<HomeAppBar> {
     final userRole = user?.hasRole == true ? user?.displayRole : null;
 
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 18,
-        vertical: 8,
-      ), //always this
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
         boxShadow: [
