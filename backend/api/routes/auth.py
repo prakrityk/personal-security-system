@@ -2,11 +2,12 @@
 Authentication routes
 Handles user registration, login, phone verification, and token management
 """
-
+from datetime import timedelta
+from sqlalchemy.sql import func
 from typing import List, Optional  
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_,desc
 from typing import List
 import random
 
@@ -65,43 +66,122 @@ def generate_otp() -> str:
 # ================================================
 
 @router.post("/send-verification-code")
-async def send_verification_code(request: PhoneVerificationRequest, db: Session = Depends(get_db)):
+async def send_verification_code(
+    request: PhoneVerificationRequest,
+    db: Session = Depends(get_db)
+):
     """
     Send OTP verification code to phone number
+
+    Protections:
+    - 1 OTP per minute per phone number
+    - Maximum 5 OTPs per 24 hours per phone number
     """
+
+    # Rate limit: 1 OTP per minute
+    recent_otp = db.query(OTP).filter(
+        OTP.phone_number == request.phone_number,
+        OTP.created_at > func.now() - timedelta(minutes=1)
+    ).first()
+
+    if recent_otp:
+        raise HTTPException(
+            status_code=429,
+            detail="Please wait before requesting another OTP"
+        )
+
+    # Daily limit: max 5 OTPs in last 24 hours
+    today_count = db.query(OTP).filter(
+        OTP.phone_number == request.phone_number,
+        OTP.created_at > func.now() - timedelta(hours=24)
+    ).count()
+
+    if today_count >= 5:
+        raise HTTPException(
+            status_code=429,
+            detail="OTP limit reached for today"
+        )
+
+    # Generate and store OTP
     code = generate_otp()
 
-    otp_entry = OTP(phone_number=request.phone_number, code=code, is_verified=False)
+    otp_entry = OTP(
+        phone_number=request.phone_number,
+        code=code,
+        attempts=0,
+        is_verified=False
+    )
+
     db.add(otp_entry)
     db.commit()
     db.refresh(otp_entry)
 
-    # For now, print OTP (replace with Twilio later)
+    # Replace with SMS provider integration
     print(f"OTP for {request.phone_number}: {code}")
 
-    return {"success": True, "message": "OTP sent"}
+    return {
+        "success": True,
+        "message": "OTP sent"
+    }
 
+
+
+
+from datetime import timedelta
+from sqlalchemy.sql import func
 
 @router.post("/verify-phone")
-async def verify_phone(request: PhoneVerificationConfirm, db: Session = Depends(get_db)):
+async def verify_phone(
+    request: PhoneVerificationConfirm,
+    db: Session = Depends(get_db)
+):
     """
-    Verify phone number with OTP code
+    Verify OTP for phone number
     """
-    otp_entry = db.query(OTP).filter(
+
+    #Get latest unverified OTP for this phone number
+    otp = db.query(OTP).filter(
         OTP.phone_number == request.phone_number,
         OTP.is_verified == False
     ).order_by(OTP.created_at.desc()).first()
 
-    if not otp_entry:
-        raise HTTPException(status_code=400, detail="No OTP sent or already verified")
+    if not otp:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or already used OTP"
+        )
 
-    if otp_entry.code != request.verification_code:
-        raise HTTPException(status_code=400, detail="Invalid OTP")
+    # Expiry check (5 minutes)
+    if otp.created_at < func.now() - timedelta(minutes=5):
+        raise HTTPException(
+            status_code=400,
+            detail="OTP expired"
+        )
 
-    otp_entry.is_verified = True
+    # Max attempts
+    if otp.attempts >= 3:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many attempts. Request new OTP."
+        )
+
+    # Wrong code
+    if otp.code != request.verification_code:
+        otp.attempts += 1
+        db.commit()
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid OTP"
+        )
+
+    # Correct OTP → mark as verified
+    otp.is_verified = True
     db.commit()
 
-    return {"success": True, "message": "Phone number verified successfully"}
+    return {
+        "success": True,
+        "message": "Phone verified successfully"
+    }
 
 
 @router.get("/check-phone")
@@ -165,7 +245,9 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
         email=user_data.email,
         hashed_password=hashed_password,
         full_name=user_data.full_name,
-        phone_number=user_data.phone_number
+        phone_number=user_data.phone_number,
+        phone_verified=True   
+
     )
 
     db.add(new_user)
