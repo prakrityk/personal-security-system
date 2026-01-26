@@ -24,20 +24,18 @@ env_path = backend_dir / '.env'
 load_dotenv(dotenv_path=env_path)
 
 # Now import models
-# Now import models
 try:
     from models.base import Base
     from models.user import User
-    from models.user_roles import UserRole
     from models.role import Role
-
+    from models.user_roles import UserRole
     from models.otp import OTP
+    from models.pending_dependent import PendingDependent  # Must be before qr_invitation
+    from models.refresh_token import RefreshToken
+    from models.qr_invitation import QRInvitation  # Depends on pending_dependent
+    from models.guardian_dependent import GuardianDependent  # Depends on pending_dependent
 
-
-
-    print("\n✅ Successfully created 2 tables!")
-    print("   - users")
-    print("   - user_roles")
+    print("\n✅ Successfully imported all models!")
 except ImportError as e:
     print(f"❌ Error importing models: {e}")
     print(f"Make sure you're running from: {backend_dir}")
@@ -55,8 +53,6 @@ if not DATABASE_URL:
 print(f"Database URL: {DATABASE_URL[:30]}...")  # Show first 30 chars only
 
 
-
-
 def create_database():
     """Create all tables in the database"""
     print("\n🔌 Connecting to PostgreSQL...")
@@ -67,8 +63,16 @@ def create_database():
         print("📝 Creating tables...")
         Base.metadata.create_all(bind=engine)
         
-        print("\n✅ Successfully created the users table!")
-        print("   - users")
+        print("\n✅ Successfully created all tables!")
+        print("\n📊 Tables created:")
+        print("   1. users - User accounts")
+        print("   2. roles - System roles (admin, global_user, guardian, child, elderly)")
+        print("   3. user_roles - User-role assignments (many-to-many)")
+        print("   4. otp - Phone verification codes")
+        print("   5. pending_dependents - Dependents before QR scan")
+        print("   6. refresh_tokens - JWT refresh tokens ✨ NEW")
+        print("   7. qr_invitations - QR codes for linking ✨ NEW")
+        print("   8. guardian_dependents - Approved guardian-dependent relationships ✨ NEW")
         print("\n🔍 Verify in DBeaver - refresh and check!")
         
     except Exception as e:
@@ -78,6 +82,7 @@ def create_database():
         print("  - Wrong password in .env file")
         print("  - Database doesn't exist")
         sys.exit(1)
+
 
 def populate_roles():
     """
@@ -141,9 +146,69 @@ def populate_roles():
     except Exception as e:
         print(f"❌ Error populating roles: {e}")
         sys.exit(1)
+
+
+def verify_tables():
+    """
+    Verify that all tables were created successfully
+    """
+    print("\n🔍 Verifying tables...")
+    
+    try:
+        from sqlalchemy import inspect
         
+        engine = create_engine(DATABASE_URL)
+        inspector = inspect(engine)
+        
+        expected_tables = [
+            'users',
+            'roles',
+            'user_roles',
+            'otp',
+            'pending_dependents',
+            'refresh_tokens',
+            'qr_invitations',
+            'guardian_dependents'
+        ]
+        
+        existing_tables = inspector.get_table_names()
+        
+        print("\n📋 Table verification:")
+        all_present = True
+        for table in expected_tables:
+            if table in existing_tables:
+                print(f"   ✅ {table}")
+            else:
+                print(f"   ❌ {table} - MISSING!")
+                all_present = False
+        
+        if all_present:
+            print("\n🎉 All tables created successfully!")
+        else:
+            print("\n⚠️  Some tables are missing. Please check for errors above.")
+            
+    except Exception as e:
+        print(f"❌ Error verifying tables: {e}")
+
 
 if __name__ == "__main__":
+    print("=" * 60)
+    print("🚀 PERSONAL SECURITY SYSTEM - DATABASE INITIALIZATION")
+    print("=" * 60)
     
     create_database()
     populate_roles()
+    verify_tables()
+    
+    print("\n" + "=" * 60)
+    print("✅ DATABASE SETUP COMPLETE!")
+    print("=" * 60)
+    print("\n📌 Next steps:")
+    print("   1. Verify tables in DBeaver")
+    print("   2. Test registration endpoint: POST /api/auth/register")
+    print("   3. Test login endpoint: POST /api/auth/login")
+    print("   4. Check refresh token endpoint: POST /api/auth/refresh")
+    print("\n💡 To reset database:")
+    print("   - Drop all tables in DBeaver")
+    print("   - Run this script again")
+    print("\n")
