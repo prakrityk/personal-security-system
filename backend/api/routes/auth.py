@@ -273,7 +273,9 @@ async def check_phone(phone_number: str, db: Session = Depends(get_db)):
 # ================================================
 
 @router.post("/register", status_code=status.HTTP_200_OK)
+@router.post("/register", status_code=status.HTTP_200_OK)
 async def register(user_data: UserRegister, db: Session = Depends(get_db)):
+
 
     """
     Register a new user with refresh token
@@ -281,10 +283,15 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
     """
 
    # 1. Check phone verified (unchanged)
+   # 1. Check phone verified (unchanged)
     otp_verified = db.query(OTP).filter(
         OTP.phone_number == user_data.phone_number,
         OTP.is_verified == True
     ).order_by(OTP.created_at.desc()).first()
+    
+    print("Checking OTP for phone:", user_data.phone_number)
+    print("OTP record found:", otp_verified)
+
     
     print("Checking OTP for phone:", user_data.phone_number)
     print("OTP record found:", otp_verified)
@@ -297,9 +304,11 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
         )
 
     # 2. If user already exists → must login
+    # 2. If user already exists → must login
     if db.query(User).filter(User.email == user_data.email).first():
         raise HTTPException(
             status_code=400,
+            detail="Email already registered. Please login."
             detail="Email already registered. Please login."
         )
 
@@ -446,15 +455,6 @@ async def logout(
     request: RefreshTokenRequest,
     db: Session = Depends(get_db)
 ):
-<<<<<<< HEAD
-    """Logout user by revoking the refresh token"""
-    revoke_refresh_token(request.refresh_token, db)
-    
-    return {
-        "success": True,
-        "message": "Logged out successfully"
-    }
-=======
     """
     Logout user by revoking the refresh token
     NOTE: Does NOT require current_user - token might be invalid
@@ -486,7 +486,6 @@ async def logout(
             "success": True,
             "message": "Logged out"
         }
->>>>>>> 008fb737f3016194a109b20e536adbcfa8ae3e94
 
 
 @router.post("/logout-all")
