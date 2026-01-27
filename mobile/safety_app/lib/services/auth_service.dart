@@ -1,6 +1,5 @@
 // lib/services/auth_service.dart
 // Complete authentication service with refresh token support
-
 import 'package:dio/dio.dart';
 import 'package:safety_app/models/role_info.dart';
 import '../core/network/dio_client.dart';

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:safety_app/core/theme/app_colors.dart';
 import 'package:safety_app/core/theme/app_text_styles.dart';
+import 'package:safety_app/features/home/widgets/home_section_header.dart';
 import '../widgets/family_card.dart';
 
 class FamilyListScreen extends StatelessWidget {
@@ -9,7 +10,7 @@ class FamilyListScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     // TODO: Replace with actual data
     final hasDependents = true; // Set to false to see empty state
 
@@ -22,48 +23,14 @@ class FamilyListScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Header with icon
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryGreen.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(
-                      Icons.people,
-                      color: AppColors.primaryGreen,
-                      size: 28,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'My Family',
-                          style: AppTextStyles.h3.copyWith(
-                            color: isDark
-                                ? AppColors.darkOnBackground
-                                : AppColors.lightOnBackground,
-                          ),
-                        ),
-                        Text(
-                          'Manage your family members',
-                          style: AppTextStyles.bodySmall.copyWith(
-                            color: isDark
-                                ? AppColors.darkHint
-                                : AppColors.lightHint,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+              HomeSectionHeader(
+                icon: Icons.people,
+                title: 'My Family',
+                subtitle: 'Manage your family members',
               ),
+
               const SizedBox(height: 24),
-              
+
               if (hasDependents)
                 // Grid of Family Members
                 GridView.count(
@@ -100,7 +67,7 @@ class FamilyListScreen extends StatelessWidget {
               else
                 // Empty State
                 _buildEmptyState(context, isDark),
-              
+
               const SizedBox(height: 100), // Space for bottom nav
             ],
           ),
@@ -157,10 +124,7 @@ class FamilyListScreen extends StatelessWidget {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primaryGreen,
               foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 32,
-                vertical: 16,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
             ),
           ),
         ],
