@@ -9,5 +9,5 @@ class PendingDependent(Base):
     guardian_id=Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     dependent_name = Column(String(250), nullable=False)
     relation = Column(String(50), nullable=False)
-    Age=Column(Integer, nullable=False )
+    age=Column(Integer, nullable=False )
     created_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -240,6 +240,103 @@ async def register_with_firebase(
             detail=f"Registration failed: {str(e)}"
         )
 
+<<<<<<< HEAD
+=======
+    # Correct OTP → mark as verified
+    otp.is_verified = True
+    db.commit()
+
+    return {
+        "success": True,
+        "message": "Phone verified successfully"
+    }
+
+
+@router.get("/check-phone")
+async def check_phone(phone_number: str, db: Session = Depends(get_db)):
+    """
+    Check if phone is available and/or verified (for prefill in registration)
+    """
+    otp_entry = db.query(OTP).filter(
+        OTP.phone_number == phone_number,
+        OTP.is_verified == True
+    ).order_by(OTP.created_at.desc()).first()
+
+    if otp_entry:
+        return {"available": True, "phone_number": phone_number, "prefill": True}
+    else:
+        return {"available": False, "phone_number": phone_number, "prefill": False}
+
+
+# ================================================
+# SECTION 2: REGISTRATION
+# ================================================
+
+@router.post("/register", status_code=status.HTTP_200_OK)
+async def register(user_data: UserRegister, db: Session = Depends(get_db)):
+
+    """
+    Register a new user with refresh token
+    Only allows registration if phone number is verified
+    """
+
+   # 1. Check phone verified (unchanged)
+    otp_verified = db.query(OTP).filter(
+        OTP.phone_number == user_data.phone_number,
+        OTP.is_verified == True
+    ).order_by(OTP.created_at.desc()).first()
+    
+    print("Checking OTP for phone:", user_data.phone_number)
+    print("OTP record found:", otp_verified)
+
+
+    if not otp_verified:
+        raise HTTPException(
+            status_code=400,
+            detail="Phone number not verified. Please verify before registering."
+        )
+
+    # 2. If user already exists → must login
+    if db.query(User).filter(User.email == user_data.email).first():
+        raise HTTPException(
+            status_code=400,
+            detail="Email already registered. Please login."
+        )
+
+    # 3. Generate email OTP
+    email_otp = str(random.randint(100000, 999999))
+
+    # 4. Check if pending already exists
+    pending = db.query(PendingUser).filter(
+        PendingUser.email == user_data.email
+    ).order_by(PendingUser.created_at.desc()).first()
+
+    if pending:
+        # resend OTP
+        pending.email_otp = email_otp
+        pending.otp_attempts = 0
+        db.commit()
+    else:
+        # create new pending
+        pending = PendingUser(
+            full_name=user_data.full_name,
+            email=user_data.email,
+            phone_number=user_data.phone_number,
+            hashed_password=hash_password(user_data.password),
+            email_otp=email_otp
+        )
+        db.add(pending)
+        db.commit()
+
+    # simulate email sending
+    print(f"📧 Email OTP for {user_data.email}: {email_otp}")
+
+    return {
+        "success": True,
+        "message": "Email verification OTP sent"
+    }
+
+>>>>>>> 008fb737f3016194a109b20e536adbcfa8ae3e94
 
 # ================================================
 # SECTION 3: LOGIN
@@ -340,13 +437,16 @@ async def refresh_access_token(request: RefreshTokenRequest, db: Session = Depen
         expires_in=1800
     )
 
+# In api/routes/auth.py
+# api/routes/auth.py
+# FIXED logout endpoint
 
 @router.post("/logout")
 async def logout(
     request: RefreshTokenRequest,
-    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+<<<<<<< HEAD
     """Logout user by revoking the refresh token"""
     revoke_refresh_token(request.refresh_token, db)
     
@@ -354,6 +454,39 @@ async def logout(
         "success": True,
         "message": "Logged out successfully"
     }
+=======
+    """
+    Logout user by revoking the refresh token
+    NOTE: Does NOT require current_user - token might be invalid
+    """
+    try:
+        print(f"🔄 Logout request received")
+        print(f"📦 Refresh token: {request.refresh_token[:20]}..." if request.refresh_token else "❌ No token")
+        
+        # Try to revoke the token
+        result = revoke_refresh_token(request.refresh_token, db)
+        
+        if result:
+            print("✅ Token revoked successfully")
+            return {
+                "success": True,
+                "message": "Logged out successfully"
+            }
+        else:
+            # Token not found or already revoked - still return success
+            print("ℹ️ Token not found or already revoked")
+            return {
+                "success": True,
+                "message": "Already logged out"
+            }
+    except Exception as e:
+        print(f"❌ Logout error: {e}")
+        # Always return success for logout - don't fail the user
+        return {
+            "success": True,
+            "message": "Logged out"
+        }
+>>>>>>> 008fb737f3016194a109b20e536adbcfa8ae3e94
 
 
 @router.post("/logout-all")
@@ -361,6 +494,7 @@ async def logout_all_devices(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+<<<<<<< HEAD
     """Logout from all devices by revoking all refresh tokens for the user"""
     revoke_all_user_tokens(current_user.id, db)
     
@@ -368,6 +502,25 @@ async def logout_all_devices(
         "success": True,
         "message": "Logged out from all devices successfully"
     }
+=======
+    """
+    Logout from all devices by revoking all refresh tokens for the user
+    """
+    try:
+        revoke_all_user_tokens(current_user.id, db)
+        
+        return {
+            "success": True,
+            "message": "Logged out from all devices successfully"
+        }
+    except Exception as e:
+        print(f"❌ Logout-all error: {e}")
+        # Still return success
+        return {
+            "success": True,
+            "message": "Logged out from all devices"
+        }
+>>>>>>> 008fb737f3016194a109b20e536adbcfa8ae3e94
 
 
 # ================================================
