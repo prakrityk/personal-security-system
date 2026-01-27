@@ -32,7 +32,6 @@ from api.schemas.auth import (
 # Models
 from models.user import User
 from models.pending_user import PendingUser
-from models.pending_user import PendingUser
 from models.role import Role
 from models.user_roles import UserRole
 from models.otp import OTP

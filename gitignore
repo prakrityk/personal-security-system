@@ -16,6 +16,7 @@ dist/
 downloads/
 eggs/
 .eggs/
+lib/
 lib64/
 parts/
 sdist/
@@ -44,16 +45,3 @@ Thumbs.db
 # Logs
 *.log
 logs/
-
-# Flutter/Dart (add these for your frontend)
-.dart_tool/
-.flutter-plugins
-.flutter-plugins-dependencies
-.packages
-.pub-cache/
-.pub/
-build/
-
-firebase-credentials.json
-firebase-*.json
-*.json.bak
