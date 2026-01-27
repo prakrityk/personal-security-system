@@ -14,7 +14,7 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _emailOrPhoneController = TextEditingController();
+  final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final AuthService _authService = AuthService();
 
@@ -22,17 +22,17 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
-    _emailOrPhoneController.dispose();
+    _phoneController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
   Future<void> _handleLogin() async {
-    final emailOrPhone = _emailOrPhoneController.text.trim();
+    final phone = _phoneController.text.trim();
     final password = _passwordController.text.trim();
 
     // Validation
-    if (emailOrPhone.isEmpty || password.isEmpty) {
+    if (phone.isEmpty || password.isEmpty) {
       _showError("Please fill all fields");
       return;
     }
@@ -40,33 +40,31 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // Call API
       final response = await _authService.login(
-        email: emailOrPhone,
+        email: phone, // if backend expects `phone_number`, update AuthService.login
         password: password,
       );
 
       if (!mounted) return;
 
-      // Success message with user name
-      _showSuccess("Welcome back, ${response.user.fullName}!");
+      final user = response.user;
 
-      // Check if user has roles assigned
-      // Navigate based on role status
-      if (response.user.hasRole) {
-        context.go('/home');
+      if (user != null) {
+        _showSuccess("Welcome back, ${user.fullName}!");
+
+        if (user.hasRole) {
+          context.go('/home');
+        } else {
+          context.go('/role-intent');
+        }
       } else {
-        context.go('/role-intent');
+        _showError("Login successful, but user data not found.");
       }
     } catch (e) {
       if (!mounted) return;
-
-      // Show error message
       _showError(e.toString().replaceAll('Exception: ', ''));
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -112,16 +110,14 @@ class _LoginScreenState extends State<LoginScreen> {
                     Text("Welcome back", style: AppTextStyles.heading),
                     const SizedBox(height: 8),
                     Text("Login to continue", style: AppTextStyles.body),
-
                     const SizedBox(height: 40),
 
                     AppTextField(
                       label: "Phone",
                       hint: "+977XXXXXXXX",
-                      controller: _emailOrPhoneController,
+                      controller: _phoneController,
                       enabled: !_isLoading,
                     ),
-
                     const SizedBox(height: 16),
 
                     AppTextField(
@@ -130,7 +126,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       controller: _passwordController,
                       enabled: !_isLoading,
                     ),
-
                     const SizedBox(height: 12),
 
                     Align(
@@ -149,7 +144,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                     ),
-
                     const SizedBox(height: 32),
 
                     Row(
@@ -197,5 +191,3 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 }
-
-
