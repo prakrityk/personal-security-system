@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:safety_app/core/theme/app_colors.dart';
 import 'package:safety_app/core/theme/app_text_styles.dart';
 import '../widgets/safety_toggle_tile.dart';
+import 'package:safety_app/features/voice_activation/screens/voice_registration_screen.dart';
 
 class SafetySettingsScreen extends StatefulWidget {
   const SafetySettingsScreen({super.key});
@@ -79,14 +80,32 @@ class _SafetySettingsScreenState extends State<SafetySettingsScreen> {
                 isEnabled: _liveLocation,
                 onToggle: (value) => setState(() => _liveLocation = value),
               ),
-              
+                
               SafetyToggleTile(
                 icon: Icons.mic_outlined,
                 title: 'Voice activation',
                 subtitle: 'Activate SOS with voice command',
                 isEnabled: _voiceActivation,
-                onToggle: (value) => setState(() => _voiceActivation = value),
-              ),
+                // onToggle: (value) => setState(() => _voiceActivation = value),
+                 onToggle: (value) async {
+                    if (value == true) {
+                      // 👉 First go to voice registration
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const VoiceRegistrationScreen(),
+                        ),
+                      );
+
+                      // After returning, enable toggle
+                      setState(() => _voiceActivation = true);
+                    } else {
+                      setState(() => _voiceActivation = false);
+                    }
+                  },
+                
+                ),
+              
               
               SafetyToggleTile(
                 icon: Icons.sensors_outlined,
@@ -103,7 +122,7 @@ class _SafetySettingsScreenState extends State<SafetySettingsScreen> {
                 isEnabled: _recordEvidence,
                 onToggle: (value) => setState(() => _recordEvidence = value),
               ),
-              
+
               const SizedBox(height: 100), // Space for bottom nav
             ],
           ),
