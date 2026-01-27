@@ -38,43 +38,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     super.dispose();
   }
 
-  // Future<void> _handleRegistration() async {
-  //   // Validate form
-  //   if (!_formKey.currentState!.validate()) {
-  //     return;
-  //   }
-
-  //   setState(() => _isLoading = true);
-
-  //   try {
-  //     // ✅ Register - phone is already verified in backend
-  //     final response = await _authService.register(
-  //       email: _emailController.text.trim(),
-  //       password: _passwordController.text,
-  //       fullName: _fullNameController.text.trim(),
-  //       phoneNumber: widget.phoneNumber,
-  //     );
-
-  //     if (!mounted) return;
-
-  //     _showSuccess("Account created successfully!");
-
-  //     // Navigate to role selection or home
-  //     Navigator.pushAndRemoveUntil(
-  //       context,
-  //       MaterialPageRoute(builder: (_) => const RoleIntentScreen()),
-  //       (route) => false, // Remove all previous routes
-  //     );
-  //   } catch (e) {
-  //     if (!mounted) return;
-  //     _showError(e.toString().replaceAll('Exception: ', ''));
-  //   } finally {
-  //     if (mounted) {
-  //       setState(() => _isLoading = false);
-  //     }
-  //   }
-  // }
-
   Future<void> _handleRegistration() async {
     // 1️⃣ Validate form
     if (!_formKey.currentState!.validate()) return;
@@ -92,7 +55,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         return;
       }
 
-      // 3️⃣ Register user
+      // 3️⃣ Register user (creates pending user and sends email OTP)
       final response = await _authService.register(
         email: _emailController.text.trim(),
         password: _passwordController.text,
@@ -102,10 +65,21 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
       if (!mounted) return;
 
-      _showSuccess("Account created successfully!");
+      // Check if registration was successful
+      if (response['success'] == true) {
+        _showSuccess("Verification code sent to your email!");
 
-      // 4️⃣ Navigate to role selection or home
-      context.go('/login');
+        // 4️⃣ Navigate to email verification screen
+        await Future.delayed(const Duration(seconds: 1));
+        if (!mounted) return;
+        
+        context.push(
+          '/email-verification',
+          extra: {'email': _emailController.text.trim()},
+        );
+      } else {
+        _showError(response['message'] ?? 'Registration failed');
+      }
     } catch (e) {
       if (!mounted) return;
       _showError(e.toString().replaceAll('Exception: ', ''));

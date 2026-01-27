@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:safety_app/features/auth/screens/login_screen.dart';
 import 'package:safety_app/features/auth/screens/otp_verification_screen.dart';
 import 'package:safety_app/features/auth/screens/registration_screen.dart';
+import 'package:safety_app/features/auth/screens/email_verification_screen.dart';
 import 'package:safety_app/features/home/general_home_screen.dart';
 import 'package:safety_app/features/onboarding/screens/lets_get_started_screen.dart';
 import 'package:safety_app/features/auth/screens/phone_number_screen.dart';
@@ -21,6 +22,7 @@ class AppRouter {
   static const String phoneNumber = '/phone-number';
   static const String otpVerification = '/otp-verification';
   static const String registration = '/registration';
+  static const String emailVerification = '/email-verification'; // 🆕 NEW
   static const String roleIntent = '/role-intent';
   static const String home = '/home';
 
@@ -68,7 +70,7 @@ class AppRouter {
         builder: (context, state) => const PhoneNumberScreen(),
       ),
 
-      // OTP Verification Screen
+      // OTP Verification Screen (Phone)
       GoRoute(
         path: otpVerification,
         name: 'otpVerification',
@@ -85,6 +87,17 @@ class AppRouter {
         builder: (context, state) {
           final phoneNumber = state.extra as String;
           return RegistrationScreen(phoneNumber: phoneNumber);
+        },
+      ),
+
+      // 🆕 Email Verification Screen (NEW)
+      GoRoute(
+        path: emailVerification,
+        name: 'emailVerification',
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          final email = extra?['email'] as String? ?? '';
+          return EmailVerificationScreen(email: email);
         },
       ),
 

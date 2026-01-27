@@ -1,5 +1,5 @@
 // lib/services/auth_service.dart
-// Complete authentication service with refresh token support
+// Complete authentication service with email verification support
 import 'package:dio/dio.dart';
 import 'package:safety_app/models/role_info.dart';
 import '../core/network/dio_client.dart';
@@ -78,8 +78,8 @@ class AuthService {
     }
   }
 
-  /// Register new user
-  Future<AuthResponseModel> register({
+  /// Register new user - creates pending user and sends email OTP
+  Future<Map<String, dynamic>> register({
     required String email,
     required String password,
     required String fullName,
@@ -99,21 +99,76 @@ class AuthService {
       print('📦 Registration Response:');
       print(response.data);
 
-      final authResponse = AuthResponseModel.fromJson(response.data);
-
-      // Save both access and refresh tokens
-      await _storage.saveAccessToken(authResponse.token.accessToken);
-      if (authResponse.token.refreshToken != null) {
-        await _storage.saveRefreshToken(authResponse.token.refreshToken!);
-      }
-      await _storage.saveUserData(authResponse.user.toJson());
-
-      print('✅ Registration successful');
-      print('👤 User: ${authResponse.user.fullName}');
-
-      return authResponse;
+      // Registration creates pending user and returns success message
+      return response.data as Map<String, dynamic>;
     } catch (e) {
       print('❌ Error registering user: $e');
+      rethrow;
+    }
+  }
+
+  /// Verify email OTP - converts pending user to actual user
+  Future<Map<String, dynamic>> verifyEmail({
+    required String email,
+    required String otp,
+  }) async {
+    try {
+      print('📧 Verifying email OTP for: $email');
+      print('🔑 OTP: $otp');
+
+      // Use query parameters instead of body
+      final response = await _dioClient.post(
+        ApiEndpoints.verifyEmail,
+        queryParameters: {'email': email, 'otp': otp},
+      );
+
+      print('✅ Email verified successfully');
+      print('📦 Response: ${response.data}');
+
+      return response.data as Map<String, dynamic>;
+    } catch (e) {
+      print('❌ Error verifying email: $e');
+
+      if (e is DioException) {
+        if (e.response?.statusCode == 400) {
+          final detail = e.response?.data['detail'];
+          final message = detail is String ? detail : 'Invalid OTP';
+          throw Exception(message);
+        } else if (e.response?.statusCode == 404) {
+          throw Exception('No pending registration found');
+        } else if (e.response?.statusCode == 429) {
+          throw Exception('Too many attempts. Please try again later.');
+        }
+      }
+
+      rethrow;
+    }
+  }
+
+  /// Resend email OTP
+  Future<Map<String, dynamic>> resendEmailOTP({required String email}) async {
+    try {
+      print('📧 Resending email OTP for: $email');
+
+      // Use query parameters instead of body
+      final response = await _dioClient.post(
+        ApiEndpoints.resendEmailOTP,
+        queryParameters: {'email': email},
+      );
+
+      print('✅ Email OTP resent successfully');
+      return response.data as Map<String, dynamic>;
+    } catch (e) {
+      print('❌ Error resending email OTP: $e');
+
+      if (e is DioException) {
+        if (e.response?.statusCode == 404) {
+          throw Exception('No pending registration found for this email');
+        } else if (e.response?.statusCode == 429) {
+          throw Exception('Please wait before requesting another OTP');
+        }
+      }
+
       rethrow;
     }
   }
@@ -132,35 +187,31 @@ class AuthService {
       print('📦 Login Response:');
       print(response.data);
 
-      // Parse the response (handles both 'token' and 'tokens')
       final authResponse = AuthResponseModel.fromJson(response.data);
 
-      // Save both access and refresh tokens
-      await _storage.saveAccessToken(authResponse.token.accessToken);
-      if (authResponse.token.refreshToken != null) {
-        await _storage.saveRefreshToken(authResponse.token.refreshToken!);
+      // ⚠️ Only save tokens and user if they exist
+      if (authResponse.token != null) {
+        await _storage.saveAccessToken(authResponse.token!.accessToken);
+        if (authResponse.token!.refreshToken != null) {
+          await _storage.saveRefreshToken(authResponse.token!.refreshToken!);
+        }
       }
-      await _storage.saveUserData(authResponse.user.toJson());
 
-      print('✅ Login successful');
-      print('👤 User: ${authResponse.user.fullName}');
-      print(
-        '🎭 Roles: ${authResponse.user.roles.map((r) => r.roleName).join(", ")}',
-      );
-      print(
-        '🔑 Access Token: ${authResponse.token.accessToken.substring(0, 20)}...',
-      );
-      if (authResponse.token.refreshToken != null) {
+      if (authResponse.user != null) {
+        await _storage.saveUserData(authResponse.user!.toJson());
+        print('✅ Login successful');
+        print('👤 User: ${authResponse.user!.fullName}');
         print(
-          '🔄 Refresh Token: ${authResponse.token.refreshToken!.substring(0, 20)}...',
+          '🎭 Roles: ${authResponse.user!.roles.map((r) => r.roleName).join(", ")}',
         );
+      } else {
+        print('ℹ️ Login response received, user object missing.');
       }
 
       return authResponse;
     } catch (e) {
       print('❌ Error logging in: $e');
 
-      // Provide more specific error messages
       if (e is DioException) {
         if (e.response?.statusCode == 401) {
           throw Exception('Invalid email or password');
@@ -240,9 +291,6 @@ class AuthService {
     }
   }
 
-  // lib/services/auth_service.dart
-  // FIXED logout method
-
   /// Logout user
   Future<void> logout() async {
     print('🔄 Starting logout process...');
@@ -257,7 +305,6 @@ class AuthService {
           print('📤 Attempting to revoke token on backend...');
           print('🔗 Endpoint: ${ApiEndpoints.logout}');
 
-          // CRITICAL FIX: Send as JSON object with the exact key the backend expects
           final response = await _dioClient.post(
             ApiEndpoints.logout,
             data: {'refresh_token': refreshToken},
@@ -267,7 +314,6 @@ class AuthService {
           print('📥 Response data: ${response.data}');
           print('✅ Token revoked on backend successfully');
         } on DioException catch (e) {
-          // Check if it's just "already logged out" or token not found
           if (e.response?.statusCode == 404 || e.response?.statusCode == 400) {
             print('ℹ️ Token already invalid or revoked');
           } else {
@@ -277,7 +323,6 @@ class AuthService {
             print('   Response data: ${e.response?.data}');
             print('   Error message: ${e.message}');
           }
-          // Continue with local logout regardless
           print('   Continuing with local logout...');
         } catch (e) {
           print('⚠️ Unexpected error during backend revocation: $e');
@@ -302,11 +347,8 @@ class AuthService {
         print('✅ Force clear successful');
       } catch (clearError) {
         print('❌ Fatal: Could not clear storage: $clearError');
-        // Even if clear fails, don't throw - we want logout to always succeed
       }
     }
-
-    // NEVER throw from logout - it should always succeed
   }
 
   /// Logout from all devices
@@ -314,7 +356,6 @@ class AuthService {
     print('🔄 Logging out from all devices...');
 
     try {
-      // Try to revoke all tokens on backend
       try {
         await _dioClient.post(ApiEndpoints.logoutAll);
         print('✅ All tokens revoked on backend');
@@ -323,20 +364,16 @@ class AuthService {
         print('   Continuing with local logout...');
       }
 
-      // Always clear local data
       await _storage.clearAll();
       print('✅ Logged out from all devices - local data cleared');
     } catch (e) {
       print('❌ Error during logout-all: $e');
 
-      // Force clear as fallback
       try {
         await _storage.clearAll();
       } catch (clearError) {
         print('❌ Failed to clear storage: $clearError');
       }
-
-      // Don't rethrow - logout should always succeed
     }
   }
 
