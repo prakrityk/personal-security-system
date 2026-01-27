@@ -54,3 +54,5 @@ logs/
 .pub-cache/
 .pub/
 build/
+#backend
+backend/firebase-credentials.json
