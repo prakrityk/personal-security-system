@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:safety_app/core/theme/app_colors.dart';
 import 'package:safety_app/core/theme/app_text_styles.dart';
+import 'package:safety_app/features/home/widgets/home_section_header.dart';
 import '../widgets/safety_toggle_tile.dart';
 
 class SafetySettingsScreen extends StatefulWidget {
@@ -28,49 +29,14 @@ class _SafetySettingsScreenState extends State<SafetySettingsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header with icon
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryGreen.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(
-                      Icons.shield,
-                      color: AppColors.primaryGreen,
-                      size: 28,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Safety Features',
-                          style: AppTextStyles.h3.copyWith(
-                            color: isDark
-                                ? AppColors.darkOnBackground
-                                : AppColors.lightOnBackground,
-                          ),
-                        ),
-                        Text(
-                          'Customize your safety settings',
-                          style: AppTextStyles.bodySmall.copyWith(
-                            color: isDark
-                                ? AppColors.darkHint
-                                : AppColors.lightHint,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+              HomeSectionHeader(
+                icon: Icons.shield,
+                title: 'Safety Features',
+                subtitle: 'Customize your safety settings',
               ),
+
               const SizedBox(height: 24),
-              
+
               // Safety Toggles
               SafetyToggleTile(
                 icon: Icons.location_on_outlined,
@@ -79,7 +45,7 @@ class _SafetySettingsScreenState extends State<SafetySettingsScreen> {
                 isEnabled: _liveLocation,
                 onToggle: (value) => setState(() => _liveLocation = value),
               ),
-              
+
               SafetyToggleTile(
                 icon: Icons.mic_outlined,
                 title: 'Voice activation',
@@ -87,7 +53,7 @@ class _SafetySettingsScreenState extends State<SafetySettingsScreen> {
                 isEnabled: _voiceActivation,
                 onToggle: (value) => setState(() => _voiceActivation = value),
               ),
-              
+
               SafetyToggleTile(
                 icon: Icons.sensors_outlined,
                 title: 'Motion Detection',
@@ -95,7 +61,7 @@ class _SafetySettingsScreenState extends State<SafetySettingsScreen> {
                 isEnabled: _motionDetection,
                 onToggle: (value) => setState(() => _motionDetection = value),
               ),
-              
+
               SafetyToggleTile(
                 icon: Icons.videocam_outlined,
                 title: 'Record Evidence',
@@ -103,7 +69,7 @@ class _SafetySettingsScreenState extends State<SafetySettingsScreen> {
                 isEnabled: _recordEvidence,
                 onToggle: (value) => setState(() => _recordEvidence = value),
               ),
-              
+
               const SizedBox(height: 100), // Space for bottom nav
             ],
           ),
