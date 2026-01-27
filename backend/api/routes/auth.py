@@ -240,8 +240,6 @@ async def register_with_firebase(
             detail=f"Registration failed: {str(e)}"
         )
 
-<<<<<<< HEAD
-=======
     # Correct OTP → mark as verified
     otp.is_verified = True
     db.commit()
@@ -336,7 +334,6 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
         "message": "Email verification OTP sent"
     }
 
->>>>>>> 008fb737f3016194a109b20e536adbcfa8ae3e94
 
 # ================================================
 # SECTION 3: LOGIN
@@ -446,7 +443,6 @@ async def logout(
     request: RefreshTokenRequest,
     db: Session = Depends(get_db)
 ):
-<<<<<<< HEAD
     """Logout user by revoking the refresh token"""
     revoke_refresh_token(request.refresh_token, db)
     
@@ -454,7 +450,6 @@ async def logout(
         "success": True,
         "message": "Logged out successfully"
     }
-=======
     """
     Logout user by revoking the refresh token
     NOTE: Does NOT require current_user - token might be invalid
@@ -486,7 +481,8 @@ async def logout(
             "success": True,
             "message": "Logged out"
         }
->>>>>>> 008fb737f3016194a109b20e536adbcfa8ae3e94
+
+
 
 
 @router.post("/logout-all")
@@ -494,7 +490,6 @@ async def logout_all_devices(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-<<<<<<< HEAD
     """Logout from all devices by revoking all refresh tokens for the user"""
     revoke_all_user_tokens(current_user.id, db)
     
@@ -502,7 +497,6 @@ async def logout_all_devices(
         "success": True,
         "message": "Logged out from all devices successfully"
     }
-=======
     """
     Logout from all devices by revoking all refresh tokens for the user
     """
@@ -520,7 +514,6 @@ async def logout_all_devices(
             "success": True,
             "message": "Logged out from all devices"
         }
->>>>>>> 008fb737f3016194a109b20e536adbcfa8ae3e94
 
 
 # ================================================
