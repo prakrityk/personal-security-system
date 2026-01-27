@@ -53,3 +53,6 @@ logs/
 .pub-cache/
 .pub/
 build/
+firebase-credentials.json
+firebase-*.json
+*.json.bak
