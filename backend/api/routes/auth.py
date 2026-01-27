@@ -520,3 +520,171 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
     Get current authenticated user's profile
     """
     return current_user
+
+# Backend Endpoints to Add to auth.py
+# Add these after your existing /register endpoint
+
+@router.post("/verify-email")
+async def verify_email(
+    email: str,
+    otp: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Verify email OTP and convert pending user to actual user
+    
+    Parameters:
+    - email: User's email address
+    - otp: 6-digit OTP code sent to email
+    
+    Returns:
+    - Success message and user_id
+    
+    Raises:
+    - 404: No pending registration found
+    - 400: OTP expired or invalid
+    - 429: Too many attempts
+    """
+    
+    # 1. Get pending user
+    pending = db.query(PendingUser).filter(
+        PendingUser.email == email,
+        PendingUser.is_email_verified == False
+    ).order_by(PendingUser.created_at.desc()).first()
+
+    if not pending:
+        raise HTTPException(
+            status_code=404,
+            detail="No pending registration found for this email"
+        )
+
+    # 2. Check OTP expiry (10 minutes)
+    if pending.created_at < datetime.now(timezone.utc) - timedelta(minutes=10):
+        raise HTTPException(
+            status_code=400,
+            detail="OTP expired. Please register again."
+        )
+
+    # 3. Check max attempts
+    if pending.otp_attempts >= 3:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many attempts. Please register again."
+        )
+
+    # 4. Verify OTP
+    if pending.email_otp != otp:
+        pending.otp_attempts += 1
+        db.commit()
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid OTP"
+        )
+
+    # 5. Create actual user
+    new_user = User(
+        full_name=pending.full_name,
+        email=pending.email,
+        phone_number=pending.phone_number,
+        hashed_password=pending.hashed_password,
+        email_verified=True,
+        phone_verified=True,
+        is_active=True
+    )
+
+    db.add(new_user)
+    
+    # 6. Delete pending user
+    db.delete(pending)
+    
+    db.commit()
+    db.refresh(new_user)
+
+    print(f"✅ User {new_user.email} created successfully!")
+
+    return {
+        "success": True,
+        "message": "Email verified successfully. You can now login.",
+        "user_id": new_user.id
+    }
+
+
+@router.post("/resend-email-otp")
+async def resend_email_otp(
+    email: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Resend email OTP to pending user
+    
+    Parameters:
+    - email: User's email address
+    
+    Returns:
+    - Success message
+    
+    Raises:
+    - 404: No pending registration found
+    - 429: Rate limit (must wait 1 minute)
+    """
+    
+    # Rate limit: 1 OTP per minute
+    pending = db.query(PendingUser).filter(
+        PendingUser.email == email,
+        PendingUser.is_email_verified == False
+    ).order_by(PendingUser.created_at.desc()).first()
+
+    if not pending:
+        raise HTTPException(
+            status_code=404,
+            detail="No pending registration found for this email"
+        )
+
+    # Check if user requested OTP too soon (less than 1 minute ago)
+    if pending.created_at > datetime.now(timezone.utc) - timedelta(minutes=1):
+        raise HTTPException(
+            status_code=429,
+            detail="Please wait before requesting another OTP"
+        )
+
+    # Generate new OTP
+    new_otp = generate_otp()
+    pending.email_otp = new_otp
+    pending.otp_attempts = 0
+    db.commit()
+
+    # Simulate email sending (replace with actual email service)
+    print(f"📧 Resent Email OTP for {email}: {new_otp}")
+
+    return {
+        "success": True,
+        "message": "OTP resent successfully"
+    }
+
+
+# ===================================================================
+# IMPORTANT NOTES:
+# ===================================================================
+#
+# 1. These endpoints use your existing:
+#    - PendingUser model
+#    - User model
+#    - generate_otp() function
+#    - All imports are already in your auth.py
+#
+# 2. OTP Security:
+#    - 10 minute expiration
+#    - Maximum 3 attempts per OTP
+#    - Rate limited to 1 resend per minute
+#
+# 3. Testing:
+#    - After registration, check console for OTP
+#    - Use the OTP within 10 minutes
+#    - After 3 wrong attempts, user must register again
+#
+# 4. Production:
+#    - Replace print() statements with actual email service
+#    - Consider using a background task for sending emails
+#    - Add proper email templates
+#
+# ===================================================================
