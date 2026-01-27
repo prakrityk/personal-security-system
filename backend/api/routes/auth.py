@@ -240,8 +240,6 @@ async def register_with_firebase(
             detail=f"Registration failed: {str(e)}"
         )
 
-<<<<<<< HEAD
-=======
     # Correct OTP → mark as verified
     otp.is_verified = True
     db.commit()
@@ -304,11 +302,9 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
         )
 
     # 2. If user already exists → must login
-    # 2. If user already exists → must login
     if db.query(User).filter(User.email == user_data.email).first():
         raise HTTPException(
             status_code=400,
-            detail="Email already registered. Please login."
             detail="Email already registered. Please login."
         )
 
@@ -345,7 +341,6 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
         "message": "Email verification OTP sent"
     }
 
->>>>>>> 008fb737f3016194a109b20e536adbcfa8ae3e94
 
 # ================================================
 # SECTION 3: LOGIN
@@ -493,15 +488,6 @@ async def logout_all_devices(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-<<<<<<< HEAD
-    """Logout from all devices by revoking all refresh tokens for the user"""
-    revoke_all_user_tokens(current_user.id, db)
-    
-    return {
-        "success": True,
-        "message": "Logged out from all devices successfully"
-    }
-=======
     """
     Logout from all devices by revoking all refresh tokens for the user
     """
@@ -519,7 +505,6 @@ async def logout_all_devices(
             "success": True,
             "message": "Logged out from all devices"
         }
->>>>>>> 008fb737f3016194a109b20e536adbcfa8ae3e94
 
 
 # ================================================
