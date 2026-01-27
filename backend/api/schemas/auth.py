@@ -4,7 +4,18 @@ Pydantic schemas for authentication endpoints
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional, List
-import re
+from pydantic import BaseModel
+
+class FirebaseTokenVerification(BaseModel):
+    """Schema for verifying Firebase ID token"""
+    firebase_token: str
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "firebase_token": "eyJhbGciOiJSUzI1NiIsImtpZCI6IjFmOD..."
+            }
+        }
 
 
 class UserRegister(BaseModel):
@@ -155,3 +166,4 @@ class UserWithTokens(BaseModel):
     """User response with both tokens"""
     user: UserResponse
     tokens: TokenResponse
+
