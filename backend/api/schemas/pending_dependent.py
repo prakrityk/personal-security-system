@@ -16,8 +16,8 @@ class PendingDependentCreate(BaseModel):
     """Schema for creating a pending dependent"""
     dependent_name: str = Field(..., min_length=1, max_length=250, description="Name of the dependent")
     relation: str = Field(..., min_length=1, max_length=50, description="Relationship (e.g., 'son', 'daughter', 'parent')")
-    Age: int = Field(..., ge=0, le=150, description="Age of the dependent")
-
+    age: int = Field(..., ge=0, le=150, alias="Age")  # ✅ Correct
+    
     @field_validator('dependent_name')
     @classmethod
     def name_must_not_be_empty(cls, v):
@@ -39,11 +39,12 @@ class PendingDependentResponse(BaseModel):
     guardian_id: int
     dependent_name: str
     relation: str
-    Age: int
+    age: int = Field(..., alias="Age")
     created_at: datetime
 
     class Config:
         from_attributes = True
+        populate_by_name = True
 
 
 class PendingDependentWithQR(BaseModel):
@@ -52,7 +53,7 @@ class PendingDependentWithQR(BaseModel):
     guardian_id: int
     dependent_name: str
     relation: str
-    Age: int
+    age: int = Field(..., alias="Age")
     created_at: datetime
     has_qr: bool = False
     qr_status: Optional[str] = None
@@ -60,6 +61,7 @@ class PendingDependentWithQR(BaseModel):
 
     class Config:
         from_attributes = True
+        populate_by_name = True
 
 
 # ----------------------
@@ -91,9 +93,10 @@ class ScanQRResponse(BaseModel):
     guardian_name: str
     dependent_name: str
     relation: str
-    Age: int
+    age: int = Field(..., alias="Age")  
     qr_invitation_id: int
-
+    class Config:
+        populate_by_name = True  # ✅ Added
 
 class ApproveQRRequest(BaseModel):
     """Schema for approving scanned QR"""
@@ -138,12 +141,13 @@ class DependentDetailResponse(BaseModel):
     dependent_name: str
     dependent_email: str
     relation: str
-    Age: Optional[int] = None
+    age: Optional[int] = Field(None, alias="Age")
     is_primary: bool
     linked_at: datetime
 
     class Config:
         from_attributes = True
+        populate_by_name = True
 
 
 class GuardianDetailResponse(BaseModel):
@@ -169,7 +173,7 @@ class PendingQRInvitationResponse(BaseModel):
     pending_dependent_id: int
     dependent_name: str
     relation: str
-    Age: int
+    age: Optional[int] = Field(None, alias="Age")
     status: str
     scanned_by_user_id: Optional[int] = None
     scanned_by_name: Optional[str] = None
@@ -179,3 +183,4 @@ class PendingQRInvitationResponse(BaseModel):
 
     class Config:
         from_attributes = True
+        populate_by_name = True

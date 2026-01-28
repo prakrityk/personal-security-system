@@ -82,7 +82,7 @@ async def create_pending_dependent(
             guardian_id=current_user.id,
             dependent_name=dependent_data.dependent_name,
             relation=dependent_data.relation,
-            age=dependent_data.Age
+            age=dependent_data.age
         )
         
         db.add(new_dependent)
