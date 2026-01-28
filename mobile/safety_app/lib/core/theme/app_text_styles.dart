@@ -6,7 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 class AppTextStyles {
   AppTextStyles._();
 
-  static const String _fontFamily = 'Roboto';
+ // static const String _fontFamily = 'Roboto';
 
   // Headings - Bold/Black weights
   static TextStyle h1 = GoogleFonts.roboto(

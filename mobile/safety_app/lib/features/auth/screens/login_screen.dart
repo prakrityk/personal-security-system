@@ -41,7 +41,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final response = await _authService.login(
-        email: phone, // if backend expects `phone_number`, update AuthService.login
+        email:
+            phone, // if backend expects `phone_number`, update AuthService.login
         password: password,
       );
 
@@ -185,7 +186,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 onPressed: _isLoading ? () {} : _handleLogin,
               ),
             ),
-          ],
+       ],
         ),
       ),
     );

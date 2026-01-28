@@ -16,7 +16,7 @@ class PendingDependentCreate {
     return {
       'dependent_name': dependentName,
       'relation': relation,
-      'Age': age, // Note: Backend uses 'Age' with capital A
+      'Age': age, // ✅ Backend expects 'Age' with capital A
     };
   }
 }
@@ -45,7 +45,7 @@ class PendingDependentResponse {
       guardianId: json['guardian_id'],
       dependentName: json['dependent_name'],
       relation: json['relation'],
-      age: json['Age'] ?? json['age'], // Handle both cases
+      age: json['Age'] ?? json['age'], // ✅ Backend returns 'Age'
       createdAt: DateTime.parse(json['created_at']),
     );
   }
@@ -92,7 +92,7 @@ class PendingDependentWithQR {
       guardianId: json['guardian_id'],
       dependentName: json['dependent_name'],
       relation: json['relation'],
-      age: json['Age'] ?? json['age'],
+      age: json['Age'] ?? json['age'], // ✅ Handle both for safety
       createdAt: DateTime.parse(json['created_at']),
       hasQr: json['has_qr'] ?? false,
       qrStatus: json['qr_status'],

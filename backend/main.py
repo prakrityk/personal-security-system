@@ -9,6 +9,8 @@ from api.routes import auth, pending_dependent
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi import Depends
 from api.routes import guardian
+from api.routes import dependent
+
 
 
 # Create FastAPI app
@@ -54,6 +56,7 @@ def health_check():
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(pending_dependent.router, prefix="/api/pending-dependent", tags=["Pending Dependent"])
 app.include_router(guardian.router,prefix="/api/guardian",tags=["guardian"])
+app.include_router(dependent.router,prefix="/api/dependent",tags=["dependent"])
 
 if __name__ == "__main__":
     import uvicorn

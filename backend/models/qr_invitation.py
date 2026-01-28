@@ -40,7 +40,7 @@ class QRInvitation(Base):
     # Relationships
     guardian = relationship("User", foreign_keys=[guardian_id], backref="created_qr_invitations")
     scanned_by = relationship("User", foreign_keys=[scanned_by_user_id], backref="scanned_qr_invitations")
-    pending_dependent = relationship("PendingDependent", backref="qr_invitations")
+    pending_dependent = relationship("PendingDependent", back_populates="qr_invitations")
 
     def __repr__(self):
         return f"<QRInvitation(id={self.id}, token={self.qr_token[:8]}..., status={self.status})>"
@@ -53,7 +53,7 @@ class QRInvitation(Base):
     @staticmethod
     def calculate_expiry(days=3):
         """Calculate expiry datetime (default 3 days from now)"""
-        return datetime.utcnow() + timedelta(days=days)
+        return datetime.now(timezone.utc) + timedelta(days=days)
 
     def is_expired(self):
         """Check if QR code has expired"""

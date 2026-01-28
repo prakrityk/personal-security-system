@@ -31,9 +31,11 @@ class ApiEndpoints {
   static const String rejectQR = '/guardian/reject-qr';
   static const String getMyDependents = '/guardian/my-dependents';
 
-  // Dependent endpoints
+  // ✅ Dependent endpoints
   static const String scanQR = '/dependent/scan-qr';
   static const String getMyGuardians = '/dependent/my-guardians';
+  static const String removeGuardian = '/dependent/remove-guardian';
+  
   // Email Verification Endpoints
   static const String verifyEmail = '/auth/verify-email';
   static const String resendEmailOTP = '/auth/resend-email-otp';
