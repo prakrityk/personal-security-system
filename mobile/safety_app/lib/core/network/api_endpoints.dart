@@ -3,42 +3,66 @@ class ApiEndpoints {
   static const String baseUrl = 'http://localhost:8000/api';
   //static const String baseUrl = 'http://192.168.21.102:8000/api';
 
-  // Auth endpoints
+  // ============================================================================
+  // 🔥 FIREBASE AUTHENTICATION (NEW)
+  // ============================================================================
+  
+  /// Complete registration with Firebase token
+  /// This is the MAIN endpoint for new Firebase registration flow
+  static const String completeFirebaseRegistration = '/auth/firebase/complete-registration';
+
+  // ============================================================================
+  // AUTH ENDPOINTS (EXISTING - KEEP THESE)
+  // ============================================================================
+  
+  // Old phone verification (might deprecate later)
   static const String sendVerificationCode = '/auth/send-verification-code';
   static const String verifyPhone = '/auth/verify-phone';
   static const String checkPhone = '/auth/check-phone';
   static const String checkEmail = '/auth/check-email';
+  
+  // Old registration (replaced by Firebase flow)
   static const String register = '/auth/register';
+  
+  // Email Verification Endpoints (OLD system)
+  static const String verifyEmail = '/auth/verify-email';
+  static const String resendEmailOTP = '/auth/resend-email-otp';
+  
+  // Daily login & token management (STILL USED)
   static const String login = '/auth/login';
   static const String me = '/auth/me';
   static const String refresh = '/auth/refresh';
   static const String logout = '/auth/logout';
   static const String logoutAll = '/auth/logout-all';
 
-  // Role endpoints
+  // ============================================================================
+  // ROLE ENDPOINTS
+  // ============================================================================
+  
   static const String getRoles = '/auth/roles';
   static const String selectRole = '/auth/select-role';
 
-  // Guardian endpoints
+  // ============================================================================
+  // GUARDIAN ENDPOINTS
+  // ============================================================================
+  
   static const String createPendingDependent = '/guardian/pending-dependents';
   static const String getPendingDependents = '/guardian/pending-dependents';
   static const String deletePendingDependent = '/guardian/pending-dependents';
   static const String generateQR = '/guardian/generate-qr';
   static const String getQRInvitation = '/guardian/qr-invitation';
-  static const String getPendingQRInvitations =
-      '/guardian/pending-qr-invitations';
+  static const String getPendingQRInvitations = '/guardian/pending-qr-invitations';
   static const String approveQR = '/guardian/approve-qr';
   static const String rejectQR = '/guardian/reject-qr';
   static const String getMyDependents = '/guardian/my-dependents';
 
-  // ✅ Dependent endpoints
+  // ============================================================================
+  // DEPENDENT ENDPOINTS
+  // ============================================================================
+  
   static const String scanQR = '/dependent/scan-qr';
   static const String getMyGuardians = '/dependent/my-guardians';
   static const String removeGuardian = '/dependent/remove-guardian';
-  
-  // Email Verification Endpoints
-  static const String verifyEmail = '/auth/verify-email';
-  static const String resendEmailOTP = '/auth/resend-email-otp';
 
   // Other endpoints (add as needed)
   // static const String updateProfile = '/user/profile';

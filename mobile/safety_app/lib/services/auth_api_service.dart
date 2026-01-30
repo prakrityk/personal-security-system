@@ -1,4 +1,4 @@
-// lib/services/auth_service.dart
+// lib/services/auth_api_service.dart
 // Complete authentication service with email verification support
 import 'package:dio/dio.dart';
 import 'package:safety_app/models/role_info.dart';
@@ -9,7 +9,7 @@ import '../models/auth_response_model.dart';
 import '../models/user_model.dart';
 
 /// Authentication Service - handles all auth-related API calls
-class AuthService {
+class AuthApiService {
   final DioClient _dioClient = DioClient();
   final SecureStorageService _storage = SecureStorageService();
 
@@ -106,6 +106,76 @@ class AuthService {
       rethrow;
     }
   }
+
+  // ============================================================================
+  // 🔥 NEW: FIREBASE REGISTRATION METHOD
+  // ============================================================================
+
+  /// Complete registration with Firebase token
+  /// This is called AFTER phone + email are verified in Firebase
+  /// Sends Firebase token to backend which verifies it and creates the user
+  Future<AuthResponseModel> completeFirebaseRegistration({
+    required String firebaseToken,
+    required String fullName,
+    required String password,
+  }) async {
+    try {
+      print('🔥 Completing Firebase registration...');
+      print('📝 Full Name: $fullName');
+
+      final response = await _dioClient.post(
+        ApiEndpoints.completeFirebaseRegistration, 
+        data: {
+          'firebase_token': firebaseToken,
+          'full_name': fullName,
+          'password': password,
+        },
+      );
+
+      print('✅ Firebase registration completed');
+      print('📦 Response: ${response.data}');
+
+      final authResponse = AuthResponseModel.fromJson(response.data);
+
+      // Save tokens to secure storage
+      if (authResponse.token != null) {
+        await _storage.saveAccessToken(authResponse.token!.accessToken);
+        if (authResponse.token!.refreshToken != null) {
+          await _storage.saveRefreshToken(authResponse.token!.refreshToken!);
+        }
+      }
+
+      // Save user data to secure storage
+      if (authResponse.user != null) {
+        await _storage.saveUserData(authResponse.user!.toJson());
+        print('✅ User registered and tokens saved');
+        print('👤 User: ${authResponse.user!.fullName}');
+        print('📧 Email: ${authResponse.user!.email}');
+        print('📱 Phone: ${authResponse.user!.phoneNumber}');
+      }
+
+      return authResponse;
+    } catch (e) {
+      print('❌ Error completing Firebase registration: $e');
+
+      if (e is DioException) {
+        if (e.response?.statusCode == 400) {
+          final detail = e.response?.data['detail'];
+          throw Exception(detail ?? 'Invalid Firebase token');
+        } else if (e.response?.statusCode == 409) {
+          throw Exception('User already exists with this email or phone number');
+        } else if (e.response?.statusCode == 401) {
+          throw Exception('Firebase token verification failed');
+        }
+      }
+
+      rethrow;
+    }
+  }
+
+  // ============================================================================
+  // END OF FIREBASE REGISTRATION METHOD
+  // ============================================================================
 
   /// Verify email OTP - converts pending user to actual user
   Future<Map<String, dynamic>> verifyEmail({

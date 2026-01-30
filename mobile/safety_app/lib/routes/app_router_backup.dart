@@ -71,51 +71,33 @@ class AppRouter {
       ),
 
       // OTP Verification Screen (Phone)
-      // ✅ FIXED: Now passes verificationId parameter
       GoRoute(
         path: otpVerification,
         name: 'otpVerification',
         builder: (context, state) {
-          final extra = state.extra as Map<String, dynamic>? ?? {};
-          final phoneNumber = extra['phoneNumber'] as String? ?? '';
-          final verificationId = extra['verificationId'] as String? ?? '';
-          
-          return OtpVerificationScreen(
-            phoneNumber: phoneNumber,
-            verificationId: verificationId,
-          );
-        },
-      ),
-
-      // Email Verification Screen (NEW)
-      // ✅ FIXED: Now passes phoneNumber (NOT email) parameter
-      GoRoute(
-        path: emailVerification,
-        name: 'emailVerification',
-        builder: (context, state) {
-          final extra = state.extra as Map<String, dynamic>? ?? {};
-          final phoneNumber = extra['phoneNumber'] as String? ?? '';
-          
-          return EmailVerificationScreen(phoneNumber: phoneNumber);
+          final phoneNumber = state.extra as String;
+          return OtpVerificationScreen(phoneNumber: phoneNumber);
         },
       ),
 
       // Registration Screen
-      // ✅ FIXED: Now passes both phoneNumber and email parameters
       GoRoute(
         path: registration,
         name: 'registration',
         builder: (context, state) {
-          final extra = state.extra as Map<String, dynamic>? ?? {};
-          final phoneNumber = extra['phoneNumber'] as String? ?? '';
-          final email = extra['email'] as String? ?? '';
-          final password = extra['password'] as String? ?? '';
-          
-          return RegistrationScreen(
-            phoneNumber: phoneNumber,
-            email: email,
-            password: password,
-          );
+          final phoneNumber = state.extra as String;
+          return RegistrationScreen(phoneNumber: phoneNumber);
+        },
+      ),
+
+      // 🆕 Email Verification Screen (NEW)
+      GoRoute(
+        path: emailVerification,
+        name: 'emailVerification',
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          final email = extra?['email'] as String? ?? '';
+          return EmailVerificationScreen(email: email);
         },
       ),
 

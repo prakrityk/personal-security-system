@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:safety_app/core/widgets/animated_bottom_button.dart';
 import 'package:safety_app/models/role_info.dart';
-import 'package:safety_app/services/auth_service.dart';
+import 'package:safety_app/services/auth_api_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/intent_card.dart';
@@ -19,7 +19,7 @@ class DependentTypeSelectionScreen extends StatefulWidget {
 
 class _DependentTypeSelectionScreenState
     extends State<DependentTypeSelectionScreen> {
-  final AuthService _authService = AuthService();
+  final AuthApiService _authApiService = AuthApiService();
   
   List<RoleInfo> _roles = [];
   DependentType? _selectedType;
@@ -34,7 +34,7 @@ class _DependentTypeSelectionScreenState
 
   Future<void> _loadRoles() async {
     try {
-      final roles = await _authService.fetchRoles();
+      final roles = await _authApiService.fetchRoles();
       if (!mounted) return;
 
       setState(() {
@@ -77,7 +77,7 @@ class _DependentTypeSelectionScreenState
       }
 
       // ✅ Assign role in backend
-      await _authService.selectRole(role.id);
+      await _authApiService.selectRole(role.id);
 
       if (!mounted) return;
 

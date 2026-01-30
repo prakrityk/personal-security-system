@@ -5,7 +5,7 @@ import 'package:safety_app/features/dependent/screens/dependent_type_selection_s
 import 'package:safety_app/features/guardian/screens/guardian_setup_choice_screen.dart';
 import 'package:safety_app/models/role_info.dart';
 import 'package:safety_app/models/user_model.dart';
-import 'package:safety_app/services/auth_service.dart';
+import 'package:safety_app/services/auth_api_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/intent_card.dart';
@@ -21,7 +21,7 @@ class RoleIntentScreen extends StatefulWidget {
 }
 
 class _RoleIntentScreenState extends State<RoleIntentScreen> {
-  final AuthService _authService = AuthService();
+  final AuthApiService _authApiService = AuthApiService();
 
   List<RoleInfo> _roles = [];
   UserIntent? _selectedIntent;
@@ -37,8 +37,8 @@ class _RoleIntentScreenState extends State<RoleIntentScreen> {
   /// Load user + roles together
   Future<void> _initData() async {
     try {
-      final user = await _authService.getCurrentUser();
-      final roles = await _authService.fetchRoles();
+      final user = await _authApiService.getCurrentUser();
+      final roles = await _authApiService.fetchRoles();
 
       if (!mounted) return;
 
@@ -89,7 +89,7 @@ class _RoleIntentScreenState extends State<RoleIntentScreen> {
       }
 
       // Assign role in backend
-      await _authService.selectRole(role.id);
+      await _authApiService.selectRole(role.id);
 
       if (!mounted) return;
 

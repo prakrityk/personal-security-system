@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:safety_app/core/widgets/animated_bottom_button.dart';
 import 'package:safety_app/core/widgets/app_text_field.dart';
-import 'package:safety_app/services/auth_service.dart';
+import 'package:safety_app/services/auth_api_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 
@@ -16,7 +16,7 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
-  final AuthService _authService = AuthService();
+  final AuthApiService _authApiService = AuthApiService();
 
   bool _isLoading = false;
 
@@ -40,9 +40,9 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final response = await _authService.login(
+      final response = await _authApiService.login(
         email:
-            phone, // if backend expects `phone_number`, update AuthService.login
+            phone, // if backend expects `phone_number`, update AuthApiService.login
         password: password,
       );
 

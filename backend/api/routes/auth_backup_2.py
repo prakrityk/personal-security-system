@@ -1,6 +1,7 @@
 """
-Authentication Routes - Firebase Integration (WITH DETAILED LOGGING)
+Authentication Routes - Firebase Integration (FIXED)
 Handles user registration and login with Firebase verification
+CHANGES: Made endpoint async and added timeout handling
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -52,8 +53,18 @@ async def verify_firebase_token(
 ):
     """
     Step 1: Verify Firebase token after phone + email verification
+    
+    Flow:
+    1. User completes phone verification in Flutter (Firebase)
+    2. User completes email verification in Flutter (Firebase)
+    3. Flutter sends Firebase ID token to this endpoint
+    4. Backend verifies token and extracts user info
+    5. Returns verification status
+    
+    This endpoint checks if user already exists or needs to complete registration
     """
     try:
+        # Run Firebase verification in thread pool to avoid blocking
         firebase_user = await asyncio.to_thread(
             firebase_service.verify_firebase_token,
             request.firebase_token
@@ -68,6 +79,7 @@ async def verify_firebase_token(
             detail=f"Firebase verification failed: {str(e)}"
         )
     
+    # Check both email and phone are verified
     if not firebase_user['email_verified']:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -80,6 +92,7 @@ async def verify_firebase_token(
             detail="Phone number not verified in Firebase. Please verify your phone first."
         )
     
+    # Check if user already exists in our database
     existing_user = db.query(User).filter(
         User.firebase_uid == firebase_user['uid']
     ).first()
@@ -94,6 +107,7 @@ async def verify_firebase_token(
             "phone_number": firebase_user['phone_number']
         }
     
+    # User verified in Firebase but not in our database
     return {
         "success": True,
         "message": "Firebase verification successful. Complete registration.",
@@ -111,86 +125,35 @@ async def complete_firebase_registration(
     request: FirebaseRegistrationComplete,
     db: Session = Depends(get_db)
 ):
-    """Complete registration with Firebase-verified credentials"""
+    """
+    Complete registration with Firebase-verified credentials
     
-    # ============================================================================
-    # DETAILED LOGGING - CHECK TOKEN RECEIPT
-    # ============================================================================
-    logger.info("="*80)
-    logger.info("📝 FIREBASE REGISTRATION REQUEST RECEIVED")
-    logger.info("="*80)
+    Request body:
+    {
+        "firebase_token": "eyJhbGc...",
+        "full_name": "John Doe",
+        "password": "SecurePass123!"
+    }
     
-    logger.info(f"📦 Request Data:")
-    logger.info(f"   Full Name: {request.full_name}")
-    logger.info(f"   Password: {'*' * len(request.password)} (length: {len(request.password)})")
-    
-    # Check if token exists
-    if not request.firebase_token:
-        logger.error("❌ NO TOKEN RECEIVED FROM CLIENT!")
-        logger.error("   request.firebase_token is None or empty")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Firebase token is required but was not provided"
-        )
-    
-    # Log token details
-    token_length = len(request.firebase_token)
-    logger.info(f"🔑 Firebase Token:")
-    logger.info(f"   Token received: YES ✓")
-    logger.info(f"   Token length: {token_length} characters")
-    logger.info(f"   Token preview (first 100 chars): {request.firebase_token[:100]}...")
-    logger.info(f"   Token preview (last 50 chars): ...{request.firebase_token[-50:]}")
-    
-    # Check token format
-    if not request.firebase_token.startswith('eyJ'):
-        logger.error(f"❌ INVALID TOKEN FORMAT!")
-        logger.error(f"   Expected JWT starting with 'eyJ'")
-        logger.error(f"   Got: {request.firebase_token[:20]}...")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid token format"
-        )
-    
-    logger.info(f"✅ Token format looks valid (JWT)")
-    logger.info(f"🔄 Attempting Firebase verification...")
-    logger.info("="*80)
-    
-    # ============================================================================
-    # FIREBASE VERIFICATION
-    # ============================================================================
+    Flow:
+    1. Verify Firebase token (async/non-blocking)
+    2. Extract email and phone from Firebase
+    3. Create user in database with verified status
+    4. Return JWT tokens
+    """
     try:
+        logger.info("📝 Starting Firebase registration...")
+        
+        # Verify Firebase token in thread pool (non-blocking)
         firebase_user = await asyncio.to_thread(
             firebase_service.verify_firebase_token,
             request.firebase_token
         )
         
-        logger.info("="*80)
-        logger.info(f"✅ FIREBASE TOKEN VERIFIED SUCCESSFULLY")
-        logger.info("="*80)
-        logger.info(f"📋 Extracted User Info:")
-        logger.info(f"   UID: {firebase_user.get('uid')}")
-        logger.info(f"   Email: {firebase_user.get('email')}")
-        logger.info(f"   Phone: {firebase_user.get('phone_number')}")
-        logger.info(f"   Email Verified: {firebase_user.get('email_verified')}")
-        logger.info(f"   Phone Verified: {firebase_user.get('phone_verified')}")
-        logger.info("="*80)
-        
-    except HTTPException as e:
-        logger.error("="*80)
-        logger.error(f"❌ FIREBASE VERIFICATION FAILED (HTTPException)")
-        logger.error("="*80)
-        logger.error(f"   Status Code: {e.status_code}")
-        logger.error(f"   Detail: {e.detail}")
-        logger.error("="*80)
-        raise
+        logger.info(f"✅ Firebase token verified - UID: {firebase_user.get('uid')}")
         
     except Exception as e:
-        logger.error("="*80)
-        logger.error(f"❌ FIREBASE VERIFICATION FAILED (Unexpected Error)")
-        logger.error("="*80)
-        logger.error(f"   Error Type: {type(e).__name__}")
-        logger.error(f"   Error Message: {str(e)}")
-        logger.error("="*80)
+        logger.error(f"❌ Firebase token verification failed: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Firebase verification failed: {str(e)}"
@@ -198,14 +161,12 @@ async def complete_firebase_registration(
     
     # Verify both email and phone are verified
     if not firebase_user['email_verified']:
-        logger.error("❌ Email not verified in Firebase")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email not verified"
         )
     
     if not firebase_user['phone_verified']:
-        logger.error("❌ Phone not verified in Firebase")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Phone number not verified"
@@ -217,7 +178,6 @@ async def complete_firebase_registration(
     ).first()
     
     if existing_user:
-        logger.warning(f"⚠️ User already exists with Firebase UID: {firebase_user['uid']}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User already registered with this Firebase account"
@@ -236,8 +196,8 @@ async def complete_firebase_registration(
             phone_number=firebase_user['phone_number'],
             full_name=request.full_name,
             hashed_password=hashed_pw,
-            email_verified=True,
-            phone_verified=True,
+            email_verified=True,  # Already verified by Firebase
+            phone_verified=True,  # Already verified by Firebase
             is_active=True
         )
         
@@ -268,65 +228,73 @@ async def complete_firebase_registration(
             email=new_user.email,
             full_name=new_user.full_name,
             phone_number=new_user.phone_number,
-            roles=[]
+            roles=[]  # No roles yet - user will select after registration
         )
         
         tokens = TokenResponse(
             access_token=access_token,
             refresh_token=refresh_token_str,
             token_type="bearer",
-            expires_in=1800
+            expires_in=1800  # 30 minutes
         )
         
-        logger.info("="*80)
-        logger.info("✅ FIREBASE REGISTRATION COMPLETED SUCCESSFULLY!")
-        logger.info("="*80)
+        logger.info("✅ Firebase registration completed successfully!")
         return UserWithTokens(user=user_response, tokens=tokens)
         
     except Exception as e:
         db.rollback()
-        logger.error("="*80)
-        logger.error(f"❌ ERROR DURING USER CREATION")
-        logger.error("="*80)
-        logger.error(f"   Error Type: {type(e).__name__}")
-        logger.error(f"   Error Message: {str(e)}")
-        logger.error("="*80)
+        logger.error(f"❌ Error during registration: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create user: {str(e)}"
+            detail=f"Registration failed: {str(e)}"
         )
 
 
 # =====================================================
-# DAILY LOGIN (EMAIL + PASSWORD)
+# TRADITIONAL LOGIN (Email/Password)
 # =====================================================
 
 @router.post("/login", response_model=UserWithTokens)
-def login(request: UserLogin, db: Session = Depends(get_db)):
-    """Daily login using email and password"""
-    user = db.query(User).filter(User.email == request.email).first()
+def login(
+    credentials: UserLogin,
+    db: Session = Depends(get_db)
+):
+    """
+    Login with email and password (traditional auth)
+    
+    After Firebase registration, users log in daily with email + password
+    Firebase is only used during registration for verification
+    """
+    # Find user by email or phone
+    user = db.query(User).filter(
+        (User.email == credentials.email) | (User.phone_number == credentials.email)
+    ).first()
     
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email/phone or password"
         )
     
-    if not verify_password(request.password, user.hashed_password):
+    # Verify password
+    if not verify_password(credentials.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials"
+            detail="Invalid email/phone or password"
         )
     
+    # Check if user is active
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is inactive. Contact support."
+            detail="Account is deactivated"
         )
     
+    # Create tokens
     access_token = create_access_token(data={"sub": str(user.id)})
     refresh_token_str = create_refresh_token(data={"sub": str(user.id)})
     
+    # Store refresh token
     refresh_token_record = RefreshToken(
         user_id=user.id,
         token=refresh_token_str,
@@ -335,6 +303,7 @@ def login(request: UserLogin, db: Session = Depends(get_db)):
     db.add(refresh_token_record)
     db.commit()
     
+    # Get user roles
     user_roles = [
         RoleInfo(
             id=ur.role.id,
@@ -362,84 +331,60 @@ def login(request: UserLogin, db: Session = Depends(get_db)):
     return UserWithTokens(user=user_response, tokens=tokens)
 
 
-@router.post("/logout", status_code=status.HTTP_200_OK)
-def logout(request: RefreshTokenRequest, db: Session = Depends(get_db)):
-    """Logout by invalidating refresh token"""
-    refresh_token = db.query(RefreshToken).filter(
-        RefreshToken.token == request.refresh_token
-    ).first()
-    
-    if refresh_token:
-        db.delete(refresh_token)
-        db.commit()
-        return {"message": "Logged out successfully"}
-    
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="Invalid refresh token"
-    )
-
-
-@router.post("/logout-all", status_code=status.HTTP_200_OK)
-def logout_all(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Logout from all devices"""
-    db.query(RefreshToken).filter(
-        RefreshToken.user_id == current_user.id
-    ).delete()
-    db.commit()
-    
-    return {"message": "Logged out from all devices"}
-
+# =====================================================
+# REFRESH TOKEN
+# =====================================================
 
 @router.post("/refresh", response_model=TokenResponse)
 def refresh_access_token(
     request: RefreshTokenRequest,
     db: Session = Depends(get_db)
 ):
-    """Get new access token using refresh token"""
-    payload = verify_refresh_token(request.refresh_token)
-    if not payload:
+    """
+    Refresh access token using refresh token
+    """
+    # Verify refresh token
+    user_id = verify_refresh_token(request.refresh_token)
+    
+    # Check if user exists
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired refresh token"
+            detail="User not found or inactive"
         )
     
-    user_id = payload.get("sub")
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token payload"
-        )
-    
-    refresh_token = db.query(RefreshToken).filter(
-        RefreshToken.token == request.refresh_token,
-        RefreshToken.user_id == int(user_id),
-        RefreshToken.expires_at > datetime.utcnow(),
-        RefreshToken.is_revoked == False
+    # Check if refresh token exists in database and is valid
+    token_record = db.query(RefreshToken).filter(
+        RefreshToken.user_id == user_id,
+        RefreshToken.is_revoked == False,
+        RefreshToken.expires_at > datetime.utcnow()
     ).first()
     
-    if not refresh_token:
+    if not token_record:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired refresh token"
         )
     
+    # Create new access token
     access_token = create_access_token(data={"sub": str(user_id)})
     
     return TokenResponse(
         access_token=access_token,
-        refresh_token=request.refresh_token,
+        refresh_token=request.refresh_token,  # Keep same refresh token
         token_type="bearer",
         expires_in=1800
     )
 
 
+# =====================================================
+# AVAILABILITY CHECKS
+# =====================================================
+
 @router.get("/check-email/{email}", response_model=EmailCheckResponse)
 def check_email_availability(email: str, db: Session = Depends(get_db)):
-    """Check if email is available"""
+    """Check if email is available for registration"""
     existing = db.query(User).filter(User.email == email).first()
     
     if existing:
@@ -456,7 +401,7 @@ def check_email_availability(email: str, db: Session = Depends(get_db)):
 
 @router.get("/check-phone/{phone_number}", response_model=PhoneCheckResponse)
 def check_phone_availability(phone_number: str, db: Session = Depends(get_db)):
-    """Check if phone number is available"""
+    """Check if phone number is available for registration"""
     existing = db.query(User).filter(User.phone_number == phone_number).first()
     
     if existing:
@@ -471,11 +416,15 @@ def check_phone_availability(phone_number: str, db: Session = Depends(get_db)):
     )
 
 
+# =====================================================
+# USER PROFILE
+# =====================================================
+
 @router.get("/me", response_model=UserResponse)
 def get_current_user_info(
     current_user: User = Depends(get_current_user)
 ):
-    """Get current user information"""
+    """Get current authenticated user information"""
     user_roles = [
         RoleInfo(
             id=ur.role.id,
@@ -494,13 +443,21 @@ def get_current_user_info(
     )
 
 
+# =====================================================
+# ROLE SELECTION (After Registration)
+# =====================================================
+
 @router.post("/select-role", response_model=UserResponse)
 def select_user_role(
     request: RoleSelectRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Select user role after registration"""
+    """
+    Allow user to select their role after registration
+    (global_user, guardian, child, elderly)
+    """
+    # Check if role exists
     role = db.query(Role).filter(Role.id == request.role_id).first()
     if not role:
         raise HTTPException(
@@ -508,12 +465,14 @@ def select_user_role(
             detail="Role not found"
         )
     
+    # Don't allow selecting 'admin' role
     if role.role_name == "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Cannot self-assign admin role"
         )
     
+    # Check if user already has this role
     existing_role = db.query(UserRole).filter(
         UserRole.user_id == current_user.id,
         UserRole.role_id == request.role_id
@@ -525,6 +484,7 @@ def select_user_role(
             detail="User already has this role"
         )
     
+    # Assign role
     user_role = UserRole(
         user_id=current_user.id,
         role_id=request.role_id
@@ -532,6 +492,7 @@ def select_user_role(
     db.add(user_role)
     db.commit()
     
+    # Refresh user to get updated roles
     db.refresh(current_user)
     
     user_roles = [
@@ -554,7 +515,7 @@ def select_user_role(
 
 @router.get("/roles", response_model=List[RoleInfo])
 def get_available_roles(db: Session = Depends(get_db)):
-    """Get list of available roles"""
+    """Get list of available roles for selection (excluding admin)"""
     roles = db.query(Role).filter(Role.role_name != "admin").all()
     
     return [
@@ -565,6 +526,11 @@ def get_available_roles(db: Session = Depends(get_db)):
         )
         for role in roles
     ]
+
+
+# =====================================================
+# TEST ENDPOINT (REMOVE IN PRODUCTION)
+# =====================================================
 
 @router.post("/test/register-without-firebase", response_model=UserWithTokens, status_code=status.HTTP_201_CREATED)
 def test_register_without_firebase(
