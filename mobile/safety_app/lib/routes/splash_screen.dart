@@ -1,3 +1,5 @@
+// lib/routes/splash_screen.dart (FIXED)
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lottie/lottie.dart';
@@ -14,72 +16,83 @@ class SplashScreen extends ConsumerStatefulWidget {
 }
 
 class _SplashScreenState extends ConsumerState<SplashScreen> {
+  bool _isNavigating = false; // Track if navigation is in progress
+
   @override
   void initState() {
     super.initState();
-    _checkAuthAndNavigate();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAuthAndNavigate();
+    });
   }
 
   Future<void> _checkAuthAndNavigate() async {
-    // Show splash animation for at least 3 seconds
-    await Future.delayed(const Duration(seconds: 3));
-
-    if (!mounted) return;
+    if (_isNavigating) return; // Prevent multiple navigations
+    _isNavigating = true;
 
     try {
       // Get authentication state
       final authState = ref.read(authStateProvider);
 
+      // Wait for initial animation
+      await Future.delayed(const Duration(milliseconds: 1500));
+
+      if (!mounted) return;
+
       authState.when(
         data: (user) {
           if (!mounted) return;
 
-          if (user != null) {
-            // User is logged in
-            print('✅ Splash: User logged in - ${user.fullName}');
+          final targetRoute = _getTargetRoute(user);
+          print('📍 Splash: Navigating to $targetRoute');
 
-            if (user.hasRole) {
-              // Has role assigned - go to home
-              print('📍 Splash: Navigating to Home (has role)');
-              context.go(AppRouter.home);
-            } else {
-              // No role assigned - go to role selection
-              print('📍 Splash: Navigating to Role Intent (no role)');
-              context.go(AppRouter.roleIntent);
-            }
-          } else {
-            // No user - go to login
-            print('📍 Splash: No user found - Navigating to Login');
-            context.go(AppRouter.login);
-          }
+          // Use replace instead of go to remove splash from stack
+          context.replace(targetRoute);
         },
         loading: () {
-          // Still loading - default to login after a short wait
-          print('⏳ Splash: Auth state loading...');
-          Future.delayed(const Duration(seconds: 1), () {
+          // If still loading after delay, go to login
+          Future.delayed(const Duration(milliseconds: 500), () {
             if (mounted) {
               print('📍 Splash: Loading timeout - Navigating to Login');
-              context.go(AppRouter.login);
+              context.replace(AppRouter.login);
             }
           });
         },
         error: (error, stack) {
-          // Error loading auth state - go to login
-          print('❌ Splash: Auth error - $error');
-          print('📍 Splash: Navigating to Login due to error');
           if (mounted) {
-            context.go(AppRouter.login);
+            print('❌ Splash: Auth error - $error');
+            context.replace(AppRouter.login);
           }
         },
       );
     } catch (e) {
-      // Catch any unexpected errors
       print('❌ Splash: Unexpected error - $e');
       if (mounted) {
-        context.go(AppRouter.login);
+        context.replace(AppRouter.login);
       }
     }
   }
+
+  String _getTargetRoute(dynamic user) {
+    if (user == null) {
+      return AppRouter.login;
+    } else if (user.hasRole) {
+      return AppRouter.home;
+    } else {
+      return AppRouter.roleIntent;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // ✅ FIX: Prevent any rebuilds by using a const widget
+    return _SplashContent();
+  }
+}
+
+// ✅ FIX: Separate widget to prevent rebuilds
+class _SplashContent extends StatelessWidget {
+  const _SplashContent();
 
   @override
   Widget build(BuildContext context) {
@@ -100,7 +113,6 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
               fit: BoxFit.contain,
             ),
             const SizedBox(height: 24),
-            // Optional: Add loading indicator
             CircularProgressIndicator(
               color: isDark
                   ? AppColors.darkAccentGreen1
