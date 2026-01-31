@@ -1,3 +1,6 @@
+// ===================================================================
+// IMPROVED: auth_provider.dart - Better State Management
+// ===================================================================
 // lib/core/providers/auth_provider.dart
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,18 +11,6 @@ import 'package:safety_app/services/auth_service.dart';
 /// Provider for AuthService instance
 final authServiceProvider = Provider<AuthService>((ref) {
   return AuthService();
-});
-
-/// Provider for current user
-final currentUserProvider = FutureProvider<UserModel?>((ref) async {
-  final authService = ref.watch(authServiceProvider);
-  return await authService.getCurrentUser();
-});
-
-/// Provider to check if user is logged in
-final isLoggedInProvider = FutureProvider<bool>((ref) async {
-  final authService = ref.watch(authServiceProvider);
-  return await authService.isLoggedIn();
 });
 
 /// State notifier for user authentication state
@@ -41,14 +32,37 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<UserModel?>> {
     }
   }
 
-  /// Refresh user data from API
+  /// ✅ IMPROVED: Refresh user data from API with forced state update
   Future<void> refreshUser() async {
+    print('🔄 AuthProvider: Starting user refresh...');
+
     try {
+      // Temporarily set to loading to trigger widget rebuilds
+      state = const AsyncValue.loading();
+
+      // Small delay to ensure loading state is propagated
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      // Fetch fresh data from API
       final user = await _authService.fetchCurrentUser();
+
+      print('✅ AuthProvider: User refreshed - ${user.fullName}');
+
+      // Update state with new data
       state = AsyncValue.data(user);
+
+      print('✅ AuthProvider: State updated successfully');
     } catch (e, stack) {
+      print('❌ AuthProvider: Error refreshing user - $e');
       state = AsyncValue.error(e, stack);
     }
+  }
+
+  /// ✅ NEW: Update user data directly (bypass API call)
+  /// Use this when you already have the updated user object from an API call
+  void updateUserData(UserModel user) {
+    print('✅ AuthProvider: Direct state update - ${user.fullName}');
+    state = AsyncValue.data(user);
   }
 
   /// Logout user - clears all data and resets state
