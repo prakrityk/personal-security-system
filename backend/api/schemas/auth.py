@@ -112,6 +112,7 @@ class UserResponse(BaseModel):
     email: str
     full_name: str
     phone_number: str
+    profile_picture: Optional[str] = None  
     roles: List[RoleInfo] = []
     
     class Config:
@@ -122,6 +123,7 @@ class UserResponse(BaseModel):
                 "email": "john.doe@example.com",
                 "full_name": "John Doe",
                 "phone_number": "+9779812345678",
+                 "profile_picture": "/uploads/profile_pictures/user_1_abc123.jpg",
                 "roles": []  # Empty until user selects path after login
             }
         }

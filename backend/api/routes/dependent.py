@@ -1,5 +1,5 @@
 """
-Dependent Routes
+Dependent Routes - CORRECTED WITH AUTO-CONTACT INTEGRATION
 Handles dependent-related operations: QR scanning, viewing guardians
 """
 
@@ -27,7 +27,12 @@ from models.user_roles import UserRole
 from api.dependencies.auth import get_current_user
 from database.connection import get_db
 
-# ✅ FIX: Remove prefix here since it's added in main.py
+# ✅ CRITICAL: Import auto-contact hooks
+from api.routes.guardian_auto_contacts import (
+    on_guardian_relationship_created,
+    on_guardian_relationship_revoked,
+)
+
 router = APIRouter(tags=["dependent"])
 
 
@@ -54,7 +59,6 @@ def verify_dependent_role(current_user: User, db: Session):
 
 def assign_role_to_user(user_id: int, role_name: str, db: Session):
     """Assign a role to a user if they don't have it"""
-    # Get the role
     role = db.query(Role).filter(Role.role_name == role_name).first()
     
     if not role:
@@ -63,14 +67,12 @@ def assign_role_to_user(user_id: int, role_name: str, db: Session):
             detail=f"Role '{role_name}' not found in system"
         )
     
-    # Check if user already has this role
     existing = db.query(UserRole).filter(
         UserRole.user_id == user_id,
         UserRole.role_id == role.id
     ).first()
     
     if not existing:
-        # Assign the role
         user_role = UserRole(user_id=user_id, role_id=role.id)
         db.add(user_role)
         db.commit()
@@ -80,7 +82,7 @@ def assign_role_to_user(user_id: int, role_name: str, db: Session):
 
 
 # ================================================
-# SCAN QR CODE
+# SCAN QR CODE (FIXED)
 # ================================================
 
 @router.post("/scan-qr", response_model=ScanQRResponse)
@@ -96,10 +98,8 @@ async def scan_qr_code(
     try:
         print(f"📱 User {current_user.id} scanning QR: {request.qr_token}")
         
-        # Verify user has child or elderly role
         verify_dependent_role(current_user, db)
         
-        # Find QR invitation
         qr_invitation = db.query(QRInvitation).filter(
             QRInvitation.qr_token == request.qr_token
         ).first()
@@ -110,7 +110,6 @@ async def scan_qr_code(
                 detail="Invalid QR code"
             )
         
-        # Check if expired
         if qr_invitation.is_expired():
             qr_invitation.status = "expired"
             db.commit()
@@ -119,21 +118,18 @@ async def scan_qr_code(
                 detail="QR code has expired. Please ask your guardian for a new one."
             )
         
-        # Check if already used
         if qr_invitation.status not in ["pending", "scanned"]:
             raise HTTPException(
                 status_code=400,
                 detail=f"QR code has already been {qr_invitation.status}"
             )
         
-        # Check if user is trying to scan their own QR
         if qr_invitation.guardian_id == current_user.id:
             raise HTTPException(
                 status_code=400,
                 detail="You cannot scan your own QR code"
             )
         
-        # Get pending dependent info
         pending_dependent = db.query(PendingDependent).filter(
             PendingDependent.id == qr_invitation.pending_dependent_id
         ).first()
@@ -144,7 +140,6 @@ async def scan_qr_code(
                 detail="Pending dependent information not found"
             )
         
-        # Get guardian info
         guardian = db.query(User).filter(
             User.id == qr_invitation.guardian_id
         ).first()
@@ -155,41 +150,52 @@ async def scan_qr_code(
                 detail="Guardian not found"
             )
         
-        # ✅ Update QR invitation status
+        # Update QR invitation status
         qr_invitation.scanned_by_user_id = current_user.id
-        qr_invitation.status = "approved"  # Auto-approve
+        qr_invitation.status = "approved"
         qr_invitation.is_approved = True
         qr_invitation.scanned_at = datetime.now(timezone.utc)
         qr_invitation.approved_at = datetime.now(timezone.utc)
         
-        # ✅ Check if relationship already exists
+        # Check if relationship already exists
         existing_relationship = db.query(GuardianDependent).filter(
             GuardianDependent.guardian_id == guardian.id,
             GuardianDependent.dependent_id == current_user.id
         ).first()
         
+        new_relationship = None
         if not existing_relationship:
-            # ✅ Create guardian-dependent relationship
+            # Create guardian-dependent relationship
             new_relationship = GuardianDependent(
                 guardian_id=guardian.id,
                 dependent_id=current_user.id,
                 relation=pending_dependent.relation,
-                is_primary=True,  # First guardian is primary
+                is_primary=True,
+                guardian_type="primary",  # ✅ Make sure this is set
                 pending_dependent_id=pending_dependent.id
             )
             db.add(new_relationship)
+            db.commit()
+            db.refresh(new_relationship)
             print(f"✅ Created guardian-dependent relationship: {guardian.id} → {current_user.id}")
+            
+            # ✅ AUTO-SYNC: Create emergency contact for dependent
+            try:
+                on_guardian_relationship_created(db, new_relationship)
+                print(f"✅ Auto-created emergency contact for primary guardian")
+            except Exception as e:
+                print(f"⚠️ Warning: Could not auto-create emergency contact: {e}")
+                # Don't fail the main operation
         else:
             print(f"ℹ️  Guardian-dependent relationship already exists")
         
-        # ✅ Ensure user has the correct dependent role (child or elderly)
-        # This is based on what the guardian specified in pending_dependent.relation
+        # Ensure user has the correct dependent role
         if pending_dependent.relation == "child":
             assign_role_to_user(current_user.id, "child", db)
         elif pending_dependent.relation == "elderly":
             assign_role_to_user(current_user.id, "elderly", db)
         
-        # Commit all changes
+        # Commit QR status update
         db.commit()
         db.refresh(qr_invitation)
         
@@ -225,15 +231,10 @@ async def get_my_guardians(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Get all guardians linked to the current dependent
-    Requires: child or elderly role
-    """
+    """Get all guardians linked to the current dependent"""
     try:
-        # Verify user has dependent role
         verify_dependent_role(current_user, db)
         
-        # Get all relationships where current user is the dependent
         relationships = db.query(GuardianDependent).filter(
             GuardianDependent.dependent_id == current_user.id
         ).all()
@@ -269,7 +270,7 @@ async def get_my_guardians(
 
 
 # ================================================
-# REMOVE GUARDIAN (Optional - for user to unlink)
+# REMOVE GUARDIAN (FIXED)
 # ================================================
 
 @router.delete("/remove-guardian/{relationship_id}")
@@ -283,10 +284,8 @@ async def remove_guardian(
     Only the dependent can remove the relationship
     """
     try:
-        # Verify user has dependent role
         verify_dependent_role(current_user, db)
         
-        # Find the relationship
         relationship = db.query(GuardianDependent).filter(
             GuardianDependent.id == relationship_id,
             GuardianDependent.dependent_id == current_user.id
@@ -298,7 +297,14 @@ async def remove_guardian(
                 detail="Guardian relationship not found"
             )
         
-        # Delete the relationship
+        # ✅ AUTO-CLEANUP: Remove emergency contact BEFORE deleting relationship
+        try:
+            on_guardian_relationship_revoked(db, relationship)
+            print(f"✅ Removed auto emergency contact for revoked guardian")
+        except Exception as e:
+            print(f"⚠️ Warning: Could not remove emergency contact: {e}")
+            # Don't fail the main operation
+        
         db.delete(relationship)
         db.commit()
         
