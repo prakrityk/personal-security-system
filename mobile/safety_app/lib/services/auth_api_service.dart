@@ -130,6 +130,10 @@ class AuthApiService {
           'full_name': fullName,
           'password': password,
         },
+        options: Options(
+          sendTimeout: const Duration(seconds: 180),
+          receiveTimeout: const Duration(seconds: 180),
+        ),
       );
 
       print('✅ Firebase registration completed');
@@ -251,15 +255,15 @@ class AuthApiService {
     try {
       final response = await _dioClient.post(
         ApiEndpoints.login,
-        data: {'email': email, 'password': password},
+        data: {
+          'email_or_phone': email,
+          'password': password,
+        },
       );
-
-      print('📦 Login Response:');
-      print(response.data);
 
       final authResponse = AuthResponseModel.fromJson(response.data);
 
-      // ⚠️ Only save tokens and user if they exist
+      // Save tokens to secure storage
       if (authResponse.token != null) {
         await _storage.saveAccessToken(authResponse.token!.accessToken);
         if (authResponse.token!.refreshToken != null) {
@@ -267,15 +271,10 @@ class AuthApiService {
         }
       }
 
+      // Save user data to secure storage
       if (authResponse.user != null) {
         await _storage.saveUserData(authResponse.user!.toJson());
-        print('✅ Login successful');
-        print('👤 User: ${authResponse.user!.fullName}');
-        print(
-          '🎭 Roles: ${authResponse.user!.roles.map((r) => r.roleName).join(", ")}',
-        );
-      } else {
-        print('ℹ️ Login response received, user object missing.');
+        print('✅ User logged in and tokens saved');
       }
 
       return authResponse;
@@ -285,8 +284,8 @@ class AuthApiService {
       if (e is DioException) {
         if (e.response?.statusCode == 401) {
           throw Exception('Invalid email or password');
-        } else if (e.response?.statusCode == 404) {
-          throw Exception('User not found');
+        } else if (e.response?.statusCode == 403) {
+          throw Exception('Account is deactivated');
         } else if (e.type == DioExceptionType.connectionTimeout ||
             e.type == DioExceptionType.receiveTimeout) {
           throw Exception('Connection timeout. Please try again.');
@@ -481,18 +480,93 @@ class AuthApiService {
     }
   }
 
-  /// Assign role to current user
-  Future<void> selectRole(int roleId) async {
+  // ============================================================================
+  // 🔐 MODIFIED: ROLE SELECTION WITH BIOMETRIC CHECK
+  // ============================================================================
+
+  /// Select role for current user
+  /// Returns a map with:
+  /// - 'biometric_required': true if Guardian role (biometric setup needed)
+  /// - 'biometric_required': false if other roles (assigned immediately)
+  Future<Map<String, dynamic>> selectRole(int roleId) async {
     try {
-      await _dioClient.post(ApiEndpoints.selectRole, data: {"role_id": roleId});
+      final response = await _dioClient.post(
+        ApiEndpoints.selectRole,
+        data: {"role_id": roleId},
+      );
 
-      print('✅ Role assigned successfully');
+      print('✅ Role selection response: ${response.data}');
 
-      // Refresh user after role assignment
-      final updatedUser = await fetchCurrentUser();
-      await _storage.saveUserData(updatedUser.toJson());
+      // Backend returns: { success, message, biometric_required, role_assigned }
+      final data = response.data as Map<String, dynamic>;
+      
+      // If biometric is NOT required, role was assigned immediately
+      // Update user data in storage
+      if (data['biometric_required'] == false || data['role_assigned'] == true) {
+        if (data['user'] != null) {
+          final updatedUser = UserModel.fromJson(data['user']);
+          await _storage.saveUserData(updatedUser.toJson());
+          print('✅ User data updated after role assignment');
+        }
+      }
+
+      return data;
     } catch (e) {
       print('❌ Error selecting role: $e');
+      rethrow;
+    }
+  }
+
+  // ============================================================================
+  // 🔐 BIOMETRIC AUTHENTICATION METHODS
+  // ============================================================================
+
+  /// Enable biometric authentication for current user
+  /// For Guardian users: This also assigns the Guardian role
+  Future<UserModel> enableBiometric() async {
+    try {
+      print('🔐 Enabling biometric authentication...');
+      
+      final response = await _dioClient.post(ApiEndpoints.enableBiometric);
+      print('✅ Biometric enabled on backend');
+      print('📦 Response: ${response.data}');
+
+      // Backend returns updated UserResponse with roles assigned
+      final updatedUser = UserModel.fromJson(response.data);
+      
+      // Save updated user data to storage
+      await _storage.saveUserData(updatedUser.toJson());
+      print('✅ User data updated after biometric enable');
+      
+      return updatedUser;
+    } catch (e) {
+      print('❌ Error enabling biometric: $e');
+      rethrow;
+    }
+  }
+
+  /// Login via biometric (reuses existing refresh token logic)
+  /// Called when user authenticates via fingerprint/face
+  Future<AuthResponseModel> biometricLogin() async {
+    try {
+      print('🔐 Logging in via biometric...');
+      
+      // Refresh the access token using existing refresh token
+      final newAccessToken = await refreshAccessToken();
+      print('✅ Biometric login successful - token refreshed');
+
+      // Get updated user data
+      final user = await fetchCurrentUser();
+      
+      // Create response model with refreshed token
+      return AuthResponseModel(
+        success: true,
+        message: 'Biometric login successful',
+        user: user,
+        token: null, // Token is already saved by refreshAccessToken()
+      );
+    } catch (e) {
+      print('❌ Error during biometric login: $e');
       rethrow;
     }
   }

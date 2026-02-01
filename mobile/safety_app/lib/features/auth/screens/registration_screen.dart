@@ -55,35 +55,19 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       print('   Email Verified: ${_firebaseAuthService.isEmailVerified()}');
       print('   Phone Verified: ${_firebaseAuthService.isPhoneVerified()}');
 
-      // 2️⃣ Get Firebase ID token with retry logic
-      String? firebaseToken;
-      int retryCount = 0;
-      const maxRetries = 3;
+      // 2️⃣ Get Firebase ID token (single attempt, no retry)
+      print('🔄 Getting Firebase token...');
       
-      while (retryCount < maxRetries) {
-        print('🔄 Attempting to get Firebase token (attempt ${retryCount + 1}/$maxRetries)...');
-        
-        firebaseToken = await _firebaseAuthService.getFirebaseIdToken(
-          forceRefresh: true,
-        );
-        
-        if (firebaseToken != null && firebaseToken.isNotEmpty) {
-          print('✅ Firebase token obtained successfully');
-          print('📝 Token length: ${firebaseToken.length}');
-          print('📝 Token starts with: ${firebaseToken.substring(0, firebaseToken.length > 50 ? 50 : firebaseToken.length)}...');
-          break; // Success
-        }
-        
-        retryCount++;
-        if (retryCount < maxRetries) {
-          print('⚠️ Token retrieval attempt $retryCount failed, retrying...');
-          await Future.delayed(Duration(seconds: retryCount)); // Exponential backoff
-        }
-      }
+      final firebaseToken = await _firebaseAuthService.getFirebaseIdToken(
+        forceRefresh: true,
+      );
 
       if (firebaseToken == null || firebaseToken.isEmpty) {
-        throw Exception('Failed to get Firebase token after $maxRetries attempts. Please try again.');
+        throw Exception('Failed to get Firebase token. Please try again.');
       }
+
+      print('✅ Firebase token obtained successfully');
+      print('🔍 Token length: ${firebaseToken.length}');
 
       if (!mounted) return;
 
@@ -92,7 +76,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       final authResponse = await _authApiService.completeFirebaseRegistration(
         firebaseToken: firebaseToken,
         fullName: _fullNameController.text.trim(),
-        password: widget.password, // Password from email verification screen
+        password: widget.password,
       );
 
       if (!mounted) return;

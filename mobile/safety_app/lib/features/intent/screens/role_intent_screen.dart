@@ -1,11 +1,13 @@
+// lib/features/intent/screens/role_intent_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:safety_app/core/widgets/animated_bottom_button.dart';
-import 'package:safety_app/features/dependent/screens/dependent_type_selection_screen.dart';
-import 'package:safety_app/features/guardian/screens/guardian_setup_choice_screen.dart';
 import 'package:safety_app/models/role_info.dart';
 import 'package:safety_app/models/user_model.dart';
 import 'package:safety_app/services/auth_api_service.dart';
+import 'package:safety_app/services/biometric_service.dart';
+import 'package:safety_app/core/storage/secure_storage_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/intent_card.dart';
@@ -22,11 +24,14 @@ class RoleIntentScreen extends StatefulWidget {
 
 class _RoleIntentScreenState extends State<RoleIntentScreen> {
   final AuthApiService _authApiService = AuthApiService();
+  final BiometricService _biometricService = BiometricService();
+  final SecureStorageService _secureStorage = SecureStorageService();
 
   List<RoleInfo> _roles = [];
   UserIntent? _selectedIntent;
   UserModel? _currentUser;
   bool _isLoading = true;
+  bool _isBiometricAvailable = false;
 
   @override
   void initState() {
@@ -39,15 +44,20 @@ class _RoleIntentScreenState extends State<RoleIntentScreen> {
     try {
       final user = await _authApiService.getCurrentUser();
       final roles = await _authApiService.fetchRoles();
+      final bioAvailable = await _biometricService.isBiometricAvailable();
 
       if (!mounted) return;
 
       setState(() {
         _currentUser = user;
         _roles = roles;
+        _isBiometricAvailable = bioAvailable;
         _isLoading = false;
       });
+
+      print('✅ Biometric available: $bioAvailable');
     } catch (e) {
+      print('❌ Error loading data: $e');
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -61,82 +71,303 @@ class _RoleIntentScreenState extends State<RoleIntentScreen> {
         case UserIntent.guardian:
           return _roles.firstWhere((r) => r.roleName == "guardian");
         case UserIntent.dependent:
-          // ❌ DON'T assign role here for dependent
+          // DON'T assign role here for dependent
           // User needs to choose child/elderly on next screen
           return null;
       }
     } catch (e) {
-      print('Error finding role: $e');
+      print('❌ Error finding role: $e');
       return null;
     }
   }
 
-  Future<void> _navigateBasedOnIntent(UserIntent intent) async {
-    // ✅ For dependent, just navigate without assigning role
-    if (intent == UserIntent.dependent) {
-      _navigateToNextScreen(intent);
-      return;
-    }
+  // ============================================================================
+  // 🔐 NEW BIOMETRIC FLOW FOR GUARDIANS
+  // ============================================================================
 
-    // ✅ For personal and guardian, assign role first
+  /// Handle role selection based on intent
+  Future<void> _navigateBasedOnIntent(UserIntent intent) async {
     setState(() => _isLoading = true);
 
     try {
-      final role = _getRoleForIntent(intent);
-
-      if (role == null) {
-        throw Exception('Role not found for selected intent');
+      // Dependent flow - navigate to type selection (no role assigned yet)
+      if (intent == UserIntent.dependent) {
+        print('👶 Dependent flow - navigating to type selection');
+        setState(() => _isLoading = false);
+        context.push(AppRouter.dependentTypeSelection);
+        return;
       }
 
-      // Assign role in backend
-      await _authApiService.selectRole(role.id);
+      // Get the role for this intent
+      final role = _getRoleForIntent(intent);
+      if (role == null) {
+        throw Exception('Role not found for intent');
+      }
 
-      if (!mounted) return;
+      print('📋 Selecting role: ${role.roleName} (ID: ${role.id})');
 
-      _navigateToNextScreen(intent);
+      // ========================================================================
+      // GUARDIAN FLOW - BIOMETRIC REQUIRED
+      // ========================================================================
+      if (intent == UserIntent.guardian) {
+        print('🔐 Guardian role detected - initiating biometric flow');
+
+        // Check if device supports biometric
+        if (!_isBiometricAvailable) {
+          _showDeviceNotSupportedDialog();
+          setState(() => _isLoading = false);
+          return;
+        }
+
+        // Step 1: Tell backend guardian role is selected (NOT assigned yet)
+        print('📤 Step 1: Notifying backend of guardian role selection');
+        final response = await _authApiService.selectRole(role.id);
+        
+        print('📥 Backend response: $response');
+
+        // Check if biometric is required
+        if (response['biometric_required'] == true) {
+          print('🔐 Biometric required - showing setup dialog');
+          
+          // Step 2: Show biometric setup dialog and authenticate
+          final biometricSuccess = await _showBiometricSetupDialog();
+          
+          if (biometricSuccess) {
+            // Step 3: Enable biometric on backend (this also assigns guardian role)
+            print('📤 Step 3: Enabling biometric on backend');
+            final updatedUser = await _authApiService.enableBiometric();
+            
+            print('✅ Biometric enabled and guardian role assigned');
+            print('👤 Updated user: ${updatedUser.fullName}');
+            print('🎭 Roles: ${updatedUser.roles.map((r) => r.roleName).join(", ")}');
+            
+            // Step 4: Navigate to guardian setup
+            if (!mounted) return;
+            setState(() => _isLoading = false);
+            _showSuccess('Guardian account activated with biometric security!');
+            
+            // Small delay to show success message
+            await Future.delayed(const Duration(milliseconds: 500));
+            if (!mounted) return;
+            
+            context.push(AppRouter.guardianSetup);
+          } else {
+            // User cancelled biometric setup
+            if (!mounted) return;
+            setState(() => _isLoading = false);
+            _showError('Biometric authentication is required for guardian accounts');
+            
+            // Reset selection
+            setState(() => _selectedIntent = null);
+          }
+        } else {
+          // Shouldn't happen, but handle gracefully
+          print('⚠️ Unexpected: Guardian role did not require biometric');
+          setState(() => _isLoading = false);
+          context.push(AppRouter.guardianSetup);
+        }
+      }
+      // ========================================================================
+      // PERSONAL FLOW - ASSIGN IMMEDIATELY
+      // ========================================================================
+      else if (intent == UserIntent.personal) {
+        print('👤 Personal role - assigning immediately');
+        
+        final response = await _authApiService.selectRole(role.id);
+        print('✅ Role assigned: ${response}');
+        
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+        _showSuccess('Personal account activated!');
+        
+        // Small delay to show success message
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (!mounted) return;
+        
+        context.go(AppRouter.personalOnboarding);
+      }
     } catch (e) {
       if (!mounted) return;
 
+      print('❌ Error in role selection flow: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to select role: ${e.toString()}'),
           backgroundColor: Colors.red,
         ),
       );
-      setState(() => _isLoading = false);
+      setState(() {
+        _isLoading = false;
+        _selectedIntent = null; // Reset selection on error
+      });
     }
   }
 
-  /// Navigate to appropriate screen based on intent
-  // void _navigateToNextScreen(UserIntent intent) {
-  //   switch (intent) {
-  //     case UserIntent.personal:
-  //       context.go('/personal-onboarding');
-  //       break;
-  //     case UserIntent.guardian:
-  //       context.push('/guardian-setup');
-  //       break;
-  //     case UserIntent.dependent:
-  //       // ✅ Navigate to dependent type selection
-  //       // Role will be assigned there (child or elderly)
-  //       context.push('/dependent-type-selection');
-  //       break;
-  //   }
-  // }
+  /// Show MANDATORY biometric setup dialog for guardians
+  /// Returns true if biometric was successfully authenticated, false otherwise
+  Future<bool> _showBiometricSetupDialog() async {
+    if (!mounted) return false;
 
-void _navigateToNextScreen(UserIntent intent) {
-  switch (intent) {
-    case UserIntent.personal:
-      context.go(AppRouter.personalOnboarding);
-      break;
-    case UserIntent.guardian:
-      context.push(AppRouter.guardianSetup);
-      break;
-    case UserIntent.dependent:
-      context.push(AppRouter.dependentTypeSelection);
-      break;
+    return await showDialog<bool>(
+      context: context,
+      barrierDismissible: false, // Can't dismiss by tapping outside
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Biometric Login Required'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(
+              Icons.fingerprint,
+              size: 40,
+              color: AppColors.primaryGreen,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Secure Your Guardian Account',
+              style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Biometric authentication is required for guardian accounts to ensure the security and safety of your protected family members.',
+              style: AppTextStyles.bodySmall.copyWith(
+                color: Colors.grey.shade600,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.1),
+                border: Border.all(color: Colors.blue),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '✅ Your fingerprint/face will be used only for login authentication and remains secure on your device.',
+                style: AppTextStyles.caption.copyWith(
+                  color: Colors.blue.shade700,
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop(false);
+            },
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryGreen,
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+            ),
+            onPressed: () async {
+              // Authenticate with biometric
+              try {
+                print('🔐 Requesting biometric authentication...');
+                
+                final authenticated = await _biometricService.authenticate(
+                  reason: 'Verify your identity to enable guardian account',
+                );
+
+                if (!mounted) return;
+
+                if (authenticated) {
+                  print('✅ Biometric authentication successful');
+                  Navigator.of(dialogContext).pop(true);
+                } else {
+                  print('❌ Biometric authentication failed or cancelled');
+                  Navigator.of(dialogContext).pop(false);
+                }
+              } catch (e) {
+                print('❌ Biometric authentication error: $e');
+                if (!mounted) return;
+                
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Biometric error: ${e.toString()}'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                
+                Navigator.of(dialogContext).pop(false);
+              }
+            },
+            child: const Text('Enable Biometric'),
+          ),
+        ],
+      ),
+    ) ?? false; // Return false if dialog is dismissed
   }
-}
+
+  /// Show error dialog when device doesn't support biometric
+  void _showDeviceNotSupportedDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Biometric Not Supported'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.phone_iphone,
+              size: 40,
+              color: Colors.red.shade700,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Your device does not support biometric authentication.',
+              style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Guardian accounts require biometric login for security.\n\nPlease use a device with fingerprint or face recognition.',
+              style: AppTextStyles.bodySmall.copyWith(
+                color: Colors.grey.shade600,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              // Return to role selection
+              setState(() => _selectedIntent = null);
+            },
+            child: const Text('Back to Roles'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  void _showSuccess(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -178,6 +409,7 @@ void _navigateToNextScreen(UserIntent intent) {
                           ),
                           const SizedBox(height: 32),
 
+                          // Personal User Card
                           IntentCard(
                             title: "Just for me",
                             description:
@@ -190,6 +422,7 @@ void _navigateToNextScreen(UserIntent intent) {
                           ),
                           const SizedBox(height: 16),
 
+                          // Guardian Card
                           IntentCard(
                             title: "I want to protect someone",
                             description:
@@ -202,6 +435,7 @@ void _navigateToNextScreen(UserIntent intent) {
                           ),
                           const SizedBox(height: 16),
 
+                          // Dependent Card
                           IntentCard(
                             title: "I need protection",
                             description:
@@ -212,6 +446,41 @@ void _navigateToNextScreen(UserIntent intent) {
                               () => _selectedIntent = UserIntent.dependent,
                             ),
                           ),
+
+                          // Info Box for Guardians
+                          if (_selectedIntent == UserIntent.guardian) ...[
+                            const SizedBox(height: 24),
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: AppColors.primaryGreen.withOpacity(0.1),
+                                border: Border.all(
+                                  color: AppColors.primaryGreen,
+                                  width: 1.5,
+                                ),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.shield_sharp,
+                                    color: AppColors.primaryGreen,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      'Biometric login is required for guardian accounts',
+                                      style: AppTextStyles.caption.copyWith(
+                                        color: AppColors.primaryGreen,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -239,6 +508,7 @@ void _navigateToNextScreen(UserIntent intent) {
 
 class PersonalOnboardingScreen extends StatelessWidget {
   const PersonalOnboardingScreen({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(

@@ -121,4 +121,30 @@ class SecureStorageService {
       return false;
     }
   }
+
+  /// Save data to secure storage (for biometric)
+  Future<void> write({
+    required String key,
+    required String value,
+  }) async {
+    try {
+      await _storage.write(key: key, value: value);
+      print('✅ Saved to secure storage: $key');
+    } catch (e) {
+      print('❌ Error saving to secure storage: $e');
+      rethrow;
+    }
+  }
+
+  /// Read data from secure storage (for biometric)
+  Future<String?> read({
+    required String key,
+  }) async {
+    try {
+      return await _storage.read(key: key);
+    } catch (e) {
+      print('❌ Error reading from secure storage: $e');
+      return null;
+    }
+  }
 }

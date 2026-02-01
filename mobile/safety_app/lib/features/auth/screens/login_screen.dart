@@ -1,8 +1,13 @@
+// lib/features/auth/screens/login_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:safety_app/core/widgets/animated_bottom_button.dart';
 import 'package:safety_app/core/widgets/app_text_field.dart';
+import 'package:safety_app/features/auth/widgets/biometric_button.dart';
 import 'package:safety_app/services/auth_api_service.dart';
+import 'package:safety_app/services/biometric_service.dart';
+import 'package:safety_app/core/storage/secure_storage_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 
@@ -17,8 +22,17 @@ class _LoginScreenState extends State<LoginScreen> {
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final AuthApiService _authApiService = AuthApiService();
+  final BiometricService _biometricService = BiometricService();
+  final SecureStorageService _secureStorage = SecureStorageService();
 
   bool _isLoading = false;
+  bool _showBiometricOption = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkBiometricAvailability();
+  }
 
   @override
   void dispose() {
@@ -27,6 +41,28 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  /// Check if biometric login is available for this user
+  Future<void> _checkBiometricAvailability() async {
+    try {
+      final isBiometricAvailable = await _biometricService.isBiometricAvailable();
+      
+      // Also check if user has biometric enabled (check secure storage)
+      final hasSavedBiometricData = await _secureStorage.containsKey('biometric_user_id');
+      
+      if (!mounted) return;
+      
+      setState(() {
+        _showBiometricOption = isBiometricAvailable && hasSavedBiometricData;
+      });
+
+      print('✅ Biometric available: $isBiometricAvailable');
+      print('✅ Has saved biometric data: $hasSavedBiometricData');
+    } catch (e) {
+      print('❌ Error checking biometric: $e');
+    }
+  }
+
+  /// Handle regular password login
   Future<void> _handleLogin() async {
     final phone = _phoneController.text.trim();
     final password = _passwordController.text.trim();
@@ -41,8 +77,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final response = await _authApiService.login(
-        email:
-            phone, // if backend expects `phone_number`, update AuthApiService.login
+        email: phone,
         password: password,
       );
 
@@ -68,6 +103,31 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) setState(() => _isLoading = false);
     }
   }
+
+  /// Handle biometric login
+Future<void> _handleBiometricLogin() async {
+  setState(() => _isLoading = true);
+
+  try {
+    // Biometric login uses existing refresh token
+    final response = await _authApiService.biometricLogin();
+
+    if (!mounted) return;
+
+    _showSuccess("Welcome back!");
+    
+    if (response.user?.hasRole ?? false) {
+      context.go('/home');
+    } else {
+      context.go('/role-intent');
+    }
+  } catch (e) {
+    if (!mounted) return;
+    _showError('Failed to login: ${e.toString().replaceAll('Exception: ', '')}');
+  } finally {
+    if (mounted) setState(() => _isLoading = false);
+  }
+}
 
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -113,6 +173,37 @@ class _LoginScreenState extends State<LoginScreen> {
                     Text("Login to continue", style: AppTextStyles.body),
                     const SizedBox(height: 40),
 
+                    // ✅ BIOMETRIC OPTION - Show if available
+                    if (_showBiometricOption) ...[
+                      Center(
+                        child: BiometricLoginButton(
+                          isLoading: _isLoading,
+                          onSuccess: _handleBiometricLogin,
+                          onError: (error) {
+                            _showError(error);
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Row(
+                        children: [
+                          Expanded(child: Divider(color: Colors.grey.shade400)),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Text(
+                              "or",
+                              style: AppTextStyles.bodySmall.copyWith(
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                          ),
+                          Expanded(child: Divider(color: Colors.grey.shade400)),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                    ],
+
+                    // ✅ PASSWORD LOGIN
                     AppTextField(
                       label: "Phone",
                       hint: "+977XXXXXXXX",
@@ -186,7 +277,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 onPressed: _isLoading ? () {} : _handleLogin,
               ),
             ),
-       ],
+          ],
         ),
       ),
     );

@@ -1,7 +1,7 @@
 class ApiEndpoints {
   // Use your laptop's IP address for physical device
   static const String baseUrl = 'http://localhost:8000/api';
-  //static const String baseUrl = 'http://192.168.21.102:8000/api';
+  //static const String baseUrl = 'http://172.18.240.1:8000/api';
 
   // ============================================================================
   // 🔥 FIREBASE AUTHENTICATION (NEW)
@@ -34,6 +34,17 @@ class ApiEndpoints {
   static const String refresh = '/auth/refresh';
   static const String logout = '/auth/logout';
   static const String logoutAll = '/auth/logout-all';
+
+  // ============================================================================
+  // 🔐 BIOMETRIC AUTHENTICATION (NEW)
+  // ============================================================================
+  
+  /// Enable biometric authentication for current user
+  /// Only available for guardian accounts
+  static const String enableBiometric = '/auth/enable-biometric';
+  
+  /// Disable biometric authentication for current user
+  static const String disableBiometric = '/auth/disable-biometric';
 
   // ============================================================================
   // ROLE ENDPOINTS

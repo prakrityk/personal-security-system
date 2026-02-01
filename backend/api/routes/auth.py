@@ -244,10 +244,11 @@ async def complete_firebase_registration(
         db.add(new_user)
         db.commit()
         db.refresh(new_user)
-        logger.info(f"✅ User created - ID: {new_user.id}")
+        
+        logger.info(f"✅ User created successfully with ID: {new_user.id}")
         
         # Create JWT tokens
-        logger.info("🎫 Generating JWT tokens...")
+        logger.info("🔑 Generating JWT tokens...")
         access_token = create_access_token(data={"sub": str(new_user.id)})
         refresh_token_str = create_refresh_token(data={"sub": str(new_user.id)})
         
@@ -260,7 +261,10 @@ async def complete_firebase_registration(
         )
         db.add(refresh_token_record)
         db.commit()
-        logger.info("✅ Tokens created and stored")
+        
+        logger.info("="*80)
+        logger.info("✅ REGISTRATION COMPLETE!")
+        logger.info("="*80)
         
         # Prepare response
         user_response = UserResponse(
@@ -278,38 +282,41 @@ async def complete_firebase_registration(
             expires_in=1800
         )
         
-        logger.info("="*80)
-        logger.info("✅ FIREBASE REGISTRATION COMPLETED SUCCESSFULLY!")
-        logger.info("="*80)
         return UserWithTokens(user=user_response, tokens=tokens)
         
     except Exception as e:
-        db.rollback()
         logger.error("="*80)
-        logger.error(f"❌ ERROR DURING USER CREATION")
+        logger.error(f"❌ DATABASE ERROR DURING REGISTRATION")
         logger.error("="*80)
         logger.error(f"   Error Type: {type(e).__name__}")
         logger.error(f"   Error Message: {str(e)}")
         logger.error("="*80)
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create user: {str(e)}"
+            detail=f"Registration failed: {str(e)}"
         )
 
 
 # =====================================================
-# DAILY LOGIN (EMAIL + PASSWORD)
+# TRADITIONAL LOGIN (PASSWORD-BASED)
 # =====================================================
 
 @router.post("/login", response_model=UserWithTokens)
-def login(request: UserLogin, db: Session = Depends(get_db)):
-    """Daily login using email and password"""
-    user = db.query(User).filter(User.email == request.email).first()
+def login_user(
+    request: UserLogin,
+    db: Session = Depends(get_db)
+):
+    """Login user with email/phone and password"""
+    user = db.query(User).filter(
+        (User.email == request.email_or_phone) |
+        (User.phone_number == request.email_or_phone)
+    ).first()
     
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials"
         )
     
     if not verify_password(request.password, user.hashed_password):
@@ -321,7 +328,7 @@ def login(request: UserLogin, db: Session = Depends(get_db)):
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is inactive. Contact support."
+            detail="Account is deactivated"
         )
     
     access_token = create_access_token(data={"sub": str(user.id)})
@@ -362,46 +369,15 @@ def login(request: UserLogin, db: Session = Depends(get_db)):
     return UserWithTokens(user=user_response, tokens=tokens)
 
 
-@router.post("/logout", status_code=status.HTTP_200_OK)
-def logout(request: RefreshTokenRequest, db: Session = Depends(get_db)):
-    """Logout by invalidating refresh token"""
-    refresh_token = db.query(RefreshToken).filter(
-        RefreshToken.token == request.refresh_token
-    ).first()
-    
-    if refresh_token:
-        db.delete(refresh_token)
-        db.commit()
-        return {"message": "Logged out successfully"}
-    
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="Invalid refresh token"
-    )
-
-
-@router.post("/logout-all", status_code=status.HTTP_200_OK)
-def logout_all(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Logout from all devices"""
-    db.query(RefreshToken).filter(
-        RefreshToken.user_id == current_user.id
-    ).delete()
-    db.commit()
-    
-    return {"message": "Logged out from all devices"}
-
-
 @router.post("/refresh", response_model=TokenResponse)
 def refresh_access_token(
     request: RefreshTokenRequest,
     db: Session = Depends(get_db)
 ):
-    """Get new access token using refresh token"""
-    payload = verify_refresh_token(request.refresh_token)
-    if not payload:
+    """Refresh access token using refresh token"""
+    try:
+        payload = verify_refresh_token(request.refresh_token)
+    except:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired refresh token"
@@ -494,36 +470,76 @@ def get_current_user_info(
     )
 
 
-@router.post("/select-role", response_model=UserResponse)
+# =====================================================
+# 🔐 BIOMETRIC & ROLE ASSIGNMENT (MODIFIED)
+# =====================================================
+
+@router.post("/select-role", response_model=dict)
 def select_user_role(
     request: RoleSelectRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Select user role after registration"""
+    """
+    Select user role after registration.
+    
+    IMPORTANT: For Guardian role, this endpoint does NOT assign the role immediately.
+    Instead, it requires biometric setup first. The role will be assigned when
+    the user calls /enable-biometric endpoint.
+    """
+    logger.info(f"📋 Role selection requested by user {current_user.id} for role_id {request.role_id}")
+    
+    # Get the role
     role = db.query(Role).filter(Role.id == request.role_id).first()
     if not role:
+        logger.error(f"❌ Role {request.role_id} not found")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Role not found"
         )
     
+    logger.info(f"   Role name: {role.role_name}")
+    
+    # Prevent self-assignment of admin role
     if role.role_name == "admin":
+        logger.error(f"❌ User attempted to self-assign admin role")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Cannot self-assign admin role"
         )
     
+    # Check if user already has this role
     existing_role = db.query(UserRole).filter(
         UserRole.user_id == current_user.id,
         UserRole.role_id == request.role_id
     ).first()
     
     if existing_role:
+        logger.warning(f"⚠️ User already has role {role.role_name}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User already has this role"
         )
+    
+    # ============================================================================
+    # GUARDIAN ROLE - REQUIRE BIOMETRIC FIRST (DO NOT ASSIGN YET)
+    # ============================================================================
+    if role.role_name.lower() == "guardian":
+        logger.info(f"🔐 Guardian role selected - biometric authentication required")
+        logger.info(f"   Role will NOT be assigned until biometric is enabled")
+        
+        return {
+            "success": True,
+            "message": "Guardian role selected. Please enable biometric authentication to complete setup.",
+            "biometric_required": True,
+            "role_assigned": False,
+            "role_name": role.role_name
+        }
+    
+    # ============================================================================
+    # OTHER ROLES - ASSIGN IMMEDIATELY (Personal, Dependent, etc.)
+    # ============================================================================
+    logger.info(f"✅ Non-guardian role - assigning immediately")
     
     user_role = UserRole(
         user_id=current_user.id,
@@ -532,8 +548,115 @@ def select_user_role(
     db.add(user_role)
     db.commit()
     
+    logger.info(f"✅ Role {role.role_name} assigned successfully to user {current_user.id}")
+    
     db.refresh(current_user)
     
+    user_roles = [
+        RoleInfo(
+            id=ur.role.id,
+            role_name=ur.role.role_name,
+            role_description=ur.role.role_description
+        )
+        for ur in current_user.user_roles
+    ]
+    
+    return {
+        "success": True,
+        "message": f"Role {role.role_name} assigned successfully",
+        "biometric_required": False,
+        "role_assigned": True,
+        "user": UserResponse(
+            id=current_user.id,
+            email=current_user.email,
+            full_name=current_user.full_name,
+            phone_number=current_user.phone_number,
+            roles=user_roles
+        )
+    }
+
+
+@router.post("/enable-biometric", response_model=UserResponse)
+def enable_biometric_authentication(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Enable biometric authentication for the current user.
+    
+    For Guardian users: This also assigns the Guardian role if not already assigned.
+    This ensures Guardian role is only granted AFTER biometric setup is complete.
+    """
+    logger.info("="*80)
+    logger.info(f"🔐 BIOMETRIC ENABLE REQUEST")
+    logger.info("="*80)
+    logger.info(f"   User ID: {current_user.id}")
+    logger.info(f"   Email: {current_user.email}")
+    logger.info(f"   Current biometric status: {current_user.biometric_enabled}")
+    
+    # Check if biometric is already enabled
+    if current_user.biometric_enabled:
+        logger.warning(f"⚠️ Biometric already enabled for user {current_user.id}")
+        # Don't raise error, just return success
+        user_roles = [
+            RoleInfo(
+                id=ur.role.id,
+                role_name=ur.role.role_name,
+                role_description=ur.role.role_description
+            )
+            for ur in current_user.user_roles
+        ]
+        
+        return UserResponse(
+            id=current_user.id,
+            email=current_user.email,
+            full_name=current_user.full_name,
+            phone_number=current_user.phone_number,
+            roles=user_roles
+        )
+    
+    # Enable biometric
+    logger.info(f"✅ Enabling biometric for user {current_user.id}")
+    current_user.biometric_enabled = True
+    
+    # ============================================================================
+    # ASSIGN GUARDIAN ROLE IF NOT ALREADY ASSIGNED
+    # ============================================================================
+    guardian_role = db.query(Role).filter(Role.role_name.ilike("guardian")).first()
+    
+    if guardian_role:
+        logger.info(f"   Guardian role found (ID: {guardian_role.id})")
+        
+        # Check if user already has guardian role
+        has_guardian_role = db.query(UserRole).filter(
+            UserRole.user_id == current_user.id,
+            UserRole.role_id == guardian_role.id
+        ).first()
+        
+        if not has_guardian_role:
+            logger.info(f"   User does NOT have guardian role yet - assigning now")
+            
+            # Assign guardian role
+            user_role = UserRole(
+                user_id=current_user.id,
+                role_id=guardian_role.id
+            )
+            db.add(user_role)
+            logger.info(f"✅ Guardian role assigned to user {current_user.id}")
+        else:
+            logger.info(f"   User already has guardian role")
+    else:
+        logger.warning(f"⚠️ Guardian role not found in database")
+    
+    # Commit all changes
+    db.commit()
+    db.refresh(current_user)
+    
+    logger.info("="*80)
+    logger.info(f"✅ BIOMETRIC ENABLED SUCCESSFULLY")
+    logger.info("="*80)
+    
+    # Prepare response
     user_roles = [
         RoleInfo(
             id=ur.role.id,
@@ -550,6 +673,25 @@ def select_user_role(
         phone_number=current_user.phone_number,
         roles=user_roles
     )
+
+
+@router.post("/disable-biometric")
+def disable_biometric_authentication(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Disable biometric authentication for the current user"""
+    logger.info(f"🔓 Disabling biometric for user {current_user.id}")
+    
+    current_user.biometric_enabled = False
+    db.commit()
+    
+    logger.info(f"✅ Biometric disabled for user {current_user.id}")
+    
+    return {
+        "success": True,
+        "message": "Biometric authentication disabled successfully"
+    }
 
 
 @router.get("/roles", response_model=List[RoleInfo])

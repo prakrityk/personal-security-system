@@ -126,6 +126,7 @@ class UserResponse(BaseModel):
     full_name: str
     phone_number: str
     roles: List[RoleInfo] = []
+    biometric_enabled: bool = False  # 🔐 ADDED: Biometric authentication status
     
     class Config:
         from_attributes = True
@@ -135,7 +136,8 @@ class UserResponse(BaseModel):
                 "email": "john.doe@example.com",
                 "full_name": "John Doe",
                 "phone_number": "+9779812345678",
-                "roles": []
+                "roles": [],
+                "biometric_enabled": False
             }
         }
 
