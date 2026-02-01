@@ -124,19 +124,36 @@ class _RoleIntentScreenState extends State<RoleIntentScreen> {
   //   }
   // }
 
-void _navigateToNextScreen(UserIntent intent) {
-  switch (intent) {
-    case UserIntent.personal:
-      context.go(AppRouter.personalOnboarding);
-      break;
-    case UserIntent.guardian:
-      context.push(AppRouter.guardianSetup);
-      break;
-    case UserIntent.dependent:
-      context.push(AppRouter.dependentTypeSelection);
-      break;
+  // void _navigateToNextScreen(UserIntent intent) {
+  //   switch (intent) {
+  //     case UserIntent.personal:
+  //       context.go(AppRouter.personalOnboarding);
+  //       break;
+  //     case UserIntent.guardian:
+  //       context.push(AppRouter.guardianSetup);
+  //       break;
+  //     case UserIntent.dependent:
+  //       context.push(AppRouter.dependentTypeSelection);
+  //       break;
+  //   }
+  // }
+  /// Navigate to appropriate screen based on intent
+  void _navigateToNextScreen(UserIntent intent) {
+    switch (intent) {
+      case UserIntent.personal:
+        // ✅ For personal users, go directly to home after role is assigned
+        context.go(AppRouter.home);
+        break;
+      case UserIntent.guardian:
+        // ✅ For guardians, go to setup screen (use go, not push)
+        context.go(AppRouter.guardianSetup);
+        break;
+      case UserIntent.dependent:
+        // ✅ For dependents, go to type selection (use go, not push)
+        context.go(AppRouter.dependentTypeSelection);
+        break;
+    }
   }
-}
 
   @override
   Widget build(BuildContext context) {

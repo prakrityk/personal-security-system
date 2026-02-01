@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart' as mobile_scanner;
 import 'package:image_picker/image_picker.dart';
 import 'package:google_mlkit_barcode_scanning/google_mlkit_barcode_scanning.dart';
+import 'package:safety_app/routes/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import 'package:safety_app/services/collaborator_service.dart';
@@ -335,7 +336,9 @@ class _CollaboratorJoinScreenState extends State<CollaboratorJoinScreen> {
           ElevatedButton(
             onPressed: () {
               Navigator.of(context).pop();
-              context.go('/home'); // Navigate to home with Family tab
+              context.go(
+                AppRouter.home,
+              ); // ✅ Uses AppRouter constant/ Navigate to home with Family tab
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primaryGreen,

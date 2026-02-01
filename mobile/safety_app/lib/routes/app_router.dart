@@ -1,4 +1,4 @@
-// lib/routes/app_router.dart (FIXED)
+// lib/routes/app_router.dart (FIXED - Logout redirect issue resolved)
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -22,6 +22,7 @@ import 'package:safety_app/features/guardian/screens/guardian_setup_choice_scree
 import 'package:safety_app/features/guardian/screens/guardian_add_dependent_screen.dart';
 import 'package:safety_app/features/guardian/screens/collaborator_join_screen.dart';
 import 'package:safety_app/models/dependent_model.dart';
+import 'package:safety_app/routes/router_notifier.dart';
 import 'package:safety_app/routes/splash_screen.dart';
 
 class AppRouter {
@@ -52,14 +53,20 @@ class AppRouter {
   static GoRouter createRouter(WidgetRef ref) {
     return GoRouter(
       initialLocation: splash,
+      refreshListenable: ref.read(routerNotifierProvider),
+
       redirect: (context, state) {
         final authState = ref.read(authStateProvider);
         final user = authState.value;
+        final location = state.matchedLocation;
 
-        print('🔀 Router redirect: ${state.uri.toString()}');
+        print('🔀 Router redirect: $location');
+        print(
+          '👤 User state: ${user != null ? "Authenticated" : "Not authenticated"}',
+        );
 
-        // ✅ FIX: Handle splash screen redirect - always navigate away from splash
-        if (state.matchedLocation == splash) {
+        // ✅ FIX 1: Handle splash screen redirect - always navigate away from splash
+        if (location == splash) {
           print('📍 Redirecting from splash...');
 
           if (user == null) {
@@ -74,26 +81,47 @@ class AppRouter {
           }
         }
 
-        // Allow login and auth screens always
-        if (state.matchedLocation == login ||
-            state.matchedLocation.startsWith('/lets-get-started') ||
-            state.matchedLocation.startsWith('/phone-number') ||
-            state.matchedLocation.startsWith('/otp-verification') ||
-            state.matchedLocation.startsWith('/registration') ||
-            state.matchedLocation.startsWith('/email-verification')) {
-          print('✅ Allowing auth screen: ${state.matchedLocation}');
+        // ✅ FIX 2: Allow all auth screens without restriction
+        const authScreens = [
+          login,
+          letsGetStarted,
+          phoneNumber,
+          otpVerification,
+          registration,
+          emailVerification,
+        ];
+
+        if (authScreens.any((path) => location.startsWith(path))) {
+          print('✅ Allowing auth screen: $location');
           return null;
         }
 
-        // If not authenticated, redirect to login
+        // ✅ FIX 3: CRITICAL - If not authenticated, redirect to login
+        // This handles logout - when user becomes null, redirect immediately
         if (user == null) {
-          print('❌ No user → Login');
+          print('❌ No user → Redirecting to Login');
           return login;
         }
 
-        // If authenticated but no role, redirect to role selection
+        // ✅ FIX 4: Allow role-specific onboarding flows (these are part of setup)
+        const onboardingFlows = [
+          guardianSetup,
+          guardianAddDependent,
+          guardianCollaborator,
+          collaboratorJoin,
+          dependentTypeSelection,
+          scanQr,
+          personalOnboarding,
+        ];
+
+        if (onboardingFlows.any((path) => location.startsWith(path))) {
+          print('✅ Allowing onboarding flow: $location');
+          return null;
+        }
+
+        // ✅ FIX 5: If authenticated but no role, redirect to role selection
         if (!user.hasRole || user.currentRole == null) {
-          if (state.matchedLocation != roleIntent) {
+          if (location != roleIntent) {
             print('⚠️ No role → RoleIntent');
             return roleIntent;
           }
@@ -101,35 +129,31 @@ class AppRouter {
           return null;
         }
 
-        // If going to home, ensure it's the appropriate home
-        if (state.matchedLocation == home) {
-          print('✅ Going to home');
-          return null; // General home screen handles role-based UI
-        }
-
-        // For role-specific onboarding flows, allow navigation
-        if (state.matchedLocation.startsWith('/guardian-') ||
-            state.matchedLocation.startsWith('/dependent-') ||
-            state.matchedLocation.startsWith('/collaborator-') ||
-            state.matchedLocation.startsWith('/scan-qr')) {
-          print('✅ Allowing role-specific flow: ${state.matchedLocation}');
+        // ✅ FIX 6: Allow home and account screens for authenticated users with roles
+        const allowedScreens = [
+          home,
+          account,
+          editProfile,
+          dependentDetailScreen,
+        ];
+        if (allowedScreens.any((path) => location.startsWith(path))) {
+          print('✅ Allowing authenticated screen: $location');
           return null;
         }
 
         print('✅ No redirect needed');
-        return null; // No redirect needed
+        return null;
       },
+
       routes: [
         // ==================== AUTH FLOW ====================
 
-        // Splash Screen - Keep it simple, router will redirect immediately
+        // Splash Screen
         GoRoute(
           path: splash,
           name: 'splash',
-          pageBuilder: (context, state) => const MaterialPage(
-            child: SplashScreen(),
-            fullscreenDialog: true, // Makes it feel like a proper splash
-          ),
+          pageBuilder: (context, state) =>
+              const MaterialPage(child: SplashScreen(), fullscreenDialog: true),
         ),
 
         // Login Screen
@@ -161,7 +185,12 @@ class AppRouter {
           path: otpVerification,
           name: 'otpVerification',
           pageBuilder: (context, state) {
-            final phoneNumber = state.extra as String;
+            final phoneNumber = state.extra as String? ?? '';
+            if (phoneNumber.isEmpty) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                context.go(AppRouter.phoneNumber);
+              });
+            }
             return MaterialPage(
               child: OtpVerificationScreen(phoneNumber: phoneNumber),
             );
@@ -173,7 +202,12 @@ class AppRouter {
           path: registration,
           name: 'registration',
           pageBuilder: (context, state) {
-            final phoneNumber = state.extra as String;
+            final phoneNumber = state.extra as String? ?? '';
+            if (phoneNumber.isEmpty) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                context.go(AppRouter.phoneNumber);
+              });
+            }
             return MaterialPage(
               child: RegistrationScreen(phoneNumber: phoneNumber),
             );
@@ -200,8 +234,8 @@ class AppRouter {
           pageBuilder: (context, state) =>
               const MaterialPage(child: RoleIntentScreen()),
         ),
+
         // ==================== ACCOUNT SCREENS ====================
-        // ✅ ADD ACCOUNT SCREEN ROUTE
         GoRoute(
           path: account,
           name: 'account',
@@ -209,7 +243,6 @@ class AppRouter {
               const MaterialPage(child: AccountScreen()),
         ),
 
-        // ✅ ADD PROFILE EDIT SCREEN ROUTE
         GoRoute(
           path: editProfile,
           name: 'editProfile',
@@ -224,7 +257,7 @@ class AppRouter {
           path: personalOnboarding,
           name: 'personalOnboarding',
           pageBuilder: (context, state) =>
-              const MaterialPage(child: PersonalOnboardingScreen()),
+              const MaterialPage(child: Placeholder()),
         ),
 
         // ==================== GUARDIAN FLOW ====================
@@ -268,7 +301,8 @@ class AppRouter {
           path: scanQr,
           name: 'scanQr',
           pageBuilder: (context, state) {
-            final dependentType = state.extra as DependentType;
+            final dependentType =
+                state.extra as DependentType? ?? DependentType.child;
             return MaterialPage(
               child: ScanOrUploadQrScreen(dependentType: dependentType),
             );
@@ -280,7 +314,15 @@ class AppRouter {
           path: dependentDetailScreen,
           name: 'dependentDetailScreen',
           pageBuilder: (context, state) {
-            final dependent = state.extra as DependentModel;
+            final dependent = state.extra as DependentModel?;
+            if (dependent == null) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                context.go(AppRouter.home);
+              });
+              return const MaterialPage(
+                child: Scaffold(body: SizedBox.shrink()),
+              );
+            }
             return MaterialPage(
               child: FamilyMemberDetailScreen(dependent: dependent),
             );

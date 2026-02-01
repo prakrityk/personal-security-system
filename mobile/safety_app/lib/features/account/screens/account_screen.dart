@@ -156,11 +156,12 @@ class AccountScreen extends ConsumerWidget {
           const SizedBox(height: 32),
 
           /// -------- LOGOUT --------
-          LogoutButton(
-            onLogoutSuccess: () {
-              context.go(AppRouter.login);
-            },
-          ),
+          // LogoutButton(
+          //   onLogoutSuccess: () {
+          //     context.go(AppRouter.login);
+          //   },
+          //),
+          const LogoutButton(),
         ],
       ),
     );
