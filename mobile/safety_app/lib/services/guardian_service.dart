@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import '../core/network/dio_client.dart';
 import '../core/network/api_endpoints.dart';
 import '../models/pending_dependent_model.dart';
+import '../models/dependent_model.dart'; // 🆕 NEW
 
 /// Guardian Service - handles guardian-related API calls
 class GuardianService {
@@ -44,6 +45,33 @@ class GuardianService {
       return dependents;
     } catch (e) {
       print('❌ Error fetching pending dependents: $e');
+      rethrow;
+    }
+  }
+
+  /// 🆕 Get all approved dependents (works for both primary and collaborator guardians)
+  Future<List<DependentModel>> getMyDependents() async {
+    try {
+      print('📥 Fetching my dependents...');
+
+      final response = await _dioClient.get(ApiEndpoints.getMyDependents);
+
+      final List<DependentModel> dependents = (response.data as List)
+          .map((json) => DependentModel.fromJson(json))
+          .toList();
+
+      print('✅ Fetched ${dependents.length} dependents');
+
+      // Log guardian types for debugging
+      for (var dep in dependents) {
+        print(
+          '  - ${dep.dependentName}: ${dep.guardianType} (primary: ${dep.isPrimary})',
+        );
+      }
+
+      return dependents;
+    } catch (e) {
+      print('❌ Error fetching dependents: $e');
       rethrow;
     }
   }
@@ -148,4 +176,16 @@ class GuardianService {
       rethrow;
     }
   }
+  // Add to guardian_service.dart
+Future<List<Map<String, dynamic>>> getDependentCollaborators(int dependentId) async {
+  try {
+    final response = await _dioClient.get(
+      '${ApiEndpoints.getCollaborators}/$dependentId/collaborators',
+    );
+    return List<Map<String, dynamic>>.from(response.data);
+  } catch (e) {
+    print('❌ Error fetching collaborators: $e');
+    rethrow;
+  }
+}
 }

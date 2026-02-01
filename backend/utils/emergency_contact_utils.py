@@ -51,7 +51,7 @@ def sync_guardian_contacts_for_dependent(dependent_id: int, db: Session):
             if existing_contact:
                 # Update existing contact
                 existing_contact.contact_name = guardian.full_name
-                existing_contact.contact_phone = guardian.phone_number
+                existing_contact.phone_number = guardian.phone_number
                 existing_contact.contact_email = guardian.email
                 existing_contact.relationship = f"{rel.guardian_type.title()} Guardian"
                 existing_contact.is_active = True
@@ -68,7 +68,7 @@ def sync_guardian_contacts_for_dependent(dependent_id: int, db: Session):
                 new_contact = EmergencyContact(
                     user_id=dependent_id,
                     contact_name=guardian.full_name,
-                    contact_phone=guardian.phone_number,
+                    phone_number=guardian.phone_number,
                     contact_email=guardian.email,
                     relationship=f"{rel.guardian_type.title()} Guardian",
                     priority=1 if rel.guardian_type == "primary" else 10,
@@ -143,7 +143,7 @@ def create_initial_guardian_contact(
         new_contact = EmergencyContact(
             user_id=dependent_id,
             contact_name=guardian.full_name,
-            contact_phone=guardian.phone_number,
+            phone_number=guardian.phone_number,
             contact_email=guardian.email,
             relationship=f"{guardian_type.title()} Guardian",
             priority=1 if guardian_type == "primary" else 10,

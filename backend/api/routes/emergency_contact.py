@@ -92,9 +92,9 @@ async def create_my_emergency_contact(
         new_contact = EmergencyContact(
             user_id=current_user.id,
             contact_name=contact_data.contact_name,
-            contact_phone=contact_data.contact_phone,
+            phone_number=contact_data.phone_number,
             contact_email=contact_data.contact_email,
-            contact_relationship=contact_data.relationship,
+            relationship=contact_data.relationship,
             priority=contact_data.priority,
             source="manual",
             is_active=True
@@ -110,9 +110,9 @@ async def create_my_emergency_contact(
             id=new_contact.id,
             user_id=new_contact.user_id,
             contact_name=new_contact.contact_name,
-            contact_phone=new_contact.contact_phone,
+            phone_number=new_contact.phone_number,
             contact_email=new_contact.contact_email,
-            relationship=new_contact.contact_relationship,
+            relationship=new_contact.relationship,
             priority=new_contact.priority,
             is_active=new_contact.is_active,
             source=new_contact.source,
@@ -148,9 +148,9 @@ async def get_my_emergency_contacts(
                 id=contact.id,
                 user_id=contact.user_id,
                 contact_name=contact.contact_name,
-                contact_phone=contact.contact_phone,
+                phone_number=contact.phone_number,
                 contact_email=contact.contact_email,
-                relationship=contact.contact_relationship,
+                relationship=contact.relationship,
                 priority=contact.priority,
                 is_active=contact.is_active,
                 source=contact.source,
@@ -204,12 +204,12 @@ async def update_my_emergency_contact(
         # Update fields
         if contact_data.contact_name is not None:
             contact.contact_name = contact_data.contact_name
-        if contact_data.contact_phone is not None:
-            contact.contact_phone = contact_data.contact_phone
+        if contact_data.phone_number is not None:
+            contact.phone_number = contact_data.phone_number
         if contact_data.contact_email is not None:
             contact.contact_email = contact_data.contact_email
         if contact_data.relationship is not None:
-            contact.contact_relationship = contact_data.relationship
+            contact.relationship = contact_data.relationship
         if contact_data.priority is not None:
             contact.priority = contact_data.priority
         if contact_data.is_active is not None:
@@ -226,9 +226,9 @@ async def update_my_emergency_contact(
             id=contact.id,
             user_id=contact.user_id,
             contact_name=contact.contact_name,
-            contact_phone=contact.contact_phone,
+            phone_number=contact.phone_number,
             contact_email=contact.contact_email,
-            relationship=contact.contact_relationship,
+            relationship=contact.relationship,
             priority=contact.priority,
             is_active=contact.is_active,
             source=contact.source,
@@ -316,7 +316,7 @@ async def bulk_import_emergency_contacts(
                 # Check for duplicates by phone number
                 existing = db.query(EmergencyContact).filter(
                     EmergencyContact.user_id == current_user.id,
-                    EmergencyContact.contact_phone == contact_data.contact_phone
+                    EmergencyContact.phone_number == contact_data.phone_number
                 ).first()
                 
                 if existing:
@@ -327,9 +327,9 @@ async def bulk_import_emergency_contacts(
                 new_contact = EmergencyContact(
                     user_id=current_user.id,
                     contact_name=contact_data.contact_name,
-                    contact_phone=contact_data.contact_phone,
+                    phone_number=contact_data.phone_number,
                     contact_email=contact_data.contact_email,
-                    contact_relationship=contact_data.relationship,
+                    relationship=contact_data.relationship,
                     priority=contact_data.priority or 3,
                     source="phone",
                     is_active=True
@@ -398,9 +398,9 @@ async def get_dependent_emergency_contacts_for_viewing(
                 id=contact.id,
                 user_id=contact.user_id,
                 contact_name=contact.contact_name,
-                contact_phone=contact.contact_phone,
+                phone_number=contact.phone_number,
                 contact_email=contact.contact_email,
-                relationship=contact.contact_relationship,
+                relationship=contact.relationship,
                 priority=contact.priority,
                 is_active=contact.is_active,
                 source=contact.source,
@@ -447,9 +447,9 @@ async def create_dependent_emergency_contact(
         new_contact = EmergencyContact(
             user_id=contact_data.dependent_id,
             contact_name=contact_data.contact_name,
-            contact_phone=contact_data.contact_phone,
+            phone_number=contact_data.phone_number,
             contact_email=contact_data.contact_email,
-            contact_relationship=contact_data.relationship,
+            relationship=contact_data.relationship,
             priority=contact_data.priority,
             source="manual",
             is_active=True
@@ -465,9 +465,9 @@ async def create_dependent_emergency_contact(
             id=new_contact.id,
             user_id=new_contact.user_id,
             contact_name=new_contact.contact_name,
-            contact_phone=new_contact.contact_phone,
+            phone_number=new_contact.phone_number,
             contact_email=new_contact.contact_email,
-            relationship=new_contact.contact_relationship,
+            relationship=new_contact.relationship,
             priority=new_contact.priority,
             is_active=new_contact.is_active,
             source=new_contact.source,
@@ -515,12 +515,12 @@ async def update_dependent_emergency_contact(
         # Update fields
         if contact_data.contact_name is not None:
             contact.contact_name = contact_data.contact_name
-        if contact_data.contact_phone is not None:
-            contact.contact_phone = contact_data.contact_phone
+        if contact_data.phone_number is not None:
+            contact.phone_number = contact_data.phone_number
         if contact_data.contact_email is not None:
             contact.contact_email = contact_data.contact_email
         if contact_data.relationship is not None:
-            contact.contact_relationship = contact_data.relationship
+            contact.relationship = contact_data.relationship
         if contact_data.priority is not None:
             contact.priority = contact_data.priority
         if contact_data.is_active is not None:
@@ -537,9 +537,9 @@ async def update_dependent_emergency_contact(
             id=contact.id,
             user_id=contact.user_id,
             contact_name=contact.contact_name,
-            contact_phone=contact.contact_phone,
+            phone_number=contact.phone_number,
             contact_email=contact.contact_email,
-            relationship=contact.contact_relationship,
+            relationship=contact.relationship,
             priority=contact.priority,
             is_active=contact.is_active,
             source=contact.source,

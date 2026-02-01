@@ -547,7 +547,7 @@ class _EmergencyContactsSectionState
                     ),
                   ],
                 ),
-                if (contact.relationship.isNotEmpty) ...[
+                if (contact.relationship?.isNotEmpty == true) ...[
                   const SizedBox(height: 2),
                   Row(
                     children: [
@@ -561,7 +561,7 @@ class _EmergencyContactsSectionState
                       const SizedBox(width: 4),
                       Flexible(
                         child: Text(
-                          contact.relationship,
+                          contact.relationship!,
                           style: AppTextStyles.caption.copyWith(
                             color: isDark
                                 ? AppColors.darkHint

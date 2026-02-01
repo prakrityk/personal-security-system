@@ -226,6 +226,48 @@ async def scan_qr_code(
 # GET MY GUARDIANS
 # ================================================
 
+# @router.get("/my-guardians", response_model=List[GuardianDetailResponse])
+# async def get_my_guardians(
+#     current_user: User = Depends(get_current_user),
+#     db: Session = Depends(get_db)
+# ):
+#     """Get all guardians linked to the current dependent"""
+#     try:
+#         verify_dependent_role(current_user, db)
+        
+#         relationships = db.query(GuardianDependent).filter(
+#             GuardianDependent.dependent_id == current_user.id
+#         ).all()
+        
+#         result = []
+#         for rel in relationships:
+#             guardian_user = db.query(User).filter(
+#                 User.id == rel.guardian_id
+#             ).first()
+            
+#             if guardian_user:
+#                 result.append(GuardianDetailResponse(
+#                     id=rel.id,
+#                     guardian_id=rel.guardian_id,
+#                     guardian_name=guardian_user.full_name,
+#                     guardian_email=guardian_user.email,
+#                     relation=rel.relation,
+#                     is_primary=rel.is_primary,
+#                     linked_at=rel.created_at
+#                 ))
+        
+#         print(f"✅ Retrieved {len(result)} guardians for dependent {current_user.id}")
+#         return result
+    
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         print(f"❌ Error fetching guardians: {e}")
+#         raise HTTPException(
+#             status_code=500,
+#             detail=f"Failed to fetch guardians: {str(e)}"
+#         )
+
 @router.get("/my-guardians", response_model=List[GuardianDetailResponse])
 async def get_my_guardians(
     current_user: User = Depends(get_current_user),
@@ -253,6 +295,7 @@ async def get_my_guardians(
                     guardian_email=guardian_user.email,
                     relation=rel.relation,
                     is_primary=rel.is_primary,
+                    guardian_type=rel.guardian_type,  # ✅ ADD THIS
                     linked_at=rel.created_at
                 ))
         
@@ -267,8 +310,6 @@ async def get_my_guardians(
             status_code=500,
             detail=f"Failed to fetch guardians: {str(e)}"
         )
-
-
 # ================================================
 # REMOVE GUARDIAN (FIXED)
 # ================================================

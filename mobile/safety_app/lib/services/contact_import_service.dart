@@ -25,9 +25,9 @@ class PhoneContactModel {
   }) {
     return {
       'contact_name': displayName,
-      'contact_phone': phoneNumber ?? '',
+      'phone_number': phoneNumber ?? '',
       'contact_email': email ?? '',
-      'contact_relationship': relationship,
+      'relationship': relationship,
       'priority': priority,
       'source': 'phone_contacts',
       'is_active': true,
@@ -185,7 +185,7 @@ class ContactImportService {
         existingPhone =
             existing['phoneNumber'] ??
             existing['phone_number'] ??
-            existing['contact_phone'];
+            existing['phone_number'];
       } else {
         // If it's an EmergencyContact object
         try {

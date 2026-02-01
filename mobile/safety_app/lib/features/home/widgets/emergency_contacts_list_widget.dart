@@ -467,7 +467,7 @@ class EmergencyContactsListWidget extends ConsumerWidget {
                       ),
 
                       // Relationship and source
-                      if (contact.relationship.isNotEmpty ||
+                      if (contact.relationship?.isNotEmpty == true ||
                           isGuardianContact) ...[
                         const SizedBox(height: 4),
                         Row(
@@ -493,7 +493,7 @@ class EmergencyContactsListWidget extends ConsumerWidget {
                               child: Text(
                                 isGuardianContact
                                     ? 'Guardian (Auto-added)'
-                                    : contact.relationship,
+                                    : contact.relationship!,
                                 style: AppTextStyles.caption.copyWith(
                                   color: isGuardianContact
                                       ? (isDark

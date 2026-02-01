@@ -58,9 +58,9 @@ def sync_guardian_contacts_for_dependent(
     if existing_contact:
         # Update existing contact
         existing_contact.contact_name = guardian.full_name or guardian.email.split('@')[0]
-        existing_contact.contact_phone = guardian.phone_number or "+0000000000"
+        existing_contact.phone_number = guardian.phone_number or "+0000000000"
         existing_contact.contact_email = guardian.email
-        existing_contact.contact_relationship = "Primary Guardian" if is_primary else "Collaborator Guardian"
+        existing_contact.relationship = "Primary Guardian" if is_primary else "Collaborator Guardian"
         existing_contact.priority = 1 if is_primary else 2
         existing_contact.is_active = True
         existing_contact.updated_at = datetime.utcnow()
@@ -73,9 +73,9 @@ def sync_guardian_contacts_for_dependent(
         new_contact = EmergencyContact(
             user_id=dependent_id,
             contact_name=guardian.full_name or guardian.email.split('@')[0],
-            contact_phone=guardian.phone_number or "+0000000000",
+            phone_number=guardian.phone_number or "+0000000000",
             contact_email=guardian.email,
-            contact_relationship="Primary Guardian" if is_primary else "Collaborator Guardian",
+            relationship="Primary Guardian" if is_primary else "Collaborator Guardian",
             priority=1 if is_primary else 2,
             is_active=True,
             source="auto_guardian",
@@ -208,9 +208,9 @@ def sync_guardian_contacts_endpoint(
                 {
                     "id": c.id,
                     "name": c.contact_name,
-                    "phone": c.contact_phone,
+                    "phone": c.phone_number,
                     "email": c.contact_email,
-                    "relationship": c.contact_relationship,
+                    "relationship": c.relationship,
                     "priority": c.priority,
                     "source": c.source
                 }
@@ -228,26 +228,67 @@ def sync_guardian_contacts_endpoint(
 # BACKGROUND TASKS / HOOKS
 # ================================================
 
-def on_guardian_relationship_created(
-    db: Session,
-    relationship: GuardianDependent
-):
+# def on_guardian_relationship_created(
+#     db: Session,
+#     relationship: GuardianDependent
+# ):
+#     """
+#     Hook: Called when a new guardian relationship is created
+#     Automatically creates emergency contact for dependent
+#     """
+#     try:
+#         contact = sync_guardian_contacts_for_dependent(
+#             db=db,
+#             dependent_id=relationship.dependent_id,
+#             guardian_user_id=relationship.guardian_id,
+#             relationship_id=relationship.id,
+#             is_primary=relationship.is_primary
+#         )
+#         print(f"✅ Auto-created emergency contact {contact.id} for dependent {relationship.dependent_id}")
+#     except Exception as e:
+#         print(f"❌ Error creating auto emergency contact: {e}")
+def on_guardian_relationship_created(db: Session, relationship: GuardianDependent):
     """
-    Hook: Called when a new guardian relationship is created
-    Automatically creates emergency contact for dependent
+    Auto-create emergency contact when guardian-dependent relationship is created
+    Works for BOTH primary and collaborator guardians
     """
     try:
-        contact = sync_guardian_contacts_for_dependent(
-            db=db,
-            dependent_id=relationship.dependent_id,
-            guardian_user_id=relationship.guardian_id,
-            relationship_id=relationship.id,
-            is_primary=relationship.is_primary
+        # Get guardian user info
+        guardian = db.query(User).filter(User.id == relationship.guardian_id).first()
+        
+        if not guardian:
+            print(f"⚠️ Guardian {relationship.guardian_id} not found")
+            return
+        
+        # Check if emergency contact already exists
+        existing_contact = db.query(EmergencyContact).filter(
+            EmergencyContact.user_id == relationship.dependent_id,
+            EmergencyContact.phone_number == guardian.phone_number
+        ).first()
+        
+        if existing_contact:
+            print(f"ℹ️ Emergency contact already exists for {guardian.full_name}")
+            return
+        
+        # Create emergency contact for dependent
+        new_contact = EmergencyContact(
+            user_id=relationship.dependent_id,  # The dependent's user_id
+            contact_name=guardian.full_name,
+            phone_number=guardian.phone_number,
+            relationship=f"{relationship.guardian_type.capitalize()} Guardian",  # "Primary Guardian" or "Collaborator Guardian"
+            is_auto_generated=True,  # Flag to identify auto-generated contacts
+            auto_from_guardian_id=relationship.guardian_id  # Track which guardian created this
         )
-        print(f"✅ Auto-created emergency contact {contact.id} for dependent {relationship.dependent_id}")
+        
+        db.add(new_contact)
+        db.commit()
+        
+        print(f"✅ Auto-created emergency contact: {guardian.full_name} → Dependent {relationship.dependent_id}")
+        
     except Exception as e:
-        print(f"❌ Error creating auto emergency contact: {e}")
-
+        print(f"❌ Error auto-creating emergency contact: {e}")
+        db.rollback()
+        raise
 
 def on_guardian_relationship_updated(
     db: Session,

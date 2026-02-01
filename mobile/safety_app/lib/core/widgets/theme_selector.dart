@@ -31,15 +31,30 @@ class _ThemeSelectorState extends ConsumerState<ThemeSelector> {
       ),
       child: Column(
         children: [
-          // Theme Header
           _buildHeader(themeMode, isDark),
-
-          // Expandable Options
           if (_isExpanded) ...[
             _buildDivider(isDark),
-            _buildThemeOption('Light', ThemeMode.light, themeMode, isDark),
-            _buildThemeOption('Dark', ThemeMode.dark, themeMode, isDark),
-            _buildThemeOption('System Default', ThemeMode.system, themeMode, isDark),
+            _buildThemeOption(
+              'Light',
+              ThemeMode.light,
+              Icons.light_mode,
+              themeMode,
+              isDark,
+            ),
+            _buildThemeOption(
+              'Dark',
+              ThemeMode.dark,
+              Icons.dark_mode,
+              themeMode,
+              isDark,
+            ),
+            _buildThemeOption(
+              'System Default',
+              ThemeMode.system,
+              Icons.settings_brightness,
+              themeMode,
+              isDark,
+            ),
           ],
         ],
       ),
@@ -105,23 +120,36 @@ class _ThemeSelectorState extends ConsumerState<ThemeSelector> {
   Widget _buildThemeOption(
     String label,
     ThemeMode mode,
+    IconData icon,
     ThemeMode currentMode,
     bool isDark,
   ) {
     final isSelected = currentMode == mode;
 
     return ListTile(
-      contentPadding: const EdgeInsets.only(left: 72, right: 16),
+      leading: Padding(
+        padding: const EdgeInsets.only(left: 8),
+        child: Icon(
+          icon,
+          size: 20,
+          color: isSelected
+              ? (isDark ? AppColors.darkAccentGreen1 : AppColors.primaryGreen)
+              : (isDark ? AppColors.darkHint : AppColors.lightHint),
+        ),
+      ),
       title: Text(
         label,
         style: AppTextStyles.bodyMedium.copyWith(
           color: isDark ? AppColors.darkOnSurface : AppColors.lightOnSurface,
+          fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
         ),
       ),
       trailing: isSelected
           ? Icon(
               Icons.check_circle,
-              color: isDark ? AppColors.darkAccentGreen1 : AppColors.primaryGreen,
+              color: isDark
+                  ? AppColors.darkAccentGreen1
+                  : AppColors.primaryGreen,
               size: 20,
             )
           : null,
@@ -138,7 +166,7 @@ class _ThemeSelectorState extends ConsumerState<ThemeSelector> {
       case ThemeMode.light:
         return Icons.light_mode;
       case ThemeMode.system:
-        return Icons.settings_suggest;
+        return Icons.settings_brightness;
     }
   }
 

@@ -14,7 +14,7 @@ from datetime import datetime
 class EmergencyContactCreate(BaseModel):
     """Schema for creating an emergency contact"""
     contact_name: str = Field(..., min_length=1, max_length=100, description="Name of emergency contact")
-    contact_phone: str = Field(..., min_length=10, max_length=20, description="Phone number")
+    phone_number: str = Field(..., min_length=10, max_length=20, description="Phone number")
     contact_email: Optional[str] = Field(None, max_length=255, description="Email address (optional)")
     relationship: Optional[str] = Field(None, max_length=50, description="Relationship to user")
     priority: int = Field(default=999, ge=1, le=999, description="Priority (1=highest)")
@@ -26,7 +26,7 @@ class EmergencyContactCreate(BaseModel):
             raise ValueError('Contact name cannot be empty')
         return v.strip()
     
-    @field_validator('contact_phone')
+    @field_validator('phone_number')
     @classmethod
     def validate_phone(cls, v):
         # Remove spaces and special characters
@@ -43,7 +43,7 @@ class EmergencyContactCreate(BaseModel):
         json_schema_extra = {
             "example": {
                 "contact_name": "Jane Doe",
-                "contact_phone": "+9779812345678",
+                "phone_number": "+9779812345678",
                 "contact_email": "jane@example.com",
                 "relationship": "Mother",
                 "priority": 1
@@ -54,7 +54,7 @@ class EmergencyContactCreate(BaseModel):
 class EmergencyContactUpdate(BaseModel):
     """Schema for updating an emergency contact"""
     contact_name: Optional[str] = Field(None, min_length=1, max_length=100)
-    contact_phone: Optional[str] = Field(None, min_length=10, max_length=20)
+    phone_number: Optional[str] = Field(None, min_length=10, max_length=20)
     contact_email: Optional[str] = Field(None, max_length=255)
     relationship: Optional[str] = Field(None, max_length=50)
     priority: Optional[int] = Field(None, ge=1, le=999)
@@ -67,7 +67,7 @@ class EmergencyContactUpdate(BaseModel):
             raise ValueError('Contact name cannot be empty')
         return v.strip() if v else v
     
-    @field_validator('contact_phone')
+    @field_validator('phone_number')
     @classmethod
     def validate_phone(cls, v):
         if v is None:
@@ -87,7 +87,7 @@ class EmergencyContactResponse(BaseModel):
     id: int
     user_id: int
     contact_name: str
-    contact_phone: str
+    phone_number: str
     contact_email: Optional[str] = None
     relationship: Optional[str] = None
     priority: int
@@ -104,7 +104,7 @@ class EmergencyContactResponse(BaseModel):
                 "id": 1,
                 "user_id": 5,
                 "contact_name": "Jane Doe",
-                "contact_phone": "+9779812345678",
+                "phone_number": "+9779812345678",
                 "contact_email": "jane@example.com",
                 "relationship": "Mother",
                 "priority": 1,
@@ -127,13 +127,13 @@ class EmergencyContactBulkCreate(BaseModel):
                 "contacts": [
                     {
                         "contact_name": "Jane Doe",
-                        "contact_phone": "+9779812345678",
+                        "phone_number": "+9779812345678",
                         "relationship": "Mother",
                         "priority": 1
                     },
                     {
                         "contact_name": "John Smith",
-                        "contact_phone": "+9779887654321",
+                        "phone_number": "+9779887654321",
                         "relationship": "Father",
                         "priority": 2
                     }
@@ -156,7 +156,7 @@ class DependentEmergencyContactCreate(BaseModel):
     """Schema for primary guardian to add emergency contact for dependent"""
     dependent_id: int = Field(..., description="ID of the dependent")
     contact_name: str = Field(..., min_length=1, max_length=100)
-    contact_phone: str = Field(..., min_length=10, max_length=20)
+    phone_number: str = Field(..., min_length=10, max_length=20)
     contact_email: Optional[str] = Field(None, max_length=255)
     relationship: Optional[str] = Field(None, max_length=50)
     priority: int = Field(default=999, ge=1, le=999)
@@ -168,7 +168,7 @@ class DependentEmergencyContactCreate(BaseModel):
             raise ValueError('Contact name cannot be empty')
         return v.strip()
     
-    @field_validator('contact_phone')
+    @field_validator('phone_number')
     @classmethod
     def validate_phone(cls, v):
         phone = v.replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
@@ -184,7 +184,7 @@ class DependentEmergencyContactCreate(BaseModel):
 class DependentEmergencyContactUpdate(BaseModel):
     """Schema for primary guardian to update dependent's emergency contact"""
     contact_name: Optional[str] = Field(None, min_length=1, max_length=100)
-    contact_phone: Optional[str] = Field(None, min_length=10, max_length=20)
+    phone_number: Optional[str] = Field(None, min_length=10, max_length=20)
     contact_email: Optional[str] = Field(None, max_length=255)
     relationship: Optional[str] = Field(None, max_length=50)
     priority: Optional[int] = Field(None, ge=1, le=999)

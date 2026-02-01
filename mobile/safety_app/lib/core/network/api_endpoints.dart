@@ -15,6 +15,12 @@ class ApiEndpoints {
   static const String logout = '/auth/logout';
   static const String logoutAll = '/auth/logout-all';
 
+  // ✅ ADD THIS PROFILE ENDPOINT
+  static const String updateProfile = '/auth/profile';
+
+  // ✅ NEW: Profile Picture Endpoints
+  static const String uploadProfilePicture = '/auth/profile/picture';
+  static const String deleteProfilePicture = '/auth/profile/picture';
   // Role endpoints
   static const String getRoles = '/auth/roles';
   static const String selectRole = '/auth/select-role';
@@ -35,12 +41,49 @@ class ApiEndpoints {
   static const String scanQR = '/dependent/scan-qr';
   static const String getMyGuardians = '/dependent/my-guardians';
   static const String removeGuardian = '/dependent/remove-guardian';
-  
+
   // Email Verification Endpoints
   static const String verifyEmail = '/auth/verify-email';
   static const String resendEmailOTP = '/auth/resend-email-otp';
 
+  // 🆕 Collaborator endpoints
+  static const String inviteCollaborator = '/guardian/invite-collaborator';
+  static const String validateInvitation = '/guardian/validate-invitation';
+  static const String acceptInvitation = '/guardian/accept-invitation';
+  // Either make it clear:
+  static const String getCollaborators = '/guardian/dependent';
+
+  // Or fully define:
+  // static const String getCollaborators = '/guardian/dependent/{id}/collaborators';// /{id}/collaborators
+  static const String getPendingInvitations =
+      '/guardian/dependent'; // /{id}/pending-invitations
+  static const String revokeCollaborator = '/guardian/collaborator'; // /{id}
+
+  // Emergency Contact endpoints
+  static const String getMyEmergencyContacts = '/my-emergency-contacts';
+  static const String createMyEmergencyContact = '/my-emergency-contacts';
+  static const String updateMyEmergencyContact =
+      '/my-emergency-contacts'; // /{id}
+  static const String deleteMyEmergencyContact =
+      '/my-emergency-contacts'; // /{id}
+  static const String bulkImportContacts = '/my-emergency-contacts/bulk';
+
+  static const String getDependentEmergencyContacts =
+      '/dependent'; // /{id}/emergency-contacts
+  static const String createDependentEmergencyContact =
+      '/dependent/emergency-contacts';
+  static const String updateDependentEmergencyContact =
+      '/dependent/emergency-contacts'; // /{id}
+  static const String deleteDependentEmergencyContact =
+      '/dependent/emergency-contacts'; // /{id}
   // Other endpoints (add as needed)
+  // Family Service endpoints
+  static const String getFamilyStats =
+      '/family/stats'; // If you create this endpoint
+  // Note: Family service uses existing endpoints from other services
+
+  // Permission endpoints (mostly client-side, but you might want backend validation)
+  // static const String verifyPermission = '/auth/verify-permission'; // Future enhancement
   // static const String updateProfile = '/user/profile';
   // static const String uploadAvatar = '/user/avatar';
 }

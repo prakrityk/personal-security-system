@@ -1,4 +1,5 @@
 // lib/widgets/emergency_contacts/add_emergency_contact_dialog.dart
+// ✅ CORRECTED VERSION
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:safety_app/core/theme/app_colors.dart';
@@ -8,7 +9,7 @@ import 'package:safety_app/models/emergency_contact.dart';
 
 class AddEmergencyContactDialog extends ConsumerStatefulWidget {
   final int? dependentId;
-  final EmergencyContact? existingContact; // For editing
+  final EmergencyContact? existingContact;
 
   const AddEmergencyContactDialog({
     super.key,
@@ -51,10 +52,12 @@ class _AddEmergencyContactDialogState
     if (widget.existingContact != null) {
       _nameController.text = widget.existingContact!.name;
       _phoneController.text = widget.existingContact!.phoneNumber;
-      _emailController.text = widget.existingContact!.email;
-      _selectedRelationship = widget.existingContact!.relationship.isNotEmpty
-          ? widget.existingContact!.relationship
-          : 'Friend';
+      _emailController.text = widget.existingContact!.email ?? '';
+      // ✅ FIXED: Check for null and non-empty
+      if (widget.existingContact!.relationship != null &&
+          widget.existingContact!.relationship!.isNotEmpty) {
+        _selectedRelationship = widget.existingContact!.relationship!;
+      }
     }
   }
 
@@ -81,16 +84,13 @@ class _AddEmergencyContactDialogState
       return 'Please enter a phone number';
     }
 
-    // Remove all non-digit characters for validation
     final cleaned = value.replaceAll(RegExp(r'[^\d+]'), '');
 
-    // Check if it starts with + (international format)
     if (cleaned.startsWith('+')) {
       if (cleaned.length < 10) {
         return 'Please enter a valid phone number';
       }
     } else {
-      // For Nepal: should be 10 digits
       if (cleaned.length < 10) {
         return 'Phone number must be at least 10 digits';
       }
@@ -101,10 +101,9 @@ class _AddEmergencyContactDialogState
 
   String? _validateEmail(String? value) {
     if (value == null || value.trim().isEmpty) {
-      return null; // Email is optional
+      return null;
     }
 
-    // Basic email validation
     final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
     if (!emailRegex.hasMatch(value)) {
       return 'Please enter a valid email';
@@ -114,25 +113,20 @@ class _AddEmergencyContactDialogState
   }
 
   String _formatPhoneNumber(String phone) {
-    // Remove all non-digit characters except +
     String cleaned = phone.replaceAll(RegExp(r'[^\d+]'), '');
 
-    // If already has +, return as is
     if (cleaned.startsWith('+')) {
       return cleaned;
     }
 
-    // If starts with 977 (Nepal code without +)
     if (cleaned.startsWith('977') && cleaned.length > 10) {
       return '+$cleaned';
     }
 
-    // If starts with 0, remove it
     if (cleaned.startsWith('0')) {
       cleaned = cleaned.substring(1);
     }
 
-    // Add Nepal country code by default
     return '+977$cleaned';
   }
 
@@ -145,14 +139,12 @@ class _AddEmergencyContactDialogState
 
     try {
       final notifier = ref.read(emergencyContactNotifierProvider.notifier);
-
-      // Format phone number
       final formattedPhone = _formatPhoneNumber(_phoneController.text.trim());
 
       if (widget.existingContact != null) {
         // Update existing contact
         final updateData = UpdateEmergencyContact(
-          id: widget.existingContact!.id!,
+          id: widget.existingContact!.id, // ✅ FIXED: Removed ! after id
           name: _nameController.text.trim(),
           phoneNumber: formattedPhone,
           email: _emailController.text.trim().isEmpty
@@ -397,7 +389,7 @@ class _AddEmergencyContactDialogState
   }
 }
 
-// Helper function to show the dialog
+// Helper function
 Future<bool?> showAddEmergencyContactDialog({
   required BuildContext context,
   int? dependentId,

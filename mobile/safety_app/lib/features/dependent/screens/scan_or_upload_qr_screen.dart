@@ -20,10 +20,7 @@ class ScanOrUploadQrScreen extends StatefulWidget {
 class _ScanOrUploadQrScreenState extends State<ScanOrUploadQrScreen> {
   final DependentService _dependentService = DependentService();
 
-  // Camera scanner - for live scanning only
   late final mobile_scanner.MobileScannerController _cameraController;
-
-  // ML Kit barcode scanner - for gallery images only
   late final BarcodeScanner _barcodeScanner;
 
   bool _isProcessing = false;
@@ -34,15 +31,12 @@ class _ScanOrUploadQrScreenState extends State<ScanOrUploadQrScreen> {
   void initState() {
     super.initState();
 
-    // Initialize camera scanner
     _cameraController = mobile_scanner.MobileScannerController(
       detectionSpeed: mobile_scanner.DetectionSpeed.noDuplicates,
       formats: [mobile_scanner.BarcodeFormat.qrCode],
     );
 
-    // Initialize ML Kit barcode scanner for gallery images
     _barcodeScanner = BarcodeScanner(formats: [BarcodeFormat.qrCode]);
-
     _startCamera();
   }
 
@@ -62,8 +56,6 @@ class _ScanOrUploadQrScreenState extends State<ScanOrUploadQrScreen> {
 
     try {
       final ImagePicker picker = ImagePicker();
-
-      print('🖼️ Opening gallery...');
       final XFile? image = await picker.pickImage(
         source: ImageSource.gallery,
         maxWidth: 800,
@@ -71,14 +63,9 @@ class _ScanOrUploadQrScreenState extends State<ScanOrUploadQrScreen> {
         imageQuality: 75,
       );
 
-      if (image == null) {
-        print('❌ User cancelled image selection');
-        return;
-      }
+      if (image == null) return;
 
       setState(() => _isProcessing = true);
-
-      print('🔍 Analyzing image: ${image.path}');
 
       try {
         final inputImage = InputImage.fromFilePath(image.path);
@@ -90,39 +77,19 @@ class _ScanOrUploadQrScreenState extends State<ScanOrUploadQrScreen> {
           final String? qrCode = barcodes.first.rawValue;
 
           if (qrCode != null && qrCode.isNotEmpty) {
-            final displayText = qrCode.length > 20
-                ? '${qrCode.substring(0, 20)}...'
-                : qrCode;
-            print('✅ QR code found in image: $displayText');
-            print('🚀 Calling _handleQRScanned...');
-
-            // Call the method and catch any errors
-            try {
-              await _handleQRScanned(qrCode);
-            } catch (e, stackTrace) {
-              print('❌ ERROR in gallery scan flow:');
-              print('  Error: $e');
-              print('  Stack Trace: $stackTrace');
-              _handleImageScanError(
-                'Failed to process QR code: ${e.toString()}',
-              );
-            }
+            await _handleQRScanned(qrCode);
           } else {
-            print('❌ QR code data is empty');
             _handleImageScanError('QR code data is empty');
           }
         } else {
-          print('❌ No barcodes found in image');
           _handleImageScanError(
-            'No QR code found in the image. Please try a clearer image.',
+            'No QR code found. Please try a clearer image.',
           );
         }
       } catch (e) {
-        print('❌ ML Kit analysis error: $e');
         _handleImageScanError('Failed to analyze image: ${e.toString()}');
       }
     } catch (e) {
-      print('❌ Gallery picker error: $e');
       if (mounted) {
         _showErrorSnackbar('Failed to pick image: ${e.toString()}');
         setState(() => _isProcessing = false);
@@ -131,181 +98,191 @@ class _ScanOrUploadQrScreenState extends State<ScanOrUploadQrScreen> {
   }
 
   Future<void> _handleQRScanned(String qrCode) async {
-    print(
-      '🔍 _handleQRScanned STARTED with QR: ${qrCode.substring(0, qrCode.length > 20 ? 20 : qrCode.length)}...',
-    );
+    if (_isProcessing && _scannedCode != null) return;
 
-    if (_isProcessing && _scannedCode != null) {
-      print('⚠️ Already processing another QR code');
-      return;
-    }
-
-    print('📱 Setting processing state...');
     setState(() {
       _isProcessing = true;
       _scannedCode = qrCode;
     });
 
-    print('📡 Attempting to call scanQRCode API...');
-    print('📋 QR Code: $qrCode');
-
     try {
-      // Add a small delay to ensure UI updates
       await Future.delayed(const Duration(milliseconds: 100));
 
-      // Call API to link with guardian
-      print('📞 Making API call...');
       final response = await _dependentService.scanQRCode(qrCode);
 
-      print('✅ API Response received:');
-      print('  Response type: ${response.runtimeType}');
-      print('  Response: $response');
-
       if (mounted) {
-        print('🎉 Showing success dialog...');
         _showSuccessDialog(
           guardianName: response['guardian_name'] ?? 'Guardian',
           relation: response['relation'] ?? 'guardian',
         );
       }
-    } catch (e, stackTrace) {
-      print('❌ ERROR in _handleQRScanned:');
-      print('  Error type: ${e.runtimeType}');
-      print('  Error: $e');
-      print('  Stack Trace: $stackTrace');
-
+    } catch (e) {
       if (mounted) {
         String errorMessage = 'Failed to link with guardian';
 
-        // Try to get more specific error message
-        if (e is FormatException) {
-          errorMessage = 'Invalid QR code format';
-        } else if (e.toString().contains('Invalid QR code')) {
+        if (e.toString().contains('Invalid QR code')) {
           errorMessage = 'Invalid QR code. Please try again.';
         } else if (e.toString().contains('expired')) {
           errorMessage =
               'This QR code has expired. Ask your guardian for a new one.';
         } else if (e.toString().contains('already been')) {
           errorMessage = 'This QR code has already been used.';
-        } else if (e.toString().contains('403')) {
-          errorMessage =
-              'You must have a child or elderly role to scan QR codes.';
         } else if (e.toString().contains('Network is unreachable')) {
           errorMessage = 'No internet connection. Please check your network.';
-        } else if (e.toString().contains('Timeout')) {
-          errorMessage = 'Connection timeout. Please try again.';
-        } else if (e.toString().contains('SocketException')) {
-          errorMessage = 'Network error. Please check your connection.';
         }
 
-        print('⚠️ Showing error: $errorMessage');
         _showErrorSnackbar(errorMessage);
-
-        // Restart camera
-        try {
-          print('🔄 Restarting camera...');
-          await _cameraController.start();
-        } catch (camError) {
-          print('⚠️ Failed to restart camera: $camError');
-        }
-
-        if (mounted) {
-          setState(() {
-            _isProcessing = false;
-            _scannedCode = null;
-          });
-        }
+        setState(() {
+          _isProcessing = false;
+          _scannedCode = null;
+        });
       }
     }
   }
 
-  Future<void> _handleImageScanError(String error) async {
-    print('❌ Image scan error: $error');
+  void _handleImageScanError(String message) {
     if (mounted) {
-      _showErrorSnackbar(error);
+      _showErrorSnackbar(message);
       setState(() => _isProcessing = false);
-
-      // Restart camera if needed
-      if (!_cameraController.value.isRunning) {
-        try {
-          await _cameraController.start();
-        } catch (e) {
-          print('⚠️ Failed to restart camera: $e');
-        }
-      }
     }
+  }
+
+  void _showErrorSnackbar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.white),
+            const SizedBox(width: 8),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 4),
+      ),
+    );
   }
 
   void _showSuccessDialog({
     required String guardianName,
     required String relation,
   }) {
-    print(
-      '🎉 Showing success dialog for guardian: $guardianName, relation: $relation',
-    );
-
-    // First, reset the processing state
-    if (mounted) {
-      setState(() {
-        _isProcessing = false;
-        _scannedCode = null;
-      });
-    }
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            const Icon(
-              Icons.check_circle,
-              color: AppColors.primaryGreen,
-              size: 32,
-            ),
-            const SizedBox(width: 12),
-            const Text('Success!'),
-          ],
-        ),
-        content: Text(
-          'You are now linked with $guardianName as a $relation!\n\nYou can now use the safety features.',
-          style: AppTextStyles.body,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              print('🚀 Navigating to home...');
-              Navigator.of(context).pop();
-              context.go('/home');
-            },
-            child: const Text('Get Started'),
+      builder: (dialogContext) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+            borderRadius: BorderRadius.circular(24),
           ),
-        ],
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Success icon
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      AppColors.primaryGreen.withOpacity(0.2),
+                      AppColors.accentGreen1.withOpacity(0.2),
+                    ],
+                  ),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.check_circle,
+                  color: AppColors.primaryGreen,
+                  size: 64,
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              Text(
+                'Successfully Linked!',
+                style: AppTextStyles.h3.copyWith(
+                  color: isDark
+                      ? AppColors.darkOnSurface
+                      : AppColors.lightOnSurface,
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              Text(
+                'You are now protected by',
+                style: AppTextStyles.bodyMedium.copyWith(
+                  color: isDark ? AppColors.darkHint : AppColors.lightHint,
+                ),
+              ),
+
+              const SizedBox(height: 8),
+
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryGreen.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      guardianName,
+                      style: AppTextStyles.h4.copyWith(
+                        color: AppColors.primaryGreen,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    Text(
+                      relation,
+                      style: AppTextStyles.caption.copyWith(
+                        color: isDark
+                            ? AppColors.darkHint
+                            : AppColors.lightHint,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop();
+                    context.go('/home');
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryGreen,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    elevation: 2,
+                  ),
+                  child: const Text('Go to Home'),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
-  }
-
-  void _showErrorSnackbar(String message) {
-    print('⚠️ Showing error snackbar: $message');
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 4),
-        ),
-      );
-    }
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    final title = widget.dependentType == DependentType.child
-        ? "Connect with your guardian"
-        : "Connect with your caregiver";
 
     return Scaffold(
       backgroundColor: isDark
@@ -323,31 +300,78 @@ class _ScanOrUploadQrScreenState extends State<ScanOrUploadQrScreen> {
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(24),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: AppTextStyles.heading),
-                    const SizedBox(height: 8),
-                    Text(
-                      "Scan the QR code provided by your guardian to link your accounts",
-                      style: AppTextStyles.body,
+                    // Header
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            AppColors.primaryGreen.withOpacity(0.1),
+                            AppColors.accentGreen1.withOpacity(0.1),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Column(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryGreen.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(
+                              Icons.qr_code_scanner,
+                              color: AppColors.primaryGreen,
+                              size: 32,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Scan Guardian QR Code',
+                            style: AppTextStyles.h3,
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Position the QR code from your guardian within the frame',
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: isDark
+                                  ? AppColors.darkHint
+                                  : AppColors.lightHint,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 40),
 
-                    // Camera Preview with QR Scanner
+                    const SizedBox(height: 32),
+
+                    // Camera Scanner
                     Center(
                       child: Stack(
                         alignment: Alignment.center,
                         children: [
-                          // Camera container
                           Container(
                             width: 300,
                             height: 300,
                             decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(20),
+                              borderRadius: BorderRadius.circular(24),
                               border: Border.all(
                                 color: AppColors.primaryGreen,
                                 width: 3,
                               ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.primaryGreen.withOpacity(
+                                    0.3,
+                                  ),
+                                  blurRadius: 20,
+                                  spreadRadius: 2,
+                                ),
+                              ],
                             ),
                             clipBehavior: Clip.hardEdge,
                             child: _cameraStarted
@@ -356,13 +380,9 @@ class _ScanOrUploadQrScreenState extends State<ScanOrUploadQrScreen> {
                                     onDetect: (capture) {
                                       if (_isProcessing) return;
 
-                                      final List<mobile_scanner.Barcode>
-                                      barcodes = capture.barcodes;
+                                      final barcodes = capture.barcodes;
                                       for (final barcode in barcodes) {
                                         if (barcode.rawValue != null) {
-                                          print(
-                                            '📷 Camera detected QR: ${barcode.rawValue!.substring(0, barcode.rawValue!.length > 20 ? 20 : barcode.rawValue!.length)}...',
-                                          );
                                           _handleQRScanned(barcode.rawValue!);
                                           break;
                                         }
@@ -379,14 +399,14 @@ class _ScanOrUploadQrScreenState extends State<ScanOrUploadQrScreen> {
                                   ),
                           ),
 
-                          // Processing overlay with better status message
+                          // Processing overlay
                           if (_isProcessing)
                             Container(
                               width: 300,
                               height: 300,
                               decoration: BoxDecoration(
                                 color: Colors.black87,
-                                borderRadius: BorderRadius.circular(20),
+                                borderRadius: BorderRadius.circular(24),
                               ),
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
@@ -396,40 +416,32 @@ class _ScanOrUploadQrScreenState extends State<ScanOrUploadQrScreen> {
                                   ),
                                   const SizedBox(height: 16),
                                   Text(
-                                    _getProcessingMessage(),
+                                    _scannedCode == null
+                                        ? 'Analyzing...'
+                                        : 'Linking with guardian...',
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 16,
+                                      fontWeight: FontWeight.w500,
                                     ),
                                     textAlign: TextAlign.center,
                                   ),
-                                  if (_scannedCode != null)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 8),
-                                      child: Text(
-                                        'Code: ${_scannedCode!.substring(0, _scannedCode!.length > 12 ? 12 : _scannedCode!.length)}...',
-                                        style: const TextStyle(
-                                          color: Colors.white70,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ),
                                 ],
                               ),
                             ),
 
-                          // Scanning frame indicator
+                          // Scanning frame
                           if (!_isProcessing && _cameraStarted)
                             IgnorePointer(
                               child: Container(
-                                width: 200,
-                                height: 200,
+                                width: 220,
+                                height: 220,
                                 decoration: BoxDecoration(
                                   border: Border.all(
                                     color: AppColors.primaryGreen,
                                     width: 2,
                                   ),
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(16),
                                 ),
                               ),
                             ),
@@ -437,106 +449,59 @@ class _ScanOrUploadQrScreenState extends State<ScanOrUploadQrScreen> {
                       ),
                     ),
 
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 32),
 
-                    // Instructions
-                    if (!_isProcessing)
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryGreen.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: AppColors.primaryGreen.withOpacity(0.3),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.info_outline,
-                              color: AppColors.primaryGreen,
-                              size: 24,
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                'Position the QR code within the green frame',
-                                style: AppTextStyles.body.copyWith(
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                    const SizedBox(height: 24),
-
-                    // Upload from gallery option
+                    // Upload button
                     SizedBox(
                       width: double.infinity,
-                      child: ElevatedButton.icon(
+                      child: OutlinedButton.icon(
                         icon: const Icon(Icons.upload_file),
-                        label: const Text("Upload QR from gallery"),
+                        label: const Text('Upload QR from Gallery'),
                         onPressed: _isProcessing ? null : _pickImageFromGallery,
-                        style: ElevatedButton.styleFrom(
+                        style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 16),
-                          backgroundColor: AppColors.primaryGreen,
-                          foregroundColor: Colors.white,
-                          disabledBackgroundColor: Colors.grey,
                         ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // Info card
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.blue.withOpacity(0.2)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.info_outline,
+                            color: Colors.blue,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'QR codes expire after 3 days. Ask your guardian for a new one if needed.',
+                              style: AppTextStyles.caption.copyWith(
+                                color: isDark
+                                    ? AppColors.darkHint
+                                    : AppColors.lightHint,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
             ),
-
-            // Bottom info
-            if (!_isProcessing)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.orange.withOpacity(0.3)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.access_time,
-                        color: Colors.orange,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'QR codes expire after 3 days',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: isDark
-                                ? Colors.orange[200]
-                                : Colors.orange[800],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
           ],
         ),
       ),
     );
-  }
-
-  String _getProcessingMessage() {
-    if (_scannedCode == null) {
-      return 'Analyzing image...';
-    } else {
-      return 'Linking with guardian...\nPlease wait';
-    }
   }
 }
