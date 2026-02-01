@@ -10,7 +10,8 @@
     <!-- Camera feature (optional - app works without camera) -->
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false"/>
-
+    <!-- Add contacts permission --> 
+    <uses-permission android:name="android.permission.READ_CONTACTS"/> 
     <application
         android:label="safety_app"
         android:name="${applicationName}"

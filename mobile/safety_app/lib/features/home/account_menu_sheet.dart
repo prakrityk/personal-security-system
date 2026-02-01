@@ -21,6 +21,10 @@ class AccountMenuSheet extends ConsumerWidget {
     final userName = user?.fullName ?? 'Guest';
     final userRole = user?.displayRole ?? 'User';
 
+    // ✅ FIX: Check if user is a dependent (child or elderly)
+    final roleName = user?.currentRole?.roleName;
+    final isDependent = roleName == 'child' || roleName == 'elderly';
+
     return Container(
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
@@ -40,10 +44,13 @@ class AccountMenuSheet extends ConsumerWidget {
 
           // Theme Selector
           const ThemeSelector(),
-          const SizedBox(height: 16),
 
-          // Logout Button
-          _buildLogoutButton(context, ref),
+          // ✅ FIX: Only show logout button if NOT a dependent
+          if (!isDependent) ...[
+            const SizedBox(height: 16),
+            _buildLogoutButton(context, ref),
+          ],
+
           const SizedBox(height: 8),
         ],
       ),
@@ -116,7 +123,7 @@ class AccountMenuSheet extends ConsumerWidget {
   }
 
   void _handleLogout(BuildContext context, WidgetRef ref) {
-    print('📘 Logout button pressed');
+    print('🔘 Logout button pressed');
 
     // Capture auth notifier
     final authNotifier = ref.read(authStateProvider.notifier);

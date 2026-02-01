@@ -12,6 +12,23 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_,desc
 from typing import List
 import random
+# Add these with your existing imports
+from fastapi import UploadFile, File  # Already present
+import shutil
+import os
+from pathlib import Path
+import uuid
+
+# ✅ ADD THIS IMPORT at the top of auth.py with other imports
+from api.routes.guardian_auto_contacts import on_guardian_profile_updated
+
+
+
+# Configuration
+UPLOAD_DIR = Path("uploads/profile_pictures")
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
+ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
 
 # Schemas
 from api.schemas.auth import (
@@ -57,11 +74,68 @@ from database.connection import get_db
 router = APIRouter()
 
 
+
+
+def validate_image_file(file: UploadFile) -> None:
+    """Validate uploaded image file"""
+    # Check file extension
+    file_ext = os.path.splitext(file.filename)[1].lower()
+    if file_ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid file type. Allowed types: {', '.join(ALLOWED_EXTENSIONS)}"
+        )
+    
+    # Check content type
+    if not file.content_type or not file.content_type.startswith('image/'):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File must be an image"
+        )
+
+
+def save_upload_file(upload_file: UploadFile, user_id: int) -> str:
+    """Save uploaded file and return the path"""
+    # Generate unique filename
+    file_ext = os.path.splitext(upload_file.filename)[1].lower()
+    unique_filename = f"user_{user_id}_{uuid.uuid4().hex}{file_ext}"
+    file_path = UPLOAD_DIR / unique_filename
+    
+    # Save file
+    try:
+        with file_path.open("wb") as buffer:
+            shutil.copyfileobj(upload_file.file, buffer)
+    finally:
+        upload_file.file.close()
+    
+    # Return relative path for database storage
+    return f"/uploads/profile_pictures/{unique_filename}"
+
+
+def delete_profile_picture_file(file_path: str) -> None:
+    """Delete profile picture file from filesystem"""
+    if not file_path:
+        return
+    
+    try:
+        # Remove leading slash if present
+        clean_path = file_path.lstrip('/')
+        full_path = Path(clean_path)
+        
+        if full_path.exists():
+            full_path.unlink()
+            print(f"✅ Deleted file: {full_path}")
+    except Exception as e:
+        print(f"⚠️ Could not delete file {file_path}: {e}")
+        # Don't raise exception - file might already be deleted
+
+
 # ----------------------
 # OTP Helpers
 # ----------------------
 def generate_otp() -> str:
     return str(random.randint(100000, 999999))  # 6-digit OTP
+
 
 
 # ================================================
@@ -521,8 +595,131 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
     """
     return current_user
 
-# Backend Endpoints to Add to auth.py
-# Add these after your existing /register endpoint
+# FIXED: Update the /profile endpoint in auth.py
+@router.put("/profile", response_model=UserResponse)
+async def update_profile(
+    request_data: dict,  # ✅ Change from query params to request body
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Update user profile
+    ✅ AUTO-UPDATES all emergency contacts where user is a guardian
+    
+    Parameters:
+    - full_name: New full name (optional)
+    - phone_number: New phone number (optional)
+    
+    Returns:
+    - Updated user profile
+    """
+    profile_changed = False
+    
+    try:
+        # Update full name if provided
+        full_name = request_data.get("full_name")
+        if full_name and full_name != current_user.full_name:
+            current_user.full_name = full_name
+            profile_changed = True
+            print(f"✅ Updated name: {full_name}")
+        
+        if profile_changed:
+            current_user.updated_at = datetime.now(timezone.utc)
+            db.commit()
+            db.refresh(current_user)
+            
+            # ✅ AUTO-UPDATE: Sync changes to all emergency contacts
+            try:
+                on_guardian_profile_updated(db, current_user.id)
+                print(f"✅ Updated emergency contacts after profile change")
+            except Exception as e:
+                print(f"⚠️ Warning: Could not update emergency contacts: {e}")
+                # Don't fail the main operation if sync fails
+        
+        print(f"✅ Profile updated for user {current_user.id}")
+        return current_user
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"❌ Error updating profile: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to update profile: {str(e)}"
+        )
+
+@router.post("/profile/picture", response_model=UserResponse)
+async def upload_profile_picture(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Upload or update user's profile picture
+    
+    - **file**: Image file (JPG, PNG, GIF, WEBP)
+    - **max_size**: 5MB
+    
+    Returns updated user with new profile_picture path
+    """
+    # Validate file
+    validate_image_file(file)
+    
+    # Check file size
+    file.file.seek(0, 2)  # Seek to end
+    file_size = file.file.tell()
+    file.file.seek(0)  # Reset to beginning
+    
+    if file_size > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File too large. Maximum size is {MAX_FILE_SIZE / (1024*1024):.0f}MB"
+        )
+    
+    # Delete old profile picture if exists
+    if current_user.profile_picture:
+        delete_profile_picture_file(current_user.profile_picture)
+    
+    # Save new file
+    file_path = save_upload_file(file, current_user.id)
+    
+    # Update user record
+    current_user.profile_picture = file_path
+    db.commit()
+    db.refresh(current_user)
+    
+    print(f"✅ Profile picture uploaded for user {current_user.id}: {file_path}")
+    
+    return current_user
+
+
+@router.delete("/profile/picture", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_profile_picture(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Delete user's profile picture
+    
+    Returns 204 No Content on success
+    """
+    if not current_user.profile_picture:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No profile picture to delete"
+        )
+    
+    # Delete file from filesystem
+    delete_profile_picture_file(current_user.profile_picture)
+    
+    # Update user record
+    current_user.profile_picture = None
+    db.commit()
+    
+    print(f"✅ Profile picture deleted for user {current_user.id}")
+    
+    return None
 
 @router.post("/verify-email")
 async def verify_email(

@@ -79,9 +79,18 @@ class _GuardianAddDependentScreenState
   Future<void> _generateQR(DependentEntry dependent, int index) async {
     if (!dependent.isValid) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please fill all fields before generating QR'),
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.warning, color: Colors.white),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text('Please fill all fields before generating QR'),
+              ),
+            ],
+          ),
           backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
         ),
       );
       return;
@@ -109,10 +118,19 @@ class _GuardianAddDependentScreenState
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(
-                  'QR code generated for ${dependent.nameController.text}',
+                content: Row(
+                  children: [
+                    const Icon(Icons.check_circle, color: Colors.white),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'QR code generated for ${dependent.nameController.text}',
+                      ),
+                    ),
+                  ],
                 ),
                 backgroundColor: AppColors.primaryGreen,
+                behavior: SnackBarBehavior.floating,
               ),
             );
           }
@@ -124,6 +142,7 @@ class _GuardianAddDependentScreenState
           SnackBar(
             content: Text('Error: ${e.toString()}'),
             backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
           ),
         );
       }
@@ -140,9 +159,16 @@ class _GuardianAddDependentScreenState
 
     if (!hasAtLeastOne) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please add at least one dependent'),
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.warning, color: Colors.white),
+              SizedBox(width: 8),
+              Text('Please add at least one dependent'),
+            ],
+          ),
           backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
         ),
       );
       return;
@@ -157,12 +183,14 @@ class _GuardianAddDependentScreenState
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final surfaceColor =
-        isDark ? AppColors.darkSurface : AppColors.lightSurface;
+    final surfaceColor = isDark
+        ? AppColors.darkSurface
+        : AppColors.lightSurface;
 
     return Scaffold(
-      backgroundColor:
-          isDark ? AppColors.darkBackground : AppColors.lightBackground,
+      backgroundColor: isDark
+          ? AppColors.darkBackground
+          : AppColors.lightBackground,
       appBar: AppBar(
         title: const Text('Add Dependents'),
         backgroundColor: Colors.transparent,
@@ -178,11 +206,15 @@ class _GuardianAddDependentScreenState
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text("Add Dependents", style: AppTextStyles.heading),
+                    Text("Add Dependents", style: AppTextStyles.h2),
                     const SizedBox(height: 8),
                     Text(
                       "Add and manage the people you want to protect",
-                      style: AppTextStyles.body,
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        color: isDark
+                            ? AppColors.darkHint
+                            : AppColors.lightHint,
+                      ),
                     ),
                     const SizedBox(height: 32),
 
@@ -195,72 +227,115 @@ class _GuardianAddDependentScreenState
                         final dependent = _dependents[index];
 
                         return Container(
-                          margin: const EdgeInsets.only(bottom: 24),
+                          margin: const EdgeInsets.only(bottom: 20),
                           decoration: BoxDecoration(
                             color: surfaceColor,
                             borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: ExpansionTile(
-                            initiallyExpanded: dependent.isExpanded,
-                            tilePadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                            ),
-                            childrenPadding: const EdgeInsets.fromLTRB(
-                              16,
-                              8,
-                              16,
-                              16,
-                            ),
-                            title: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    dependent.nameController.text.isEmpty
-                                        ? "Dependent ${index + 1}"
-                                        : dependent.nameController.text,
-                                    style: AppTextStyles.labelLarge,
-                                  ),
-                                ),
-                                if (_dependents.length > 1 &&
-                                    !dependent.qrGenerated)
-                                  IconButton(
-                                    icon: const Icon(Icons.close, size: 20),
-                                    onPressed: () => _removeDependent(index),
-                                    color: Colors.red,
-                                  ),
-                              ],
-                            ),
-                            onExpansionChanged: (expanded) {
-                              setState(() {
-                                dependent.isExpanded = expanded;
-                              });
-                            },
-                            children: [
-                              _DependentForm(
-                                dependent: dependent,
-                                onGenerateQr: () => _generateQR(dependent, index),
-                                isLoading: _isLoading,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.05),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
                               ),
-
-                              if (dependent.qrGenerated &&
-                                  dependent.qrToken != null) ...[
-                                const SizedBox(height: 20),
-                                _QrPreviewCard(qrToken: dependent.qrToken!),
-                              ],
-
-                              if (index == _dependents.length - 1) ...[
-                                const SizedBox(height: 24),
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: TextButton.icon(
-                                    icon: const Icon(Icons.add),
-                                    label: const Text("Add another dependent"),
-                                    onPressed:
-                                        _isLoading ? null : _addAnotherDependent,
-                                  ),
-                                ),
-                              ],
                             ],
+                          ),
+                          child: Theme(
+                            data: Theme.of(
+                              context,
+                            ).copyWith(dividerColor: Colors.transparent),
+                            child: ExpansionTile(
+                              initiallyExpanded: dependent.isExpanded,
+                              tilePadding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 8,
+                              ),
+                              childrenPadding: const EdgeInsets.fromLTRB(
+                                20,
+                                0,
+                                20,
+                                20,
+                              ),
+                              title: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: dependent.qrGenerated
+                                          ? AppColors.primaryGreen.withOpacity(
+                                              0.1,
+                                            )
+                                          : Colors.grey.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Icon(
+                                      dependent.qrGenerated
+                                          ? Icons.check_circle
+                                          : Icons.person_add,
+                                      color: dependent.qrGenerated
+                                          ? AppColors.primaryGreen
+                                          : Colors.grey,
+                                      size: 20,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      dependent.nameController.text.isEmpty
+                                          ? "Dependent ${index + 1}"
+                                          : dependent.nameController.text,
+                                      style: AppTextStyles.labelLarge,
+                                    ),
+                                  ),
+                                  if (_dependents.length > 1 &&
+                                      !dependent.qrGenerated)
+                                    IconButton(
+                                      icon: const Icon(Icons.close, size: 20),
+                                      onPressed: () => _removeDependent(index),
+                                      color: Colors.red,
+                                    ),
+                                ],
+                              ),
+                              onExpansionChanged: (expanded) {
+                                setState(() {
+                                  dependent.isExpanded = expanded;
+                                });
+                              },
+                              children: [
+                                _DependentForm(
+                                  dependent: dependent,
+                                  onGenerateQr: () =>
+                                      _generateQR(dependent, index),
+                                  isLoading: _isLoading,
+                                ),
+
+                                if (dependent.qrGenerated &&
+                                    dependent.qrToken != null) ...[
+                                  const SizedBox(height: 20),
+                                  _QrPreviewCard(qrToken: dependent.qrToken!),
+                                ],
+
+                                if (index == _dependents.length - 1) ...[
+                                  const SizedBox(height: 24),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: OutlinedButton.icon(
+                                      icon: const Icon(Icons.add),
+                                      label: const Text(
+                                        "Add another dependent",
+                                      ),
+                                      onPressed: _isLoading
+                                          ? null
+                                          : _addAnotherDependent,
+                                      style: OutlinedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 14,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
                           ),
                         );
                       },
@@ -271,13 +346,22 @@ class _GuardianAddDependentScreenState
             ),
 
             /// Bottom button
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, -4),
+                  ),
+                ],
+              ),
               child: AnimatedBottomButton(
                 label: "Continue",
                 usePositioned: false,
-                isEnabled: !_isLoading &&
-                    _dependents.any((d) => d.qrGenerated),
+                isEnabled: !_isLoading && _dependents.any((d) => d.qrGenerated),
                 onPressed: _continue,
               ),
             ),
@@ -343,15 +427,22 @@ class _DependentFormState extends State<_DependentForm> {
         if (!widget.dependent.qrGenerated)
           SizedBox(
             width: double.infinity,
-            child: ElevatedButton(
+            child: ElevatedButton.icon(
               onPressed: widget.isLoading ? null : widget.onGenerateQr,
-              child: widget.isLoading
+              icon: widget.isLoading
                   ? const SizedBox(
                       height: 20,
                       width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
                     )
-                  : const Text("Generate QR"),
+                  : const Icon(Icons.qr_code_2),
+              label: const Text("Generate QR Code"),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
             ),
           ),
       ],
@@ -376,7 +467,12 @@ class _DependentTypeDropdown extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text("Dependent type", style: AppTextStyles.labelSmall),
+        Text(
+          "Dependent type",
+          style: AppTextStyles.labelSmall.copyWith(
+            color: isDark ? AppColors.darkHint : AppColors.lightHint,
+          ),
+        ),
         const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -398,8 +494,26 @@ class _DependentTypeDropdown extends StatelessWidget {
               ),
               isExpanded: true,
               items: const [
-                DropdownMenuItem(value: "child", child: Text("Child")),
-                DropdownMenuItem(value: "elderly", child: Text("Elderly")),
+                DropdownMenuItem(
+                  value: "child",
+                  child: Row(
+                    children: [
+                      Icon(Icons.child_care, size: 20),
+                      SizedBox(width: 8),
+                      Text("Child"),
+                    ],
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: "elderly",
+                  child: Row(
+                    children: [
+                      Icon(Icons.elderly, size: 20),
+                      SizedBox(width: 8),
+                      Text("Elderly"),
+                    ],
+                  ),
+                ),
               ],
               onChanged: onChanged,
             ),
@@ -419,32 +533,78 @@ class _QrPreviewCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        color: AppColors.primaryGreen.withOpacity(0.08),
+        gradient: LinearGradient(
+          colors: [
+            AppColors.primaryGreen.withOpacity(0.1),
+            AppColors.accentGreen1.withOpacity(0.1),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
       ),
       child: Column(
         children: [
-          // Actual QR Code
-          QrImageView(
-            data: qrToken,
-            version: QrVersions.auto,
-            size: 200,
-            backgroundColor: Colors.white,
+          // Success icon
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.primaryGreen.withOpacity(0.2),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.check_circle,
+              color: AppColors.primaryGreen,
+              size: 32,
+            ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
+
+          // Actual QR Code
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: QrImageView(
+              data: qrToken,
+              version: QrVersions.auto,
+              size: 180,
+              backgroundColor: Colors.white,
+              eyeStyle: const QrEyeStyle(
+                eyeShape: QrEyeShape.square,
+                color: AppColors.primaryGreen,
+              ),
+              dataModuleStyle: const QrDataModuleStyle(
+                dataModuleShape: QrDataModuleShape.square,
+                color: AppColors.primaryGreen,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
           Text(
-            "Scan now or save for later",
-            style: AppTextStyles.caption,
+            "QR Code Generated Successfully!",
+            style: AppTextStyles.labelLarge.copyWith(
+              color: AppColors.primaryGreen,
+              fontWeight: FontWeight.bold,
+            ),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
           Text(
+            "Scan now or save for later",
+            style: AppTextStyles.bodySmall.copyWith(color: Colors.grey),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 4),
+          Text(
             "This QR code will expire in 3 days",
             style: AppTextStyles.caption.copyWith(
               color: Colors.grey,
-              fontSize: 12,
+              fontSize: 11,
             ),
             textAlign: TextAlign.center,
           ),
