@@ -120,7 +120,17 @@ class AppRouter {
         }
 
         // ✅ FIX 5: If authenticated but no role, redirect to role selection
+        // BUT: Allow navigation to home (it will redirect when role updates)
         if (!user.hasRole || user.currentRole == null) {
+          // Don't block navigation to home - let it load and wait for role assignment
+          // The authStateProvider will trigger a redirect when the role is assigned
+          if (location == home) {
+            print(
+              '⚠️ No role but allowing home navigation (waiting for role assignment)',
+            );
+            return null;
+          }
+
           if (location != roleIntent) {
             print('⚠️ No role → RoleIntent');
             return roleIntent;

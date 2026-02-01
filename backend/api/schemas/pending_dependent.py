@@ -38,113 +38,86 @@ class GuardianDetailResponse(BaseModel):
             }
         }
 
-
-# ================================================================
-# OTHER SCHEMAS (keep your existing ones)
-# ================================================================
+# ================================================
+# PENDING DEPENDENT SCHEMAS
+# ================================================
 
 class PendingDependentCreate(BaseModel):
     """Schema for creating a pending dependent"""
-    dependent_name: str = Field(..., min_length=1, max_length=250)
-    relation: str = Field(..., description="Relation type: 'child' or 'elderly'")
-    age: int = Field(..., ge=1, le=150, description="Age of the dependent")  # Note: lowercase 'age'
+    dependent_name: str = Field(..., min_length=1, max_length=100)
+    relation: str = Field(..., pattern="^(child|elderly)$")
+    age: int = Field(..., ge=0, le=150, alias="age")
     
     class Config:
-        json_schema_extra = {
-            "example": {
-                "dependent_name": "John Doe",
-                "relation": "child",
-                "age": 10
-            }
-        }
+        populate_by_name = True
 
 
 class PendingDependentResponse(BaseModel):
-    """Response after creating a pending dependent"""
+    """Schema for pending dependent response"""
     id: int
     guardian_id: int
     dependent_name: str
     relation: str
-    age: int  # ✅ Using lowercase 'age' (SQLAlchemy maps to 'Age' in DB)
+    age: int = Field(..., alias="Age")
     created_at: datetime
     
     class Config:
+        populate_by_name = True
         from_attributes = True
-        json_schema_extra = {
-            "example": {
-                "id": 1,
-                "guardian_id": 5,
-                "dependent_name": "John Doe",
-                "relation": "child",
-                "age": 10,
-                "created_at": "2025-01-30T10:00:00Z"
-            }
-        }
 
 
 class PendingDependentWithQR(BaseModel):
-    """Pending dependent with QR status information"""
+    """Schema for pending dependent with QR information"""
     id: int
     guardian_id: int
     dependent_name: str
     relation: str
-    age: int
+    age: int = Field(..., alias="Age")
     created_at: datetime
-    has_qr: bool = Field(..., description="Whether QR code has been generated")
-    qr_status: Optional[str] = Field(None, description="QR status if exists")
-    qr_token: Optional[str] = Field(None, description="QR token if exists")
+    has_qr: bool = False
+    qr_status: Optional[str] = None
+    qr_token: Optional[str] = None
     
     class Config:
+        populate_by_name = True
         from_attributes = True
 
 
+# ================================================
+# QR CODE SCHEMAS
+# ================================================
+
 class GenerateQRRequest(BaseModel):
-    """Request to generate QR code"""
-    pending_dependent_id: int = Field(..., description="ID of pending dependent")
-    
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "pending_dependent_id": 1
-            }
-        }
+    """Schema for QR generation request"""
+    pending_dependent_id: int
 
 
 class GenerateQRResponse(BaseModel):
-    """Response after generating QR code"""
-    qr_invitation_id: int
+    """
+    ✅ FIXED: Schema for QR generation response
+    Matches what guardian.py actually returns
+    """
+    success: bool
+    message: str
     qr_token: str
-    qr_url: str
     expires_at: datetime
-    status: str
+    pending_dependent_id: int
     
     class Config:
         from_attributes = True
-        json_schema_extra = {
-            "example": {
-                "qr_invitation_id": 1,
-                "qr_token": "abc123-def456-ghi789",
-                "qr_url": "https://app.example.com/scan?token=abc123-def456-ghi789",
-                "expires_at": "2025-02-03T10:00:00Z",
-                "status": "pending"
-            }
-        }
 
+
+# ================================================
+# SCAN & APPROVE SCHEMAS
+# ================================================
 
 class ScanQRRequest(BaseModel):
-    """Request to scan QR code (dependent side)"""
-    qr_token: str = Field(..., min_length=10, description="QR token to scan")
-    
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "qr_token": "abc123-def456-ghi789"
-            }
-        }
+    """Schema for scanning QR code"""
+    qr_token: str
 
 
 class ScanQRResponse(BaseModel):
-    """Response after scanning QR code"""
+    """Schema for QR scan response"""
     success: bool
     message: str
     guardian_name: str
@@ -152,74 +125,60 @@ class ScanQRResponse(BaseModel):
     relation: str
     age: int
     qr_invitation_id: int
-    
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "success": True,
-                "message": "Successfully linked with Jane Doe!",
-                "guardian_name": "Jane Doe",
-                "dependent_name": "John Doe",
-                "relation": "child",
-                "age": 10,
-                "qr_invitation_id": 1
-            }
-        }
 
 
 class ApproveQRRequest(BaseModel):
-    """Request to approve QR scan"""
-    qr_invitation_id: int = Field(..., description="QR invitation ID to approve")
-    
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "qr_invitation_id": 1
-            }
-        }
+    """Schema for approving QR invitation"""
+    qr_invitation_id: int
 
 
 class ApproveQRResponse(BaseModel):
-    """Response after approving QR"""
+    """Schema for approval response"""
     success: bool
     message: str
     relationship_id: int
+    guardian_id: int
     dependent_id: int
-    dependent_name: str
-    
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "success": True,
-                "message": "Relationship approved successfully",
-                "relationship_id": 10,
-                "dependent_id": 15,
-                "dependent_name": "John Doe"
-            }
-        }
+    relation: str
 
 
 class RejectQRRequest(BaseModel):
-    """Request to reject QR scan"""
-    qr_invitation_id: int = Field(..., description="QR invitation ID to reject")
-    
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "qr_invitation_id": 1
-            }
-        }
+    """Schema for rejecting QR invitation"""
+    qr_invitation_id: int
 
+
+# ================================================
+# DEPENDENT & GUARDIAN DETAIL SCHEMAS
+# ================================================
 
 class DependentDetailResponse(BaseModel):
-    """Response for dependent details"""
-    id: int  # Relationship ID
+    """Schema for dependent details with relationship info"""
+    id: int  # relationship_id
     dependent_id: int
     dependent_name: str
     dependent_email: str
     relation: str
-    Age: Optional[int] = None  # Note: Capital 'A' to match DB column
+    age: Optional[int] = Field(None, alias="Age")
     is_primary: bool
+    guardian_type: Optional[str] = None  # "primary" or "collaborator"
+    linked_at: datetime
+    
+    class Config:
+        populate_by_name = True
+        from_attributes = True
+
+
+class GuardianDetailResponse(BaseModel):
+    """Schema for guardian details with relationship info"""
+    id: int  # relationship_id
+    guardian_id: int
+    guardian_name: str
+    guardian_email: str
+    phone_number: Optional[str] = None
+    relation: str
+    is_primary: bool
+    guardian_type: Optional[str] = None  # "primary" or "collaborator"
+    profile_picture: Optional[str] = None
     linked_at: datetime
     
     class Config:
@@ -227,15 +186,19 @@ class DependentDetailResponse(BaseModel):
 
 
 class PendingQRInvitationResponse(BaseModel):
-    """Response for pending QR invitations"""
-    id: int
-    qr_token: str
+    """Schema for pending QR invitation (scanned but not approved)"""
+    qr_invitation_id: int
+    pending_dependent_id: int
     dependent_name: str
-    scanned_by_user_id: Optional[int] = None
-    scanned_at: Optional[datetime] = None
+    relation: str
+    age: int = Field(..., alias="Age")
     status: str
+    scanned_by_user_id: Optional[int] = None
+    scanned_by_name: Optional[str] = None
+    scanned_at: Optional[datetime] = None
     created_at: datetime
     expires_at: datetime
     
     class Config:
+        populate_by_name = True
         from_attributes = True

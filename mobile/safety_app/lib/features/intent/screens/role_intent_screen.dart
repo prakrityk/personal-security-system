@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:safety_app/core/providers/auth_provider.dart';
 import 'package:safety_app/core/widgets/animated_bottom_button.dart';
 import 'package:safety_app/features/dependent/screens/dependent_type_selection_screen.dart';
 import 'package:safety_app/features/guardian/screens/guardian_setup_choice_screen.dart';
@@ -13,14 +15,14 @@ import 'package:safety_app/routes/app_router.dart';
 
 enum UserIntent { personal, guardian, dependent }
 
-class RoleIntentScreen extends StatefulWidget {
+class RoleIntentScreen extends ConsumerStatefulWidget {
   const RoleIntentScreen({super.key});
 
   @override
-  State<RoleIntentScreen> createState() => _RoleIntentScreenState();
+  ConsumerState<RoleIntentScreen> createState() => _RoleIntentScreenState();
 }
 
-class _RoleIntentScreenState extends State<RoleIntentScreen> {
+class _RoleIntentScreenState extends ConsumerState<RoleIntentScreen> {
   final AuthService _authService = AuthService();
 
   List<RoleInfo> _roles = [];
@@ -71,6 +73,48 @@ class _RoleIntentScreenState extends State<RoleIntentScreen> {
     }
   }
 
+  // Future<void> _navigateBasedOnIntent(UserIntent intent) async {
+  //   // ✅ For dependent, just navigate without assigning role
+  //   if (intent == UserIntent.dependent) {
+  //     _navigateToNextScreen(intent);
+  //     return;
+  //   }
+
+  //   // ✅ For personal and guardian, assign role first
+  //   setState(() => _isLoading = true);
+
+  //   try {
+  //     final role = _getRoleForIntent(intent);
+
+  //     if (role == null) {
+  //       throw Exception('Role not found for selected intent');
+  //     }
+
+  //     // Assign role in backend
+  //     await _authService.selectRole(role.id);
+
+  //     if (!mounted) return;
+
+  //     // ✅ CRITICAL FIX: Refresh auth state to get updated user with role
+  //     print('🔄 Refreshing auth state after role assignment...');
+  //     await ref.read(authStateProvider.notifier).refreshUser();
+  //     print('✅ Auth state refreshed');
+
+  //     if (!mounted) return;
+
+  //     _navigateToNextScreen(intent);
+  //   } catch (e) {
+  //     if (!mounted) return;
+
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       SnackBar(
+  //         content: Text('Failed to select role: ${e.toString()}'),
+  //         backgroundColor: Colors.red,
+  //       ),
+  //     );
+  //     setState(() => _isLoading = false);
+  //   }
+  // }
   Future<void> _navigateBasedOnIntent(UserIntent intent) async {
     // ✅ For dependent, just navigate without assigning role
     if (intent == UserIntent.dependent) {
@@ -93,6 +137,8 @@ class _RoleIntentScreenState extends State<RoleIntentScreen> {
 
       if (!mounted) return;
 
+      // ✅ Just navigate - don't refresh auth state
+      // The backend has assigned the role, home screen will load it
       _navigateToNextScreen(intent);
     } catch (e) {
       if (!mounted) return;
@@ -108,48 +154,21 @@ class _RoleIntentScreenState extends State<RoleIntentScreen> {
   }
 
   /// Navigate to appropriate screen based on intent
-  // void _navigateToNextScreen(UserIntent intent) {
-  //   switch (intent) {
-  //     case UserIntent.personal:
-  //       context.go('/personal-onboarding');
-  //       break;
-  //     case UserIntent.guardian:
-  //       context.push('/guardian-setup');
-  //       break;
-  //     case UserIntent.dependent:
-  //       // ✅ Navigate to dependent type selection
-  //       // Role will be assigned there (child or elderly)
-  //       context.push('/dependent-type-selection');
-  //       break;
-  //   }
-  // }
-
-  // void _navigateToNextScreen(UserIntent intent) {
-  //   switch (intent) {
-  //     case UserIntent.personal:
-  //       context.go(AppRouter.personalOnboarding);
-  //       break;
-  //     case UserIntent.guardian:
-  //       context.push(AppRouter.guardianSetup);
-  //       break;
-  //     case UserIntent.dependent:
-  //       context.push(AppRouter.dependentTypeSelection);
-  //       break;
-  //   }
-  // }
-  /// Navigate to appropriate screen based on intent
   void _navigateToNextScreen(UserIntent intent) {
     switch (intent) {
       case UserIntent.personal:
         // ✅ For personal users, go directly to home after role is assigned
+        print('🚀 Navigating to home for personal user...');
         context.go(AppRouter.home);
         break;
       case UserIntent.guardian:
-        // ✅ For guardians, go to setup screen (use go, not push)
+        // ✅ For guardians, go to setup screen
+        print('🚀 Navigating to guardian setup...');
         context.go(AppRouter.guardianSetup);
         break;
       case UserIntent.dependent:
-        // ✅ For dependents, go to type selection (use go, not push)
+        // ✅ For dependents, go to type selection
+        print('🚀 Navigating to dependent type selection...');
         context.go(AppRouter.dependentTypeSelection);
         break;
     }

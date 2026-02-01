@@ -39,117 +39,125 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
     // Get permission summary to determine capabilities
     final permissionAsync = ref.watch(permissionSummaryProvider);
 
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            isDark ? AppColors.darkBackground : AppColors.lightBackground,
-            isDark
-                ? AppColors.darkBackground.withOpacity(0.8)
-                : AppColors.lightBackground.withOpacity(0.9),
-          ],
+    return Padding(
+      padding: const EdgeInsets.all(2.0),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              isDark ? AppColors.darkBackground : AppColors.lightBackground,
+              isDark
+                  ? AppColors.darkBackground.withOpacity(0.8)
+                  : AppColors.lightBackground.withOpacity(0.9),
+            ],
+          ),
         ),
-      ),
-      child: RefreshIndicator(
-        onRefresh: () async {
-          print('🔄 [SOS Screen] Manual refresh triggered');
-          ref.read(personalContactsNotifierProvider.notifier).loadMyContacts();
-          ref.invalidate(permissionSummaryProvider);
-        },
-        color: isDark ? AppColors.darkAccentGreen1 : AppColors.primaryGreen,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              const SizedBox(height: 20),
-
-              // SOS Button with Lottie Animation Background
-              Center(
-                child: SizedBox(
-                  width: 300,
-                  height: 300,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      // Lottie Animation Background
-                      Positioned.fill(
-                        child: Lottie.asset(
-                          'assets/lottie/SoSButtonBG.json',
-                          fit: BoxFit.contain,
-                        ),
-                      ),
-                      // SOS Button
-                      SosButton(
-                        onPressed: () => _activateSOS(context, ref),
-                        size: 220,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 40),
-
-              // Emergency Contacts Section
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: permissionAsync.when(
-                  data: (permissions) {
-                    final canEdit =
-                        permissions['can_edit_own_contacts'] as bool? ?? false;
-                    final isDependent = permissions['user_type']
-                        .toString()
-                        .contains('Dependent');
-
-                    return Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? AppColors.darkSurface.withOpacity(0.7)
-                            : AppColors.lightSurface,
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(
-                          color: isDark
-                              ? AppColors.darkDivider.withOpacity(0.5)
-                              : AppColors.lightDivider,
-                          width: 1,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(
-                              isDark ? 0.3 : 0.05,
+        child: RefreshIndicator(
+          onRefresh: () async {
+            print('🔄 [SOS Screen] Manual refresh triggered');
+            ref.read(personalContactsNotifierProvider.notifier).loadMyContacts();
+            ref.invalidate(permissionSummaryProvider);
+          },
+          color: isDark ? AppColors.darkAccentGreen1 : AppColors.primaryGreen,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                const SizedBox(height: 20),
+                // SOS Button with Lottie Animation Background
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(1.0),
+                    child: SizedBox(
+                      width: 305,
+                      height: 305,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // Lottie Animation Background
+                          Positioned.fill(
+                            child: Lottie.asset(
+                              'assets/lottie/SoSButtonBG.json',
+                              fit: BoxFit.contain,
                             ),
-                            blurRadius: 20,
-                            offset: const Offset(0, 4),
+                          ),
+                          // SOS Button
+                          Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: SosButton(
+                              onPressed: () => _activateSOS(context, ref),
+                              size: 220,
+                            ),
                           ),
                         ],
                       ),
-                      child: PersonalEmergencyContactsWidget(
-                        canEdit: canEdit,
-                        isDependent: isDependent,
-                      ),
-                    );
-                  },
-                  loading: () => Center(
-                    child: Container(
-                      padding: const EdgeInsets.all(40),
-                      child: CircularProgressIndicator(
-                        color: isDark
-                            ? AppColors.darkAccentGreen1
-                            : AppColors.primaryGreen,
-                      ),
                     ),
                   ),
-                  error: (error, stack) =>
-                      _buildErrorState(context, isDark, error.toString(), ref),
                 ),
-              ),
-
-              const SizedBox(height: 100), // Space for bottom nav
-            ],
+      
+                const SizedBox(height: 20),
+      
+                // Emergency Contacts Section
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: permissionAsync.when(
+                    data: (permissions) {
+                      final canEdit =
+                          permissions['can_edit_own_contacts'] as bool? ?? false;
+                      final isDependent = permissions['user_type']
+                          .toString()
+                          .contains('Dependent');
+      
+                      return Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? AppColors.darkSurface.withOpacity(0.7)
+                              : AppColors.lightSurface,
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(
+                            color: isDark
+                                ? AppColors.darkDivider.withOpacity(0.5)
+                                : AppColors.lightDivider,
+                            width: 1,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(
+                                isDark ? 0.3 : 0.05,
+                              ),
+                              blurRadius: 20,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: PersonalEmergencyContactsWidget(
+                          canEdit: canEdit,
+                          isDependent: isDependent,
+                        ),
+                      );
+                    },
+                    loading: () => Center(
+                      child: Container(
+                        padding: const EdgeInsets.all(40),
+                        child: CircularProgressIndicator(
+                          color: isDark
+                              ? AppColors.darkAccentGreen1
+                              : AppColors.primaryGreen,
+                        ),
+                      ),
+                    ),
+                    error: (error, stack) =>
+                        _buildErrorState(context, isDark, error.toString(), ref),
+                  ),
+                ),
+      
+                const SizedBox(height: 100), // Space for bottom nav
+              ],
+            ),
           ),
         ),
       ),

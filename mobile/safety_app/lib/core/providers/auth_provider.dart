@@ -32,21 +32,20 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<UserModel?>> {
     }
   }
 
-  /// ✅ IMPROVED: Refresh user data from API with forced state update
+  /// ✅ IMPROVED: Refresh user data from API WITHOUT setting loading state
+  /// This prevents router from redirecting to login during refresh
   Future<void> refreshUser() async {
     print('🔄 AuthProvider: Starting user refresh...');
 
     try {
-      // Temporarily set to loading to trigger widget rebuilds
-      state = const AsyncValue.loading();
-
-      // Small delay to ensure loading state is propagated
-      await Future.delayed(const Duration(milliseconds: 50));
+      // DON'T set to loading - keep current user in state
+      // This prevents router redirect during refresh
 
       // Fetch fresh data from API
       final user = await _authService.fetchCurrentUser();
 
       print('✅ AuthProvider: User refreshed - ${user.fullName}');
+      print('   Role: ${user.currentRole?.roleName ?? "No role"}');
 
       // Update state with new data
       state = AsyncValue.data(user);
@@ -54,7 +53,8 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<UserModel?>> {
       print('✅ AuthProvider: State updated successfully');
     } catch (e, stack) {
       print('❌ AuthProvider: Error refreshing user - $e');
-      state = AsyncValue.error(e, stack);
+      // Don't update state on error - keep current user
+      // state = AsyncValue.error(e, stack);
     }
   }
 

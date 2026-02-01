@@ -31,10 +31,10 @@ class RoleBasedBottomNavBar extends StatelessWidget {
         borderRadius: BorderRadius.circular(30),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 20,
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 10,
             offset: const Offset(0, 10),
-            spreadRadius: 0,
+            spreadRadius: 1,
           ),
         ],
       ),
@@ -85,7 +85,7 @@ class _NavItem extends StatelessWidget {
         ),
         decoration: BoxDecoration(
           color: isSelected
-              ? AppColors.primaryGreen.withOpacity(0.1)
+              ? AppColors.secondaryGreen.withOpacity(0.3)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(20),
         ),
@@ -95,7 +95,7 @@ class _NavItem extends StatelessWidget {
             Icon(
               isSelected ? selectedIcon : icon,
               color: isSelected
-                  ? AppColors.primaryGreen
+                  ? AppColors.secondaryGreen
                   : (isDark ? AppColors.darkHint : AppColors.lightHint),
               size: 24,
             ),
@@ -107,7 +107,7 @@ class _NavItem extends StatelessWidget {
                 child: Text(
                   label,
                   style: AppTextStyles.labelSmall.copyWith(
-                    color: AppColors.primaryGreen,
+                    color: AppColors.secondaryGreen,
                     fontWeight: FontWeight.w600,
                   ),
                 ),

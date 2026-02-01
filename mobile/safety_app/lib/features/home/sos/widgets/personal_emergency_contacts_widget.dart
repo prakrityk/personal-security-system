@@ -140,7 +140,7 @@ class _PersonalEmergencyContactsWidgetState
                 child: ElevatedButton.icon(
                   onPressed: () => _showAddContactDialog(context),
                   icon: const Icon(Icons.add_circle_outline, size: 18),
-                  label: const Text('Add Contact'),
+                  label: const Text('Add'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: isDark
                         ? AppColors.darkAccentGreen1

@@ -31,7 +31,7 @@ class FamilyCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
           borderRadius: BorderRadius.circular(20),
@@ -86,7 +86,7 @@ class FamilyCard extends StatelessWidget {
             ProfilePictureWidget(
               profilePicturePath: profilePicture,
               fullName: name,
-              radius: 30,
+              radius: 32,
               showBorder: true,
               borderColor: isPrimary
                   ? AppColors.primaryGreen
@@ -96,36 +96,30 @@ class FamilyCard extends StatelessWidget {
                   ? AppColors.primaryGreen.withOpacity(0.2)
                   : Colors.blue.withOpacity(0.2),
             ),
-            const SizedBox(height: 12),
-
             const SizedBox(height: 10),
 
             // Name
-            Flexible(
-              child: Text(
-                name,
-                style: AppTextStyles.labelMedium.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
+            Text(
+              name,
+              style: AppTextStyles.labelMedium.copyWith(
+                fontWeight: FontWeight.w600,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
             ),
 
             const SizedBox(height: 4),
 
             // Role
-            Flexible(
-              child: Text(
-                role.toUpperCase(),
-                style: AppTextStyles.caption.copyWith(
-                  color: isDark ? AppColors.darkHint : AppColors.lightHint,
-                  fontSize: 10,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+            Text(
+              role.toUpperCase(),
+              style: AppTextStyles.caption.copyWith(
+                color: isDark ? AppColors.darkHint : AppColors.lightHint,
+                fontSize: 10,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
 
             const SizedBox(height: 8),
@@ -170,7 +164,7 @@ class FamilyCard extends StatelessWidget {
               ),
             ),
 
-            const SizedBox(height: 6),
+            const SizedBox(height: 3),
 
             // Safe status
             Container(
