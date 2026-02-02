@@ -1,7 +1,12 @@
+import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:safety_app/core/widgets/animated_bottom_button.dart';
 import 'package:safety_app/models/pending_dependent_model.dart';
 import '../../../core/theme/app_colors.dart';
@@ -311,7 +316,13 @@ class _GuardianAddDependentScreenState
                                 if (dependent.qrGenerated &&
                                     dependent.qrToken != null) ...[
                                   const SizedBox(height: 20),
-                                  _QrPreviewCard(qrToken: dependent.qrToken!),
+                                  _QrPreviewCard(
+                                    qrToken: dependent.qrToken!,
+                                    dependentName:
+                                        dependent.nameController.text,
+                                    dependentType:
+                                        dependent.selectedType ?? 'child',
+                                  ),
                                 ],
 
                                 if (index == _dependents.length - 1) ...[
@@ -524,11 +535,295 @@ class _DependentTypeDropdown extends StatelessWidget {
   }
 }
 
-/// 🔹 QR Preview with actual QR code
-class _QrPreviewCard extends StatelessWidget {
+/// 🔹 QR Preview with actual QR code and Share functionality
+class _QrPreviewCard extends StatefulWidget {
   final String qrToken;
+  final String dependentName;
+  final String dependentType;
 
-  const _QrPreviewCard({required this.qrToken});
+  const _QrPreviewCard({
+    required this.qrToken,
+    required this.dependentName,
+    required this.dependentType,
+  });
+
+  @override
+  State<_QrPreviewCard> createState() => _QrPreviewCardState();
+}
+
+class _QrPreviewCardState extends State<_QrPreviewCard> {
+  final GlobalKey _qrKey = GlobalKey();
+  bool _isSharing = false;
+
+  Future<void> _shareInvitation() async {
+    setState(() => _isSharing = true);
+
+    try {
+      // Create a composite image with QR code and invitation details
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+      final paint = Paint()..color = Colors.white;
+
+      // Canvas dimensions
+      const width = 600.0;
+      const height = 900.0;
+
+      // Draw white background
+      canvas.drawRect(Rect.fromLTWH(0, 0, width, height), paint);
+
+      // Draw gradient header
+      final gradientPaint = Paint()
+        ..shader = ui.Gradient.linear(
+          const Offset(0, 0),
+          const Offset(0, 150),
+          [AppColors.primaryGreen, AppColors.accentGreen1],
+        );
+      canvas.drawRect(const Rect.fromLTWH(0, 0, width, 150), gradientPaint);
+
+      // Draw header text
+      final titlePainter = TextPainter(
+        text: const TextSpan(
+          text: '👨‍👩‍👧 Dependent Invitation',
+          style: TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      );
+      titlePainter.layout(maxWidth: width - 40);
+      titlePainter.paint(canvas, const Offset(20, 40));
+
+      final subtitlePainter = TextPainter(
+        text: TextSpan(
+          text: 'For ${widget.dependentName}',
+          style: const TextStyle(fontSize: 18, color: Colors.white70),
+        ),
+        textDirection: TextDirection.ltr,
+      );
+      subtitlePainter.layout(maxWidth: width - 40);
+      subtitlePainter.paint(canvas, const Offset(20, 85));
+
+      // Capture QR code
+      final boundary =
+          _qrKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary == null) {
+        throw Exception('Could not capture QR code');
+      }
+
+      final qrImage = await boundary.toImage(pixelRatio: 2.0);
+      final qrByteData = await qrImage.toByteData(
+        format: ui.ImageByteFormat.png,
+      );
+      final qrPngBytes = qrByteData?.buffer.asUint8List();
+
+      if (qrPngBytes == null) {
+        throw Exception('Could not convert QR code to image');
+      }
+
+      // Decode QR image and draw it on canvas
+      final codec = await ui.instantiateImageCodec(qrPngBytes);
+      final frame = await codec.getNextFrame();
+      final qrImageUI = frame.image;
+
+      // Draw QR code centered with larger size
+      const qrSize = 360.0;
+      const qrX = (width - qrSize) / 2;
+      const qrY = 170.0;
+      canvas.drawImageRect(
+        qrImageUI,
+        Rect.fromLTWH(
+          0,
+          0,
+          qrImageUI.width.toDouble(),
+          qrImageUI.height.toDouble(),
+        ),
+        const Rect.fromLTWH(qrX, qrY, qrSize, qrSize),
+        Paint(),
+      );
+
+      // Draw info box
+      const infoBoxY = qrY + qrSize + 30;
+      final infoBoxPaint = Paint()
+        ..color = AppColors.primaryGreen.withOpacity(0.1);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          const Rect.fromLTWH(40, infoBoxY, width - 80, 120),
+          const Radius.circular(12),
+        ),
+        infoBoxPaint,
+      );
+
+      // Draw border for info box
+      final borderPaint = Paint()
+        ..color = AppColors.primaryGreen.withOpacity(0.3)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          const Rect.fromLTWH(40, infoBoxY, width - 80, 120),
+          const Radius.circular(12),
+        ),
+        borderPaint,
+      );
+
+      // Draw dependent info
+      final typeLabelPainter = TextPainter(
+        text: const TextSpan(
+          text: 'Dependent Type',
+          style: TextStyle(fontSize: 14, color: Colors.black54),
+        ),
+        textDirection: TextDirection.ltr,
+      );
+      typeLabelPainter.layout();
+      typeLabelPainter.paint(
+        canvas,
+        Offset((width - typeLabelPainter.width) / 2, infoBoxY + 20),
+      );
+
+      // Draw dependent type
+      final typeIcon = widget.dependentType.toLowerCase() == 'child'
+          ? '👶'
+          : '👴';
+      final typeText =
+          widget.dependentType[0].toUpperCase() +
+          widget.dependentType.substring(1);
+      final typePainter = TextPainter(
+        text: TextSpan(
+          text: '$typeIcon $typeText',
+          style: const TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            color: AppColors.primaryGreen,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      );
+      typePainter.layout();
+      typePainter.paint(
+        canvas,
+        Offset((width - typePainter.width) / 2, infoBoxY + 55),
+      );
+
+      // Draw expiry note
+      final expiryPainter = TextPainter(
+        text: const TextSpan(
+          text: 'Expires in 3 days',
+          style: TextStyle(
+            fontSize: 13,
+            color: Colors.orange,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      );
+      expiryPainter.layout();
+      expiryPainter.paint(
+        canvas,
+        Offset((width - expiryPainter.width) / 2, infoBoxY + 90),
+      );
+
+      // Draw instructions
+      const instructionsY = infoBoxY + 150;
+      final instructionsPainter = TextPainter(
+        text: const TextSpan(
+          text:
+              'Steps to Join:\n'
+              '1. Download Safety App\n'
+              '2. Select "Dependent" role\n'
+              '3. Scan this QR code\n'
+              '4. Complete registration\n\n'
+              'Keep this QR code safe!',
+          style: TextStyle(fontSize: 15, color: Colors.black87, height: 1.6),
+        ),
+        textDirection: TextDirection.ltr,
+        textAlign: TextAlign.center,
+      );
+      instructionsPainter.layout(maxWidth: width - 80);
+      instructionsPainter.paint(
+        canvas,
+        Offset((width - instructionsPainter.width) / 2, instructionsY),
+      );
+
+      // Convert canvas to image
+      final picture = recorder.endRecording();
+      final img = await picture.toImage(width.toInt(), height.toInt());
+      final imgByteData = await img.toByteData(format: ui.ImageByteFormat.png);
+      final imgPngBytes = imgByteData!.buffer.asUint8List();
+
+      // Save composite image
+      final tempDir = await getTemporaryDirectory();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final fileName =
+          'SafetyApp_Dependent_${widget.dependentName.replaceAll(' ', '_')}_$timestamp.png';
+      final file = File('${tempDir.path}/$fileName');
+      await file.writeAsBytes(imgPngBytes);
+
+      // Create message (for apps that support it)
+      final message =
+          '''
+👨‍👩‍👧 Dependent Invitation
+
+You've been invited to join Safety App as a dependent!
+
+Dependent Name: ${widget.dependentName}
+Type: ${widget.dependentType[0].toUpperCase()}${widget.dependentType.substring(1)}
+
+📱 Steps to join:
+1. Download the Safety App
+2. Select "Dependent" role
+3. Scan the QR code (in the image)
+4. Complete your registration
+
+⏰ This QR code expires in 3 days
+
+Download the Safety App and scan the code to get started!
+''';
+
+      // Share with both text message AND composite image
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: message,
+        subject:
+            'Safety App - Dependent Invitation for ${widget.dependentName}',
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white, size: 20),
+                SizedBox(width: 12),
+                Text('Invitation shared successfully!'),
+              ],
+            ),
+            backgroundColor: AppColors.primaryGreen,
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to share: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSharing = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -563,24 +858,27 @@ class _QrPreviewCard extends StatelessWidget {
           const SizedBox(height: 16),
 
           // Actual QR Code
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: QrImageView(
-              data: qrToken,
-              version: QrVersions.auto,
-              size: 180,
-              backgroundColor: Colors.white,
-              eyeStyle: const QrEyeStyle(
-                eyeShape: QrEyeShape.square,
-                color: AppColors.primaryGreen,
+          RepaintBoundary(
+            key: _qrKey,
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
               ),
-              dataModuleStyle: const QrDataModuleStyle(
-                dataModuleShape: QrDataModuleShape.square,
-                color: AppColors.primaryGreen,
+              child: QrImageView(
+                data: widget.qrToken,
+                version: QrVersions.auto,
+                size: 180,
+                backgroundColor: Colors.white,
+                eyeStyle: const QrEyeStyle(
+                  eyeShape: QrEyeShape.square,
+                  color: AppColors.primaryGreen,
+                ),
+                dataModuleStyle: const QrDataModuleStyle(
+                  dataModuleShape: QrDataModuleShape.square,
+                  color: AppColors.primaryGreen,
+                ),
               ),
             ),
           ),
@@ -607,6 +905,36 @@ class _QrPreviewCard extends StatelessWidget {
               fontSize: 11,
             ),
             textAlign: TextAlign.center,
+          ),
+
+          const SizedBox(height: 20),
+
+          // Share Invitation Button
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _isSharing ? null : _shareInvitation,
+              icon: _isSharing
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Icon(Icons.share_rounded, size: 20),
+              label: Text(_isSharing ? 'Preparing...' : 'Share Invitation'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryGreen,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                elevation: 0,
+                disabledBackgroundColor: AppColors.primaryGreen.withOpacity(
+                  0.6,
+                ),
+              ),
+            ),
           ),
         ],
       ),

@@ -16,7 +16,7 @@ class SmartFamilyListScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final userState = ref.watch(authStateProvider);
     final user = userState.value;
-    final roleName = user?.currentRole?.roleName?.toLowerCase();
+    final roleName = user?.currentRole?.roleName.toLowerCase();
 
     // Route based on role
     switch (roleName) {

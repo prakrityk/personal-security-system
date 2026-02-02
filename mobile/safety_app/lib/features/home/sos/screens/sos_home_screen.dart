@@ -57,7 +57,9 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
         child: RefreshIndicator(
           onRefresh: () async {
             print('🔄 [SOS Screen] Manual refresh triggered');
-            ref.read(personalContactsNotifierProvider.notifier).loadMyContacts();
+            ref
+                .read(personalContactsNotifierProvider.notifier)
+                .loadMyContacts();
             ref.invalidate(permissionSummaryProvider);
           },
           color: isDark ? AppColors.darkAccentGreen1 : AppColors.primaryGreen,
@@ -97,20 +99,21 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
                     ),
                   ),
                 ),
-      
+
                 const SizedBox(height: 20),
-      
+
                 // Emergency Contacts Section
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: permissionAsync.when(
                     data: (permissions) {
                       final canEdit =
-                          permissions['can_edit_own_contacts'] as bool? ?? false;
+                          permissions['can_edit_own_contacts'] as bool? ??
+                          false;
                       final isDependent = permissions['user_type']
                           .toString()
                           .contains('Dependent');
-      
+
                       return Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
@@ -150,11 +153,15 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
                         ),
                       ),
                     ),
-                    error: (error, stack) =>
-                        _buildErrorState(context, isDark, error.toString(), ref),
+                    error: (error, stack) => _buildErrorState(
+                      context,
+                      isDark,
+                      error.toString(),
+                      ref,
+                    ),
                   ),
                 ),
-      
+
                 const SizedBox(height: 100), // Space for bottom nav
               ],
             ),
