@@ -4,11 +4,18 @@ Handles guardian-related operations: pending dependents, QR generation, approval
 """
 
 from datetime import datetime, timedelta, timezone
-from typing import List
+from typing import List, Optional
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
+from pathlib import Path
+import shutil
+import os
+
+from models.user import User
+from models.guardian_dependent import GuardianDependent
+from api.schemas.auth import UserResponse
 
 # Schemas
 from api.schemas.pending_dependent import (
@@ -667,6 +674,7 @@ async def get_my_dependents(
                     dependent_id=rel.dependent_id,
                     dependent_name=dependent_user.full_name,
                     dependent_email=dependent_user.email,
+                    profile_picture=dependent_user.profile_picture,
                     relation=rel.relation,
                     age=age,
                     is_primary=rel.is_primary,
@@ -999,3 +1007,242 @@ async def revoke_collaborator(
     print(f"✅ Collaborator access revoked for relationship {relationship_id}")
     
     return {"success": True, "message": "Collaborator access revoked successfully"}
+
+# Configure upload directory
+UPLOAD_DIR = Path("uploads/profile_pictures")
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+# Allowed file extensions
+ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp'}
+MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
+
+
+def validate_image_file(file: UploadFile) -> None:
+    """Validate uploaded image file"""
+    # Check file extension
+    file_ext = Path(file.filename).suffix.lower()
+    if file_ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid file type. Allowed types: {', '.join(ALLOWED_EXTENSIONS)}"
+        )
+    
+    # Check content type
+    if not file.content_type or not file.content_type.startswith('image/'):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File must be an image"
+        )
+
+
+def save_profile_picture(file: UploadFile, user_id: int) -> str:
+    """
+    Save profile picture to disk and return the file path
+    
+    Returns:
+        str: Relative path to saved file (e.g., '/uploads/profile_pictures/user_123_timestamp.jpg')
+    """
+    # Generate unique filename
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    file_ext = Path(file.filename).suffix.lower()
+    filename = f"user_{user_id}_{timestamp}{file_ext}"
+    
+    file_path = UPLOAD_DIR / filename
+    
+    # Save file
+    with file_path.open("wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    
+    # Return relative path (for storing in database and accessing via URL)
+    return f"/uploads/profile_pictures/{filename}"
+
+
+def delete_old_profile_picture(old_path: Optional[str]) -> None:
+    """Delete old profile picture file if it exists"""
+    if not old_path:
+        return
+    
+    try:
+        # Remove leading slash if present
+        clean_path = old_path.lstrip('/')
+        file_path = Path(clean_path)
+        
+        if file_path.exists():
+            file_path.unlink()
+            print(f"✅ Deleted old profile picture: {file_path}")
+    except Exception as e:
+        print(f"⚠️ Could not delete old profile picture: {e}")
+
+
+@router.post(
+    "/dependents/{dependent_id}/profile-picture",
+    response_model=UserResponse,
+    summary="Upload Dependent Profile Picture",
+    description="Upload or update profile picture for a dependent (Primary Guardian only)"
+)
+async def upload_dependent_profile_picture(
+    dependent_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Upload profile picture for a dependent
+    
+    - **dependent_id**: ID of the dependent user
+    - **file**: Image file (JPG, PNG, WEBP) - max 5MB
+    
+    Only PRIMARY guardians can upload profile pictures for their dependents.
+    Collaborators have read-only access.
+    """
+    print(f"📸 Upload dependent profile picture request")
+    print(f"   Guardian ID: {current_user.id}")
+    print(f"   Dependent ID: {dependent_id}")
+    
+    # 1. Validate image file
+    validate_image_file(file)
+    
+    # 2. Check file size
+    file.file.seek(0, 2)  # Seek to end
+    file_size = file.file.tell()
+    file.file.seek(0)  # Reset to beginning
+    
+    if file_size > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File too large. Maximum size is {MAX_FILE_SIZE / (1024 * 1024):.1f}MB"
+        )
+    
+    # 3. Verify dependent exists
+    dependent_user = db.query(User).filter(User.id == dependent_id).first()
+    if not dependent_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Dependent not found"
+        )
+    
+    # 4. Verify guardian-dependent relationship and PRIMARY status
+    relationship = db.query(GuardianDependent).filter(
+        GuardianDependent.guardian_id == current_user.id,
+        GuardianDependent.dependent_id == dependent_id
+    ).first()
+    
+    if not relationship:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a guardian of this dependent"
+        )
+    
+    # ✅ CRITICAL: Check if PRIMARY guardian
+    if relationship.guardian_type != "primary" and not relationship.is_primary:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only primary guardians can update dependent profile pictures. Collaborators have read-only access."
+        )
+    
+    print(f"✅ Authorization verified - {current_user.full_name} is PRIMARY guardian")
+    
+    # 5. Delete old profile picture if exists
+    if dependent_user.profile_picture:
+        delete_old_profile_picture(dependent_user.profile_picture)
+    
+    # 6. Save new profile picture
+    try:
+        file_path = save_profile_picture(file, dependent_id)
+        print(f"✅ Profile picture saved: {file_path}")
+    except Exception as e:
+        print(f"❌ Error saving profile picture: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to save profile picture"
+        )
+    
+    # 7. Update dependent's profile_picture in database
+    dependent_user.profile_picture = file_path
+    db.commit()
+    db.refresh(dependent_user)
+    
+    print(f"✅ Dependent profile picture updated successfully")
+    
+    # 8. Return updated dependent user data
+    return UserResponse(
+        id=dependent_user.id,
+        email=dependent_user.email,
+        full_name=dependent_user.full_name,
+        phone_number=dependent_user.phone_number,
+        profile_picture=dependent_user.profile_picture,
+        roles=[
+            {"id": r.id, "role_name": r.role_name, "role_description": r.role_description}
+            for user_role in dependent_user.user_roles
+            for r in [user_role.role]
+        ]
+    )
+
+
+@router.delete(
+    "/dependents/{dependent_id}/profile-picture",
+    status_code=status.HTTP_200_OK,
+    summary="Delete Dependent Profile Picture",
+    description="Delete profile picture for a dependent (Primary Guardian only)"
+)
+async def delete_dependent_profile_picture(
+    dependent_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Delete profile picture for a dependent
+    
+    Only PRIMARY guardians can delete profile pictures for their dependents.
+    """
+    print(f"🗑️ Delete dependent profile picture request")
+    print(f"   Guardian ID: {current_user.id}")
+    print(f"   Dependent ID: {dependent_id}")
+    
+    # 1. Verify dependent exists
+    dependent_user = db.query(User).filter(User.id == dependent_id).first()
+    if not dependent_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Dependent not found"
+        )
+    
+    # 2. Verify guardian-dependent relationship and PRIMARY status
+    relationship = db.query(GuardianDependent).filter(
+        GuardianDependent.guardian_id == current_user.id,
+        GuardianDependent.dependent_id == dependent_id
+    ).first()
+    
+    if not relationship:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a guardian of this dependent"
+        )
+    
+    # ✅ CRITICAL: Check if PRIMARY guardian
+    if relationship.guardian_type != "primary" and not relationship.is_primary:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only primary guardians can delete dependent profile pictures"
+        )
+    
+    # 3. Check if profile picture exists
+    if not dependent_user.profile_picture:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Dependent has no profile picture to delete"
+        )
+    
+    # 4. Delete file from disk
+    delete_old_profile_picture(dependent_user.profile_picture)
+    
+    # 5. Update database
+    dependent_user.profile_picture = None
+    db.commit()
+    
+    print(f"✅ Dependent profile picture deleted successfully")
+    
+    return {
+        "success": True,
+        "message": "Profile picture deleted successfully"
+    }

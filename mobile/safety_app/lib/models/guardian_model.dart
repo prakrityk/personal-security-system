@@ -66,7 +66,9 @@ class GuardianModel {
       isPrimary: json['is_primary'] as bool? ?? false,
       guardianType:
           json['guardian_type'] as String? ??
-          'primary', // ✅ ADDED with fallback
+          (json['is_primary'] as bool? ?? false
+              ? 'primary'
+              : 'collaborator'), // ✅ ADDED with fallback
       profilePicture: json['profile_picture'] as String?,
       linkedAt: DateTime.parse(json['linked_at'] as String),
     );
@@ -87,8 +89,46 @@ class GuardianModel {
     };
   }
 
+  /// Create a copy with updated fields
+  GuardianModel copyWith({
+    int? id,
+    int? guardianId,
+    String? guardianName,
+    String? guardianEmail,
+    String? phoneNumber,
+    String? relation,
+    bool? isPrimary,
+    String? guardianType,
+    String? profilePicture,
+    DateTime? linkedAt,
+  }) {
+    return GuardianModel(
+      id: id ?? this.id,
+      guardianId: guardianId ?? this.guardianId,
+      guardianName: guardianName ?? this.guardianName,
+      guardianEmail: guardianEmail ?? this.guardianEmail,
+      phoneNumber: phoneNumber ?? this.phoneNumber,
+      relation: relation ?? this.relation,
+      isPrimary: isPrimary ?? this.isPrimary,
+      guardianType: guardianType ?? this.guardianType,
+      profilePicture: profilePicture ?? this.profilePicture,
+      linkedAt: linkedAt ?? this.linkedAt,
+    );
+  }
+
   @override
   String toString() {
     return 'GuardianModel(id: $id, name: $guardianName, type: $guardianType, isPrimary: $isPrimary)';
   }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is GuardianModel &&
+        other.id == id &&
+        other.guardianId == guardianId;
+  }
+
+  @override
+  int get hashCode => Object.hash(id, guardianId);
 }

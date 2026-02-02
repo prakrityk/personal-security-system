@@ -7,10 +7,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:safety_app/core/theme/app_colors.dart';
 import 'package:safety_app/core/theme/app_text_styles.dart';
-import 'package:safety_app/core/providers/dependent_guardian_provider.dart';
+import 'package:safety_app/core/providers/guardian_state_provider.dart'; // ✅ Updated
 import 'package:safety_app/features/home/widgets/home_section_header.dart';
 import 'package:safety_app/models/guardian_model.dart';
-import 'package:safety_app/core/widgets/profile_picture_widget.dart'; // ✅ Import
+import 'package:safety_app/core/widgets/profile_picture_widget.dart';
 
 class DependentFamilyListScreen extends ConsumerWidget {
   const DependentFamilyListScreen({super.key});
@@ -18,14 +18,17 @@ class DependentFamilyListScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final guardiansAsync = ref.watch(myGuardiansProvider);
+    final guardiansAsync = ref.watch(
+      guardianStateProvider,
+    ); // ✅ Updated to StateNotifier
 
     return Container(
       color: isDark ? AppColors.darkBackground : AppColors.lightBackground,
       child: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async {
-            ref.invalidate(myGuardiansProvider);
+            // ✅ Use StateNotifier's refresh method
+            await ref.read(guardianStateProvider.notifier).refresh();
           },
           color: AppColors.primaryGreen,
           child: SingleChildScrollView(
@@ -462,7 +465,7 @@ class DependentFamilyListScreen extends ConsumerWidget {
             const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: () {
-                ref.invalidate(myGuardiansProvider);
+                ref.read(guardianStateProvider.notifier).refresh();
               },
               icon: const Icon(Icons.refresh),
               label: const Text('Retry'),

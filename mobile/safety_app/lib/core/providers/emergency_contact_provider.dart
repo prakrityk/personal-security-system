@@ -1,6 +1,4 @@
 // lib/core/providers/emergency_contact_provider.dart (UPDATED - PRODUCTION READY)
-
-
 // ====================
 // SERVICE PROVIDER
 // ====================

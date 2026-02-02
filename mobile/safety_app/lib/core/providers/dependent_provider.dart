@@ -11,48 +11,70 @@ class DependentNotifier
     extends StateNotifier<AsyncValue<List<DependentModel>>> {
   final GuardianService _guardianService;
 
-  DependentNotifier(this._guardianService) : super(const AsyncValue.loading()) {
-    loadDependents();
+  DependentNotifier(this._guardianService)
+      : super(const AsyncValue.loading()) {
+    // Initial load (no local data to preserve yet)
+    loadDependents(preserveLocalUpdates: false);
   }
 
   /// Load all approved dependents for current guardian
-  Future<void> loadDependents() async {
-    state = const AsyncValue.loading();
+  /// [preserveLocalUpdates] keeps locally updated data (e.g. profile pictures)
+  Future<void> loadDependents({
+    bool preserveLocalUpdates = true,
+  }) async {
     try {
-      final dependents = await _guardianService.getMyDependents();
-      state = AsyncValue.data(dependents);
+      final current = state.value ?? [];
+      final remote = await _guardianService.getMyDependents();
 
-      print('📦 Dependent Provider: Loaded ${dependents.length} dependents');
+      // First load OR no local data → just use backend
+      if (!preserveLocalUpdates || current.isEmpty) {
+        state = AsyncValue.data(remote);
+        print('📦 Dependent Provider: Loaded ${remote.length} dependents');
+        return;
+      }
+
+      // Merge backend data with local state
+      final merged = remote.map((remoteDep) {
+        final localDep = current.firstWhere(
+          (d) => d.dependentId == remoteDep.dependentId,
+          orElse: () => remoteDep,
+        );
+
+        // 🔑 Preserve locally updated profile picture if backend is stale
+        if (remoteDep.profilePicture == null ||
+            remoteDep.profilePicture!.isEmpty) {
+          return localDep;
+        }
+
+        return remoteDep;
+      }).toList();
+
+      state = AsyncValue.data(merged);
+      print('📦 Dependent Provider: Merged ${merged.length} dependents');
     } catch (e, stack) {
       print('❌ Dependent Provider: Error loading dependents: $e');
       state = AsyncValue.error(e, stack);
     }
   }
 
-  /// Refresh dependents list
+  /// Refresh dependents list (safe, no flicker, no overwrite)
   Future<void> refresh() async {
-    await loadDependents();
+    await loadDependents(preserveLocalUpdates: true);
   }
 
   /// Get current list synchronously
-  List<DependentModel>? get currentList {
-    return state.value;
-  }
+  List<DependentModel>? get currentList => state.value;
 
   /// Get primary dependents only
-  List<DependentModel> get primaryDependents {
-    return state.value?.where((d) => d.isPrimaryGuardian).toList() ?? [];
-  }
+  List<DependentModel> get primaryDependents =>
+      state.value?.where((d) => d.isPrimaryGuardian).toList() ?? [];
 
   /// Get collaborator dependents only
-  List<DependentModel> get collaboratorDependents {
-    return state.value?.where((d) => d.isCollaborator).toList() ?? [];
-  }
+  List<DependentModel> get collaboratorDependents =>
+      state.value?.where((d) => d.isCollaborator).toList() ?? [];
 
   /// Check if user has any dependents
-  bool get hasDependents {
-    return (state.value?.isNotEmpty) ?? false;
-  }
+  bool get hasDependents => (state.value?.isNotEmpty) ?? false;
 
   /// Get dependent by ID
   DependentModel? getDependentById(int dependentId) {
@@ -61,25 +83,62 @@ class DependentNotifier
       orElse: () => throw Exception('Dependent not found'),
     );
   }
+
+  /// ✅ Real-time profile picture update (optimistic UI)
+  void updateDependentProfilePicture(
+    int dependentId,
+    String? newProfilePicture,
+  ) {
+    final current = state.value;
+    if (current == null) return;
+
+    final updatedList = current.map((dependent) {
+      if (dependent.dependentId == dependentId) {
+        return DependentModel(
+          id: dependent.id,
+          dependentId: dependent.dependentId,
+          dependentName: dependent.dependentName,
+          dependentEmail: dependent.dependentEmail,
+          phoneNumber: dependent.phoneNumber,
+          relation: dependent.relation,
+          age: dependent.age,
+          isPrimary: dependent.isPrimary,
+          guardianType: dependent.guardianType,
+          profilePicture: newProfilePicture,
+          linkedAt: dependent.linkedAt,
+        );
+      }
+      return dependent;
+    }).toList();
+
+    state = AsyncValue.data(updatedList);
+
+    print(
+      '✅ Dependent Provider: Profile picture updated for dependent $dependentId',
+    );
+  }
+
+  /// Remove dependent profile picture immediately
+  void removeDependentProfilePicture(int dependentId) {
+    updateDependentProfilePicture(dependentId, null);
+  }
 }
 
 /// Provider for dependents state notifier
 final dependentProvider =
-    StateNotifierProvider<DependentNotifier, AsyncValue<List<DependentModel>>>((
-      ref,
-    ) {
-      final guardianService = ref.watch(guardianServiceProvider);
-      return DependentNotifier(guardianService);
-    });
+    StateNotifierProvider<DependentNotifier, AsyncValue<List<DependentModel>>>(
+  (ref) {
+    final guardianService = ref.watch(guardianServiceProvider);
+    return DependentNotifier(guardianService);
+  },
+);
 
 /// Convenience provider to get just the list (without AsyncValue wrapper)
 final dependentListProvider = Provider<List<DependentModel>>((ref) {
-  final dependentsState = ref.watch(dependentProvider);
-  return dependentsState.value ?? [];
+  return ref.watch(dependentProvider).value ?? [];
 });
 
 /// Provider to check if user has any dependents
 final hasDependentsProvider = Provider<bool>((ref) {
-  final dependents = ref.watch(dependentListProvider);
-  return dependents.isNotEmpty;
+  return ref.watch(dependentListProvider).isNotEmpty;
 });
