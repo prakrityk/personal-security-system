@@ -8,4 +8,5 @@ export 'family_provider.dart';
 export 'permission_provider.dart';
 export 'emergency_contact_provider.dart';
 export 'theme_provider.dart';
-export 'dependent_guardian_provider.dart';
+//export 'dependent_guardian_provider.dart';
+export 'guardian_state_provider.dart'; 

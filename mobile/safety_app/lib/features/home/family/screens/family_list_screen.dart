@@ -356,13 +356,14 @@ import 'package:safety_app/core/theme/app_colors.dart';
 import 'package:safety_app/core/theme/app_text_styles.dart';
 import 'package:safety_app/features/home/widgets/home_section_header.dart';
 import 'package:safety_app/models/dependent_model.dart';
-import 'package:safety_app/services/guardian_service.dart';
+import 'package:safety_app/core/providers/dependent_provider.dart'; // ✅ Use centralized provider
 import '../widgets/family_card.dart';
 
-final myDependentsProvider = FutureProvider<List<DependentModel>>((ref) async {
-  final guardianService = GuardianService();
-  return guardianService.getMyDependents();
-});
+// ❌ REMOVED: Local FutureProvider (was creating separate state)
+// final myDependentsProvider = FutureProvider<List<DependentModel>>((ref) async {
+//   final guardianService = GuardianService();
+//   return guardianService.getMyDependents();
+// });
 
 class FamilyListScreen extends ConsumerWidget {
   const FamilyListScreen({super.key});
@@ -370,14 +371,16 @@ class FamilyListScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final dependentsAsync = ref.watch(myDependentsProvider);
+    // ✅ Watch the centralized dependentProvider instead
+    final dependentsAsync = ref.watch(dependentProvider);
 
     return Container(
       color: isDark ? AppColors.darkBackground : AppColors.lightBackground,
       child: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async {
-            ref.invalidate(myDependentsProvider);
+            // ✅ Use centralized provider's refresh method
+            await ref.read(dependentProvider.notifier).refresh();
           },
           color: AppColors.primaryGreen,
           child: SingleChildScrollView(
@@ -625,7 +628,8 @@ class FamilyListScreen extends ConsumerWidget {
             const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: () {
-                ref.invalidate(myDependentsProvider);
+                // ✅ Use centralized provider's refresh method
+                ref.read(dependentProvider.notifier).refresh();
               },
               icon: const Icon(Icons.refresh),
               label: const Text('Retry'),

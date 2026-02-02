@@ -1,11 +1,21 @@
+// ===================================================================
+// UPDATED: family_member_detail_screen.dart - With Profile Picture Upload
+// ===================================================================
+// lib/features/home/family/screens/family_member_detail_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 import 'package:safety_app/core/theme/app_colors.dart';
 import 'package:safety_app/core/theme/app_text_styles.dart';
+import 'package:safety_app/core/widgets/profile_picture_widget.dart';
+import 'package:safety_app/core/providers/dependent_provider.dart';
 import 'package:safety_app/features/home/family/widgets/emergency_contatcs_section.dart';
 import 'package:safety_app/models/dependent_model.dart';
 import 'package:safety_app/services/collaborator_service.dart';
+import 'package:safety_app/services/dependent_profile_service.dart';
 import 'package:safety_app/features/home/family/widgets/collaborator_invitation_dialog.dart';
 
 class FamilyMemberDetailScreen extends ConsumerStatefulWidget {
@@ -21,9 +31,14 @@ class FamilyMemberDetailScreen extends ConsumerStatefulWidget {
 class _FamilyMemberDetailScreenState
     extends ConsumerState<FamilyMemberDetailScreen> {
   final CollaboratorService _collaboratorService = CollaboratorService();
+  final DependentProfileService _profileService = DependentProfileService();
 
   List<Map<String, dynamic>> _collaborators = [];
   bool _isLoadingCollaborators = false;
+
+  // Profile picture state
+  String? _currentProfilePicture;
+  bool _isUploadingImage = false;
 
   // Safety settings states
   bool _liveLocationTracking = true;
@@ -34,10 +49,10 @@ class _FamilyMemberDetailScreenState
   @override
   void initState() {
     super.initState();
+    _currentProfilePicture = widget.dependent.profilePicture;
     _loadSafetySettings();
     _loadCollaborators();
 
-    // 🐛 DEBUG: Print guardian type info
     print('═══════════════════════════════════════════════════');
     print('📋 DEPENDENT DETAIL SCREEN INITIALIZED');
     print('═══════════════════════════════════════════════════');
@@ -46,6 +61,7 @@ class _FamilyMemberDetailScreenState
     print('Is Primary: ${widget.dependent.isPrimary}');
     print('Is Primary Guardian: ${widget.dependent.isPrimaryGuardian}');
     print('Is Collaborator: ${widget.dependent.isCollaborator}');
+    print('Profile Picture: $_currentProfilePicture');
     print('═══════════════════════════════════════════════════');
   }
 
@@ -70,7 +86,6 @@ class _FamilyMemberDetailScreenState
 
   Future<void> _loadSafetySettings() async {
     // TODO: Load actual settings from backend
-    // For now using dummy data
     setState(() {
       _liveLocationTracking = true;
       _audioRecording = false;
@@ -78,6 +93,205 @@ class _FamilyMemberDetailScreenState
       _autoRecording = false;
     });
   }
+
+  // ==================== PROFILE PICTURE METHODS ====================
+
+  /// Pick image from gallery or camera
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final picker = ImagePicker();
+      final pickedFile = await picker.pickImage(
+        source: source,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 85,
+      );
+
+      if (pickedFile != null) {
+        Navigator.pop(context); // Close bottom sheet
+        await _uploadProfilePicture(File(pickedFile.path));
+      }
+    } catch (e) {
+      if (mounted) {
+        _showErrorSnackbar('Failed to pick image: ${e.toString()}');
+      }
+    }
+  }
+
+  /// Show image picker options
+  void _showImagePickerOptions() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Update Profile Picture', style: AppTextStyles.h4),
+              const SizedBox(height: 20),
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: const Text('Choose from Gallery'),
+                onTap: () => _pickImage(ImageSource.gallery),
+              ),
+              ListTile(
+                leading: const Icon(Icons.camera_alt),
+                title: const Text('Take a Photo'),
+                onTap: () => _pickImage(ImageSource.camera),
+              ),
+              if (_currentProfilePicture != null)
+                ListTile(
+                  leading: const Icon(Icons.delete, color: AppColors.sosRed),
+                  title: const Text(
+                    'Remove Picture',
+                    style: TextStyle(color: AppColors.sosRed),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showDeleteConfirmation();
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Upload profile picture to backend
+  Future<void> _uploadProfilePicture(File imageFile) async {
+    setState(() => _isUploadingImage = true);
+
+    try {
+      print('📸 Uploading profile picture for dependent...');
+
+      final updatedUser = await _profileService.uploadDependentProfilePicture(
+        dependentId: widget.dependent.dependentId,
+        imageFile: imageFile,
+      );
+
+      if (mounted) {
+        // ✅ Update local state
+        setState(() {
+          _currentProfilePicture = updatedUser.profilePicture;
+          _isUploadingImage = false;
+        });
+
+        // ✅ Update provider state for real-time updates across all screens
+        ref
+            .read(dependentProvider.notifier)
+            .updateDependentProfilePicture(
+              widget.dependent.dependentId,
+              updatedUser.profilePicture,
+            );
+
+        _showSuccessSnackbar('Profile picture updated successfully!');
+
+        print('✅ Profile picture updated in both local and provider state');
+      }
+    } catch (e) {
+      print('❌ Error uploading profile picture: $e');
+
+      if (mounted) {
+        setState(() => _isUploadingImage = false);
+
+        String errorMessage = 'Failed to upload picture';
+        if (e.toString().contains('primary guardian')) {
+          errorMessage = 'Only primary guardians can update profile pictures';
+        } else if (e.toString().contains('too large')) {
+          errorMessage = 'Image too large. Maximum size is 5MB';
+        }
+
+        _showErrorSnackbar(errorMessage);
+      }
+    }
+  }
+
+  /// Show delete confirmation dialog
+  void _showDeleteConfirmation() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: isDark
+            ? AppColors.darkSurface
+            : AppColors.lightSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Remove Picture'),
+        content: Text(
+          'Are you sure you want to remove ${widget.dependent.dependentName}\'s profile picture?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _deleteProfilePicture();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Delete profile picture
+  Future<void> _deleteProfilePicture() async {
+    setState(() => _isUploadingImage = true);
+
+    try {
+      await _profileService.deleteDependentProfilePicture(
+        widget.dependent.dependentId,
+      );
+
+      if (mounted) {
+        // ✅ Update local state
+        setState(() {
+          _currentProfilePicture = null;
+          _isUploadingImage = false;
+        });
+
+        // ✅ Update provider state for real-time updates
+        ref
+            .read(dependentProvider.notifier)
+            .removeDependentProfilePicture(widget.dependent.dependentId);
+
+        _showSuccessSnackbar('Profile picture removed successfully');
+
+        print('✅ Profile picture removed from both local and provider state');
+      }
+    } catch (e) {
+      print('❌ Error deleting profile picture: $e');
+
+      if (mounted) {
+        setState(() => _isUploadingImage = false);
+
+        String errorMessage = 'Failed to remove picture';
+        if (e.toString().contains('primary guardian')) {
+          errorMessage = 'Only primary guardians can remove profile pictures';
+        }
+
+        _showErrorSnackbar(errorMessage);
+      }
+    }
+  }
+
+  // ==================== OTHER METHODS ====================
 
   Future<void> _updateSafetySetting(String setting, bool value) async {
     // TODO: Update backend
@@ -107,7 +321,7 @@ class _FamilyMemberDetailScreenState
       dependentId: widget.dependent.dependentId,
       dependentName: widget.dependent.dependentName,
     );
-    _loadCollaborators(); // Refresh the list
+    _loadCollaborators();
   }
 
   void _showRevokeCollaboratorDialog(Map<String, dynamic> collaborator) {
@@ -149,7 +363,7 @@ class _FamilyMemberDetailScreenState
     try {
       await _collaboratorService.revokeCollaborator(relationshipId);
       _showSuccessSnackbar('Collaborator access revoked');
-      _loadCollaborators(); // Refresh the list
+      _loadCollaborators();
     } catch (e) {
       _showErrorSnackbar('Failed to revoke access: $e');
     }
@@ -175,12 +389,11 @@ class _FamilyMemberDetailScreenState
     );
   }
 
+  // ==================== UI BUILD METHODS ====================
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    // ✅ FIX: Use the dependent model's isPrimaryGuardian property directly
-    // This avoids async provider issues and uses data already available
     final isPrimary = widget.dependent.isPrimaryGuardian;
 
     print('🔍 Building detail screen - isPrimary: $isPrimary');
@@ -191,28 +404,16 @@ class _FamilyMemberDetailScreenState
           : AppColors.lightBackground,
       body: CustomScrollView(
         slivers: [
-          // App Bar
           _buildSliverAppBar(isDark, isPrimary),
-
-          // Content
           SliverToBoxAdapter(
             child: Column(
               children: [
-                // Profile Section
                 _buildProfileSection(isDark, isPrimary),
-
                 const SizedBox(height: 16),
-
-                // Safety Controls Section
                 _buildSafetyControlsSection(isDark, isPrimary),
-
                 const SizedBox(height: 16),
-
-                // Geofencing Section
                 _buildGeofencingSection(isDark, isPrimary),
                 const SizedBox(height: 16),
-
-                // ✅ Emergency Contacts Section
                 EmergencyContactsSection(
                   dependentId: widget.dependent.dependentId,
                   isPrimaryGuardian: isPrimary,
@@ -220,12 +421,9 @@ class _FamilyMemberDetailScreenState
                 ),
                 if (isPrimary) ...[
                   const SizedBox(height: 16),
-
-                  // Collaborators Section
                   _buildCollaboratorsSection(isDark),
                 ],
-
-                const SizedBox(height: 100), // Space for bottom padding
+                const SizedBox(height: 100),
               ],
             ),
           ),
@@ -271,7 +469,6 @@ class _FamilyMemberDetailScreenState
         ),
       ),
       actions: [
-        // Guardian type indicator badge
         Container(
           margin: const EdgeInsets.only(right: 16),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -326,54 +523,103 @@ class _FamilyMemberDetailScreenState
       ),
       child: Column(
         children: [
-          // Avatar
+          // ✅ UPDATED: Use ProfilePictureWidget with upload functionality
           Stack(
             alignment: Alignment.center,
             children: [
-              Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: [
-                      isPrimary
-                          ? AppColors.primaryGreen.withOpacity(0.3)
-                          : Colors.blue.withOpacity(0.3),
-                      isPrimary
-                          ? AppColors.accentGreen1.withOpacity(0.3)
-                          : Colors.lightBlue.withOpacity(0.3),
-                    ],
-                  ),
-                ),
-                child: Icon(
-                  Icons.person,
-                  size: 50,
-                  color: isDark
-                      ? AppColors.darkOnSurface
-                      : AppColors.lightOnSurface,
+              // Profile Picture Widget
+              GestureDetector(
+                onTap: isPrimary ? _showImagePickerOptions : null,
+                child: ProfilePictureWidget(
+                  profilePicturePath: _currentProfilePicture,
+                  fullName: widget.dependent.dependentName,
+                  radius: 50,
+                  showBorder: true,
+                  borderColor: isPrimary
+                      ? (isDark
+                            ? AppColors.darkAccentGreen1
+                            : AppColors.primaryGreen)
+                      : Colors.blue,
+                  borderWidth: 3,
+                  backgroundColor: isPrimary
+                      ? AppColors.primaryGreen.withOpacity(0.2)
+                      : Colors.blue.withOpacity(0.2),
                 ),
               ),
-              // Online/Safe status indicator
-              Positioned(
-                bottom: 0,
-                right: 0,
-                child: Container(
-                  width: 28,
-                  height: 28,
+
+              // Loading indicator overlay
+              if (_isUploadingImage)
+                Container(
+                  width: 106, // radius * 2 + border
+                  height: 106,
                   decoration: BoxDecoration(
-                    color: Colors.green,
+                    color: Colors.black.withOpacity(0.5),
                     shape: BoxShape.circle,
-                    border: Border.all(
-                      color: isDark
-                          ? AppColors.darkSurface
-                          : AppColors.lightSurface,
-                      width: 3,
+                  ),
+                  child: const Center(
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 3,
                     ),
                   ),
-                  child: const Icon(Icons.check, size: 16, color: Colors.white),
                 ),
-              ),
+
+              // ✅ Camera icon for PRIMARY guardians
+              if (isPrimary && !_isUploadingImage)
+                Positioned(
+                  bottom: 0,
+                  right: 0,
+                  child: GestureDetector(
+                    onTap: _showImagePickerOptions,
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? AppColors.darkAccentGreen1
+                            : AppColors.primaryGreen,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isDark
+                              ? AppColors.darkSurface
+                              : AppColors.lightSurface,
+                          width: 3,
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.camera_alt,
+                        size: 16,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+
+              // Status indicator for COLLABORATORS (view only)
+              if (!isPrimary)
+                Positioned(
+                  bottom: 0,
+                  right: 0,
+                  child: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: Colors.green,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isDark
+                            ? AppColors.darkSurface
+                            : AppColors.lightSurface,
+                        width: 3,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.check,
+                      size: 16,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
             ],
           ),
 
@@ -424,10 +670,13 @@ class _FamilyMemberDetailScreenState
                 color: isDark ? AppColors.darkHint : AppColors.lightHint,
               ),
               const SizedBox(width: 8),
-              Text(
-                widget.dependent.dependentEmail,
-                style: AppTextStyles.bodySmall.copyWith(
-                  color: isDark ? AppColors.darkHint : AppColors.lightHint,
+              Flexible(
+                child: Text(
+                  widget.dependent.dependentEmail,
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: isDark ? AppColors.darkHint : AppColors.lightHint,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -495,6 +744,31 @@ class _FamilyMemberDetailScreenState
               ],
             ),
           ),
+
+          // ✅ Info message for collaborators
+          if (!isPrimary) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, size: 16, color: Colors.blue),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'You can view but not edit this dependent\'s profile picture',
+                      style: AppTextStyles.caption.copyWith(color: Colors.blue),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -742,7 +1016,6 @@ class _FamilyMemberDetailScreenState
               width: double.infinity,
               child: OutlinedButton.icon(
                 onPressed: () {
-                  // TODO: Implement geofencing setup
                   _showSuccessSnackbar('Geofencing feature coming soon');
                 },
                 icon: const Icon(Icons.add_location),
@@ -869,10 +1142,14 @@ class _FamilyMemberDetailScreenState
       ),
       child: Row(
         children: [
-          CircleAvatar(
+          ProfilePictureWidget(
+            profilePicturePath: collaborator['profile_picture'],
+            fullName: collaborator['guardian_name'] ?? 'Unknown',
             radius: 24,
+            showBorder: true,
+            borderColor: Colors.blue,
+            borderWidth: 2,
             backgroundColor: Colors.blue.withOpacity(0.2),
-            child: Icon(Icons.person, color: Colors.blue, size: 24),
           ),
           const SizedBox(width: 12),
           Expanded(

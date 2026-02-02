@@ -12,31 +12,31 @@ from datetime import datetime
 # GUARDIAN DETAIL RESPONSE - UPDATED WITH guardian_type
 # ================================================================
 
-class GuardianDetailResponse(BaseModel):
-    """Response model for guardian details (dependent viewing their guardians)"""
-    id: int = Field(..., description="Relationship ID")
-    guardian_id: int = Field(..., description="Guardian user ID")
-    guardian_name: str = Field(..., description="Guardian full name")
-    guardian_email: str = Field(..., description="Guardian email")
-    relation: str = Field(..., description="Relation type (child/elderly)")
-    is_primary: bool = Field(..., description="Is this the primary guardian?")
-    guardian_type: str = Field(..., description="Guardian type (primary/collaborator)")  # ✅ ADDED
-    linked_at: datetime = Field(..., description="When the relationship was created")
+# class GuardianDetailResponse(BaseModel):
+#     """Response model for guardian details (dependent viewing their guardians)"""
+#     id: int = Field(..., description="Relationship ID")
+#     guardian_id: int = Field(..., description="Guardian user ID")
+#     guardian_name: str = Field(..., description="Guardian full name")
+#     guardian_email: str = Field(..., description="Guardian email")
+#     relation: str = Field(..., description="Relation type (child/elderly)")
+#     is_primary: bool = Field(..., description="Is this the primary guardian?")
+#     guardian_type: str = Field(..., description="Guardian type (primary/collaborator)")  # ✅ ADDED
+#     linked_at: datetime = Field(..., description="When the relationship was created")
     
-    class Config:
-        from_attributes = True
-        json_schema_extra = {
-            "example": {
-                "id": 1,
-                "guardian_id": 5,
-                "guardian_name": "Jane Doe",
-                "guardian_email": "jane@example.com",
-                "relation": "child",
-                "is_primary": True,
-                "guardian_type": "primary",  # ✅ ADDED
-                "linked_at": "2025-01-30T10:00:00Z"
-            }
-        }
+#     class Config:
+#         from_attributes = True
+#         json_schema_extra = {
+#             "example": {
+#                 "id": 1,
+#                 "guardian_id": 5,
+#                 "guardian_name": "Jane Doe",
+#                 "guardian_email": "jane@example.com",
+#                 "relation": "child",
+#                 "is_primary": True,
+#                 "guardian_type": "primary",  # ✅ ADDED
+#                 "linked_at": "2025-01-30T10:00:00Z"
+#             }
+#         }
 
 # ================================================
 # PENDING DEPENDENT SCHEMAS
@@ -157,6 +157,7 @@ class DependentDetailResponse(BaseModel):
     dependent_id: int
     dependent_name: str
     dependent_email: str
+    profile_picture: Optional[str] = None
     relation: str
     age: Optional[int] = Field(None, alias="Age")
     is_primary: bool

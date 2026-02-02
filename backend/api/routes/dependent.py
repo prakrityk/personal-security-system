@@ -293,6 +293,8 @@ async def get_my_guardians(
                     guardian_id=rel.guardian_id,
                     guardian_name=guardian_user.full_name,
                     guardian_email=guardian_user.email,
+                    phone_number=guardian_user.phone_number,
+                    profile_picture=guardian_user.profile_picture,
                     relation=rel.relation,
                     is_primary=rel.is_primary,
                     guardian_type=rel.guardian_type,  # ✅ ADD THIS

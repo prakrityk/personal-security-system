@@ -5,6 +5,7 @@
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
+import 'package:safety_app/models/role_info.dart';
 import 'package:safety_app/models/user_model.dart';
 import 'package:safety_app/services/auth_service.dart';
 
@@ -90,6 +91,60 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<UserModel?>> {
       // Don't rethrow - we want logout to always succeed in the UI
       // The service already handled the actual logout
     }
+  }
+
+  // ===================================================================
+  // AUTH PROVIDER - Profile Picture Update Methods
+  // ===================================================================
+  // Add these methods to your existing lib/core/providers/auth_provider.dart
+
+  // Inside your AuthNotifier class:
+
+  /// Update user profile picture in real-time
+  /// Call this after successfully uploading a profile picture
+  void updateProfilePicture(String? newProfilePicture) {
+    final currentUser = state.value;
+    if (currentUser == null) {
+      print('⚠️ Cannot update profile picture: No user in state');
+      return;
+    }
+
+    // Create updated user model with new profile picture
+    final updatedUser = currentUser.copyWith(profilePicture: newProfilePicture);
+
+    state = AsyncValue.data(updatedUser);
+
+    print('✅ Auth Provider: Profile picture updated in state');
+  }
+
+  /// Update entire user object
+  /// Useful when backend returns a complete updated user
+  void updateUser(UserModel updatedUser) {
+    state = AsyncValue.data(updatedUser);
+    print('✅ Auth Provider: User data updated');
+  }
+
+  /// Remove profile picture (set to null)
+  void removeProfilePicture() {
+    updateProfilePicture(null);
+    print('✅ Auth Provider: Profile picture removed');
+  }
+
+  /// Update user roles
+  void updateUserRoles(List<RoleInfo> newRoles) {
+    final currentUser = state.value;
+    if (currentUser == null) {
+      print('⚠️ Cannot update roles: No user in state');
+      return;
+    }
+
+    final updatedUser = currentUser.copyWith(
+      roles: newRoles,
+      updatedAt: DateTime.now(),
+    );
+
+    state = AsyncValue.data(updatedUser);
+    print('✅ Auth Provider: User roles updated');
   }
 
   /// Get current user synchronously

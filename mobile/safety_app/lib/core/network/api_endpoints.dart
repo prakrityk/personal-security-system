@@ -86,4 +86,11 @@ class ApiEndpoints {
   // static const String verifyPermission = '/auth/verify-permission'; // Future enhancement
   // static const String updateProfile = '/user/profile';
   // static const String uploadAvatar = '/user/avatar';
+
+  
+  // ==================== DEPENDENT PROFILE PICTURE ====================
+
+  /// Upload/Update profile picture for a dependent (Primary Guardian only)
+  /// POST /api/guardian/dependents/{dependent_id}/profile-picture
+  static const String uploadDependentProfilePicture = '/guardian/dependents';
 }
