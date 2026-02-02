@@ -272,7 +272,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                             const SizedBox(width: 12),
                             Expanded(
                               child: Text(
-                                "Your phone and email are verified. Use your email and password for daily login.",
+                                "Your phone and email are verified. Use your phone number and password for daily login.",
                                 style: AppTextStyles.caption.copyWith(
                                   color: isDark
                                       ? AppColors.darkHint

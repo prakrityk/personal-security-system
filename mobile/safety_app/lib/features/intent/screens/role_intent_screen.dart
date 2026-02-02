@@ -132,26 +132,60 @@ class _RoleIntentScreenState extends State<RoleIntentScreen> {
           // Step 2: Show biometric setup dialog and authenticate
           final biometricSuccess = await _showBiometricSetupDialog();
           
+          // if (biometricSuccess) {
+          //   // Step 3: Enable biometric on backend (this also assigns guardian role)
+          //   print('📤 Step 3: Enabling biometric on backend');
+          //   final updatedUser = await _authApiService.enableBiometric();
+            
+          //   print('✅ Biometric enabled and guardian role assigned');
+          //   print('👤 Updated user: ${updatedUser.fullName}');
+          //   print('🎭 Roles: ${updatedUser.roles.map((r) => r.roleName).join(", ")}');
+            
+          //   // Step 4: Navigate to guardian setup
+          //   if (!mounted) return;
+          //   setState(() => _isLoading = false);
+          //   _showSuccess('Guardian account activated with biometric security!');
+            
+          //   // Small delay to show success message
+          //   await Future.delayed(const Duration(milliseconds: 500));
+          //   if (!mounted) return;
+            
+          //   context.push(AppRouter.guardianSetup);
+     
           if (biometricSuccess) {
-            // Step 3: Enable biometric on backend (this also assigns guardian role)
-            print('📤 Step 3: Enabling biometric on backend');
-            final updatedUser = await _authApiService.enableBiometric();
-            
-            print('✅ Biometric enabled and guardian role assigned');
-            print('👤 Updated user: ${updatedUser.fullName}');
-            print('🎭 Roles: ${updatedUser.roles.map((r) => r.roleName).join(", ")}');
-            
-            // Step 4: Navigate to guardian setup
-            if (!mounted) return;
-            setState(() => _isLoading = false);
-            _showSuccess('Guardian account activated with biometric security!');
-            
-            // Small delay to show success message
-            await Future.delayed(const Duration(milliseconds: 500));
-            if (!mounted) return;
-            
-            context.push(AppRouter.guardianSetup);
-          } else {
+  // Step 3: Enable biometric on backend (this also assigns guardian role)
+  print('📤 Step 3: Enabling biometric on backend');
+  final updatedUser = await _authApiService.enableBiometric();
+  
+  // 🔥 CRITICAL: Set biometric flag to TRUE
+  print('💾 Setting biometric enabled flag to TRUE');
+  await _secureStorage.setBiometricEnabled(true);
+  
+  // 🔥 VERIFY IT WAS SAVED
+  final isEnabled = await _secureStorage.isBiometricEnabled();
+  print('✅ Biometric flag verification: $isEnabled');
+  
+  // 💡 DEBUG: Check what enableBiometric() actually returns
+  print('🔍 enableBiometric() returned user: ${updatedUser.toJson()}');
+  
+  // Note: enableBiometric() should handle token saving internally
+  // or return tokens. Let's check your AuthApiService.enableBiometric()
+  
+  print('✅ Biometric enabled and guardian role assigned');
+  print('👤 Updated user: ${updatedUser.fullName}');
+  print('🎭 Roles: ${updatedUser.roles.map((r) => r.roleName).join(", ")}');
+  
+  // Step 4: Navigate to guardian setup
+  if (!mounted) return;
+  setState(() => _isLoading = false);
+  _showSuccess('Guardian account activated with biometric security!');
+  
+  // Small delay to show success message
+  await Future.delayed(const Duration(milliseconds: 500));
+  if (!mounted) return;
+  
+  context.push(AppRouter.guardianSetup);
+} else {
             // User cancelled biometric setup
             if (!mounted) return;
             setState(() => _isLoading = false);

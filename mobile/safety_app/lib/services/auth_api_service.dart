@@ -239,7 +239,7 @@ class AuthApiService {
         if (e.response?.statusCode == 404) {
           throw Exception('No pending registration found for this email');
         } else if (e.response?.statusCode == 429) {
-          throw Exception('Please wait before requesting another OTP');
+          throw Exception('Too many attempts. Please try again later.');
         }
       }
 
@@ -247,19 +247,29 @@ class AuthApiService {
     }
   }
 
-  /// Login user
+  // ============================================================================
+  // 🔐 LOGIN METHOD - Phone + Password
+  // ============================================================================
+
+  /// Login with phone number and password
+  /// Called from login screen when user enters credentials
   Future<AuthResponseModel> login({
-    required String email,
+    required String phoneNumber,
     required String password,
   }) async {
     try {
+      print('📱 Logging in with phone: $phoneNumber');
+
       final response = await _dioClient.post(
         ApiEndpoints.login,
         data: {
-          'email_or_phone': email,
+          'phone_number': phoneNumber,
           'password': password,
         },
       );
+
+      print('✅ Login successful');
+      print('📦 Response: ${response.data}');
 
       final authResponse = AuthResponseModel.fromJson(response.data);
 
@@ -269,23 +279,35 @@ class AuthApiService {
         if (authResponse.token!.refreshToken != null) {
           await _storage.saveRefreshToken(authResponse.token!.refreshToken!);
         }
+        print('✅ Tokens saved to secure storage');
       }
 
       // Save user data to secure storage
       if (authResponse.user != null) {
         await _storage.saveUserData(authResponse.user!.toJson());
-        print('✅ User logged in and tokens saved');
+        print('✅ User data saved');
+        print('👤 User: ${authResponse.user!.fullName}');
+        print('📧 Email: ${authResponse.user!.email}');
+        
+        // ✅ Save phone number for future biometric login
+        await _storage.saveLastLoginPhone(phoneNumber);
+        print('✅ Login phone saved for biometric');
       }
 
       return authResponse;
     } catch (e) {
-      print('❌ Error logging in: $e');
+      print('❌ Login error: $e');
 
       if (e is DioException) {
         if (e.response?.statusCode == 401) {
-          throw Exception('Invalid email or password');
+          throw Exception('Invalid phone number or password');
         } else if (e.response?.statusCode == 403) {
           throw Exception('Account is deactivated');
+        } else if (e.response?.statusCode == 404) {
+          throw Exception('User not found');
+        } else if (e.response?.statusCode == 400) {
+          final detail = e.response?.data['detail'];
+          throw Exception(detail ?? 'Invalid credentials');
         } else if (e.type == DioExceptionType.connectionTimeout ||
             e.type == DioExceptionType.receiveTimeout) {
           throw Exception('Connection timeout. Please try again.');
@@ -298,9 +320,15 @@ class AuthApiService {
     }
   }
 
+  // ============================================================================
+  // END OF LOGIN METHOD
+  // ============================================================================
+
   /// Refresh access token using refresh token
   Future<String> refreshAccessToken() async {
     try {
+      print('🔄 Refreshing access token...');
+
       final refreshToken = await _storage.getRefreshToken();
 
       if (refreshToken == null || refreshToken.isEmpty) {
@@ -334,6 +362,8 @@ class AuthApiService {
       throw Exception('Session expired. Please login again.');
     }
   }
+
+
 
   /// Get current user from storage
   Future<UserModel?> getCurrentUser() async {
@@ -403,7 +433,7 @@ class AuthApiService {
 
       // Step 2: Always clear local data
       print('🗑️ Clearing local storage...');
-      await _storage.clearAll();
+      await _storage.logout();
       print('✅ Local storage cleared successfully');
       print('✅ User logged out successfully');
     } catch (e) {
@@ -412,7 +442,7 @@ class AuthApiService {
       // Force clear as last resort
       try {
         print('🔄 Attempting force clear of storage...');
-        await _storage.clearAll();
+        await _storage.logout();
         print('✅ Force clear successful');
       } catch (clearError) {
         print('❌ Fatal: Could not clear storage: $clearError');
@@ -433,7 +463,7 @@ class AuthApiService {
         print('   Continuing with local logout...');
       }
 
-      await _storage.clearAll();
+      await _storage.logout();
       print('✅ Logged out from all devices - local data cleared');
     } catch (e) {
       print('❌ Error during logout-all: $e');
@@ -537,6 +567,10 @@ class AuthApiService {
       // Save updated user data to storage
       await _storage.saveUserData(updatedUser.toJson());
       print('✅ User data updated after biometric enable');
+      
+      // ✅ NEW: Mark biometric as enabled locally for future logins
+      await _storage.setBiometricEnabled(true);
+      print('✅ Biometric preference saved locally');
       
       return updatedUser;
     } catch (e) {
