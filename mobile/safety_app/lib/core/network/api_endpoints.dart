@@ -76,6 +76,9 @@ class ApiEndpoints {
       '/dependent/emergency-contacts'; // /{id}
   static const String deleteDependentEmergencyContact =
       '/dependent/emergency-contacts'; // /{id}
+
+  // SOS Event endpoints (manual + motion)
+  static const String createSosEvent = '/sos/events';
   // Other endpoints (add as needed)
   // Family Service endpoints
   static const String getFamilyStats =

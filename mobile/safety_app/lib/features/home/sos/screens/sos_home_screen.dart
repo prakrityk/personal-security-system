@@ -10,6 +10,7 @@ import 'package:safety_app/core/providers/auth_provider.dart';
 import 'package:safety_app/core/providers/personal_emergency_contact_provider.dart';
 import 'package:safety_app/core/providers/permission_provider.dart';
 import 'package:safety_app/features/home/sos/widgets/personal_emergency_contacts_widget.dart';
+import 'package:safety_app/services/sos_event_service.dart';
 import '../widgets/sos_button.dart';
 
 class SosHomeScreen extends ConsumerStatefulWidget {
@@ -20,6 +21,8 @@ class SosHomeScreen extends ConsumerStatefulWidget {
 }
 
 class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
+  final SosEventService _sosService = SosEventService();
+
   @override
   void initState() {
     super.initState();
@@ -308,9 +311,8 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
           ),
           ElevatedButton(
             onPressed: () {
-              // TODO: Implement SOS activation
               Navigator.pop(context);
-              _showSOSActivatedConfirmation(context, isDark);
+              _sendSosEvent(context, isDark);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.sosRed,
@@ -322,6 +324,31 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _sendSosEvent(BuildContext context, bool isDark) async {
+    try {
+      // Minimal MVP: no location yet, just record + notify.
+      final eventId = await _sosService.createSosEvent(
+        triggerType: 'manual',
+        eventType: 'panic_button',
+        appState: 'foreground',
+      );
+
+      print('✅ SOS event created: $eventId');
+      _showSOSActivatedConfirmation(context, isDark);
+    } catch (e) {
+      print('❌ Failed to create SOS event: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to send SOS. Please try again.'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.all(16),
+        ),
+      );
+    }
   }
 
   void _showNoContactsDialog(BuildContext context, bool isDark) {
