@@ -39,3 +39,5 @@ pytest==7.4.4
 pytest-asyncio==0.23.3
 python-dotenv
 psycopg2-binary
+
+firebase-admin==6.4.0
