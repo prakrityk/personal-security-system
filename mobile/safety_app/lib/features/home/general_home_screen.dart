@@ -7,10 +7,11 @@ import 'package:safety_app/core/providers/auth_provider.dart';
 import 'package:safety_app/features/home/widgets/role_based_bottom_nav_bar.dart';
 import 'package:safety_app/features/home/home_app_bar.dart';
 import 'package:safety_app/models/user_model.dart';
+import 'package:safety_app/services/notification_service.dart';
 import 'sos/screens/sos_home_screen.dart';
 import 'map/screens/live_location_screen.dart';
 import 'safety/screens/safety_settings_screen.dart';
-import 'family/screens/smart_family_list_screen.dart'; // ✅ FIX: Use smart wrapper
+import 'family/screens/smart_family_list_screen.dart';
 
 class GeneralHomeScreen extends ConsumerStatefulWidget {
   const GeneralHomeScreen({super.key});
@@ -22,12 +23,11 @@ class GeneralHomeScreen extends ConsumerStatefulWidget {
 class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
   int _currentIndex = 0;
   bool _isLoadingRole = false;
+  bool _fcmTokenRegistered = false;
 
-  // ✅ FIX: Use SmartFamilyListScreen which routes to correct screen based on role
   final Map<String, Widget> _screenMap = const {
     'sos': SosHomeScreen(),
-    'family':
-        SmartFamilyListScreen(), // ✅ This handles guardian vs dependent routing
+    'family': SmartFamilyListScreen(),
     'safety': SafetySettingsScreen(),
     'map': LiveLocationScreen(),
   };
@@ -35,7 +35,6 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
   @override
   void initState() {
     super.initState();
-    // ✅ When home screen loads, check if we need to fetch the role
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAndLoadRole();
     });
@@ -51,13 +50,50 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
       try {
         // Fetch fresh user data with role
         await ref.read(authStateProvider.notifier).refreshUser();
+
+        // ✅ After role is loaded, register FCM token for guardians
+        final updatedUser = ref.read(authStateProvider).value;
+        if (updatedUser?.isGuardian == true && !_fcmTokenRegistered) {
+          await _registerGuardianNotifications(updatedUser!);
+        }
       } catch (e) {
-        print('Error loading role: $e');
+        debugPrint('❌ Error loading role: $e');
       } finally {
         if (mounted) {
           setState(() => _isLoadingRole = false);
         }
       }
+    } else if (user?.isGuardian == true && !_fcmTokenRegistered) {
+      // User already has role, just register FCM token
+      await _registerGuardianNotifications(user!);
+    }
+  }
+
+  /// ✅ IMPROVED: Register FCM token for guardian users
+  /// Uses the improved NotificationService which handles everything internally
+  Future<void> _registerGuardianNotifications(UserModel user) async {
+    try {
+      debugPrint('👮 Guardian detected: ${user.fullName}');
+      debugPrint('📱 Initializing notification service...');
+
+      // 1️⃣ Initialize notifications (permission + handlers)
+      await NotificationService.init();
+
+      // 2️⃣ Register FCM token with backend (NEW VERSION)
+      final success = await NotificationService.registerDeviceToken();
+
+      if (success) {
+        setState(() => _fcmTokenRegistered = true);
+        debugPrint('✅ Guardian FCM token registered successfully');
+        debugPrint('🎉 Guardian is now ready to receive SOS notifications!');
+      } else {
+        debugPrint(
+          '⚠️ Failed to register FCM token — will retry on next login',
+        );
+      }
+    } catch (e, stack) {
+      debugPrint('❌ Error registering guardian notifications: $e');
+      debugPrint(stack.toString());
     }
   }
 
@@ -67,7 +103,7 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
     final user = userState.value;
     final roleName = user?.currentRole?.roleName;
 
-    // ✅ Show loading if we're actively fetching the role
+    // Show loading if we're actively fetching the role
     if (_isLoadingRole ||
         (user != null && (!user.hasRole || user.currentRole == null))) {
       return const Scaffold(

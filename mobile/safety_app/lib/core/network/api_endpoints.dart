@@ -1,7 +1,11 @@
 class ApiEndpoints {
-  // Use your laptop's IP address for physical device
+  // ✅ Use your laptop's IP address for physical device
+  // Change this to match your actual backend server IP
   static const String baseUrl = 'http://localhost:8000/api';
-  //static const String baseUrl = 'http://192.168.21.102:8000/api';
+  //'http://192.168.21.102:8000/api';
+
+  // For emulator testing, use: 'http://10.0.2.2:8000/api'
+  // For localhost web testing, use: 'http://localhost:8000/api'
 
   // Auth endpoints
   static const String sendVerificationCode = '/auth/send-verification-code';
@@ -90,10 +94,16 @@ class ApiEndpoints {
   // static const String updateProfile = '/user/profile';
   // static const String uploadAvatar = '/user/avatar';
 
-  
   // ==================== DEPENDENT PROFILE PICTURE ====================
 
   /// Upload/Update profile picture for a dependent (Primary Guardian only)
   /// POST /api/guardian/dependents/{dependent_id}/profile-picture
   static const String uploadDependentProfilePicture = '/guardian/dependents';
+
+  static const String deviceRegister = '/devices/register';
+  static const String deviceUnregister = '/devices/unregister';
+
+  // Timeouts
+  static const Duration connectTimeout = Duration(seconds: 10);
+  static const Duration receiveTimeout = Duration(seconds: 10);
 }

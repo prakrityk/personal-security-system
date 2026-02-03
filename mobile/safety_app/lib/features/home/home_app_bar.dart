@@ -9,7 +9,6 @@ import 'package:go_router/go_router.dart';
 import 'package:safety_app/core/theme/app_colors.dart';
 import 'package:safety_app/core/theme/app_text_styles.dart';
 import 'package:safety_app/core/providers/auth_provider.dart';
-import 'package:safety_app/features/account/screens/account_screen.dart';
 import 'package:safety_app/core/widgets/profile_picture_widget.dart';
 import 'package:safety_app/routes/app_router.dart'; // ✅ Add this import
 

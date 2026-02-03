@@ -1,10 +1,10 @@
-// ===================================================================
-// IMPROVED: auth_provider.dart - Better State Management
-// ===================================================================
 // lib/core/providers/auth_provider.dart
+// ✅ FINAL FIX: Uses SecureStorageService to match your login implementation
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
+import 'package:safety_app/core/storage/secure_storage_service.dart';
 import 'package:safety_app/models/role_info.dart';
 import 'package:safety_app/models/user_model.dart';
 import 'package:safety_app/services/auth_service.dart';
@@ -17,6 +17,7 @@ final authServiceProvider = Provider<AuthService>((ref) {
 /// State notifier for user authentication state
 class AuthStateNotifier extends StateNotifier<AsyncValue<UserModel?>> {
   final AuthService _authService;
+  final SecureStorageService _storage = SecureStorageService(); // ✅ ADD THIS
 
   AuthStateNotifier(this._authService) : super(const AsyncValue.loading()) {
     _loadUser();
@@ -33,75 +34,70 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<UserModel?>> {
     }
   }
 
-  /// ✅ IMPROVED: Refresh user data from API WITHOUT setting loading state
-  /// This prevents router from redirecting to login during refresh
+  /// Refresh user data from API WITHOUT setting loading state
   Future<void> refreshUser() async {
     print('🔄 AuthProvider: Starting user refresh...');
 
     try {
-      // DON'T set to loading - keep current user in state
-      // This prevents router redirect during refresh
-
-      // Fetch fresh data from API
       final user = await _authService.fetchCurrentUser();
 
       print('✅ AuthProvider: User refreshed - ${user.fullName}');
       print('   Role: ${user.currentRole?.roleName ?? "No role"}');
 
-      // Update state with new data
       state = AsyncValue.data(user);
-
       print('✅ AuthProvider: State updated successfully');
     } catch (e, stack) {
       print('❌ AuthProvider: Error refreshing user - $e');
-      // Don't update state on error - keep current user
-      // state = AsyncValue.error(e, stack);
     }
   }
 
-  /// ✅ NEW: Update user data directly (bypass API call)
-  /// Use this when you already have the updated user object from an API call
+  /// Update user data directly
   void updateUserData(UserModel user) {
     print('✅ AuthProvider: Direct state update - ${user.fullName}');
     state = AsyncValue.data(user);
   }
 
-  /// Logout user - clears all data and resets state
+  /// Logout user
   Future<void> logout() async {
     print('🔄 AuthStateNotifier: Starting logout...');
 
     try {
-      // Call service logout (handles backend + storage)
       await _authService.logout();
-
-      // Reset state to null (no user)
       state = const AsyncValue.data(null);
-
       print('✅ AuthStateNotifier: Logout successful - User state cleared');
     } catch (e, stack) {
-      // Log error but ALWAYS reset state
       print('⚠️ AuthStateNotifier: Logout error: $e');
-
-      // CRITICAL: Reset state to null even on error
-      // This ensures user is logged out in UI even if something failed
       state = const AsyncValue.data(null);
-
       print('✅ AuthStateNotifier: State reset despite error');
-
-      // Don't rethrow - we want logout to always succeed in the UI
-      // The service already handled the actual logout
     }
   }
 
-  // ===================================================================
-  // AUTH PROVIDER - Profile Picture Update Methods
-  // ===================================================================
-  // Add these methods to your existing lib/core/providers/auth_provider.dart
+  /// ✅ FINAL FIX: Get access token from SecureStorageService
+  /// This matches EXACTLY how your login code saves the token
+  Future<String?> getAccessToken() async {
+    try {
+      debugPrint(
+        '🔍 [AuthProvider] Getting access token from secure storage...',
+      );
 
-  // Inside your AuthNotifier class:
+      // Use the same SecureStorageService that login uses!
+      final token = await _storage.getAccessToken();
 
-  /// Update user profile picture in real-time
-  /// Call this after successfully uploading a profile picture
+      if (token != null && token.isNotEmpty) {
+        debugPrint('✅ [AuthProvider] Found access token');
+        debugPrint('   Token preview: ${token.substring(0, 20)}...');
+        return token;
+      } else {
+        debugPrint('⚠️ [AuthProvider] No access token found in secure storage');
+        return null;
+      }
+    } catch (e, stack) {
+      debugPrint('❌ [AuthProvider] Error getting access token: $e');
+      return null;
+    }
+  }
+
+  /// Update user profile picture
   void updateProfilePicture(String? newProfilePicture) {
     final currentUser = state.value;
     if (currentUser == null) {
@@ -109,22 +105,18 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<UserModel?>> {
       return;
     }
 
-    // Create updated user model with new profile picture
     final updatedUser = currentUser.copyWith(profilePicture: newProfilePicture);
-
     state = AsyncValue.data(updatedUser);
-
     print('✅ Auth Provider: Profile picture updated in state');
   }
 
   /// Update entire user object
-  /// Useful when backend returns a complete updated user
   void updateUser(UserModel updatedUser) {
     state = AsyncValue.data(updatedUser);
     print('✅ Auth Provider: User data updated');
   }
 
-  /// Remove profile picture (set to null)
+  /// Remove profile picture
   void removeProfilePicture() {
     updateProfilePicture(null);
     print('✅ Auth Provider: Profile picture removed');
