@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 # Import Firebase service
-from services.firebase_service import FirebaseService
+from services.firebase_service import firebase_service
 
 # Import routes (you'll add these)
 # from api.routes import auth, guardian, dependent
@@ -22,7 +22,7 @@ async def lifespan(app: FastAPI):
     print("🚀 Starting Personal Security System API...")
     
     # Initialize Firebase Admin SDK
-    FirebaseService.initialize()
+    firebase_service.initialize()
     
     print("✅ Application startup complete!")
     yield

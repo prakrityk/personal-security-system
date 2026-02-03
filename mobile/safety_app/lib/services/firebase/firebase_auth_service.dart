@@ -242,6 +242,59 @@ class FirebaseAuthService {
   }
 
   // ============================================================================
+  // PASSWORD RESET
+  // ============================================================================
+
+  /// Send password reset email via Firebase
+  /// Firebase handles everything: email delivery, token, expiry, the reset page.
+  /// We intentionally do NOT reveal whether the email exists — always show success.
+  Future<void> sendPasswordResetEmail(String email) async {
+    try {
+      await _firebaseAuth.sendPasswordResetEmail(email: email);
+      debugPrint('✅ Password reset email sent to $email');
+    } on FirebaseAuthException catch (e) {
+      // For security: only throw on non-revealing errors (network, etc.)
+      // "user-not-found" is swallowed — we don't tell the user the email doesn't exist
+      if (e.code == 'user-not-found') {
+        debugPrint('ℹ️ Password reset: email not found (hidden from user)');
+        return; // Silent return — UI shows same success message
+      }
+      throw Exception(_getFirebaseErrorMessage(e));
+    } catch (e) {
+      throw Exception('Failed to send reset email: ${e.toString()}');
+    }
+  }
+
+  /// Sign into Firebase with email + password.
+  /// Used in the forgot-password fallback: after the user resets their password
+  /// via Firebase, we sign them in here so we can grab a fresh Firebase ID token
+  /// to send to /auth/firebase/login on the backend.
+  /// Returns the Firebase ID token string.
+  Future<String> signInWithEmail({
+    required String email,
+    required String password,
+  }) async {
+    try {
+      final userCredential = await _firebaseAuth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      final idToken = await userCredential.user?.getIdToken(true);
+      if (idToken == null || idToken.isEmpty) {
+        throw Exception('Failed to get Firebase ID token after sign in');
+      }
+
+      debugPrint('✅ Firebase email sign-in successful, token retrieved');
+      return idToken;
+    } on FirebaseAuthException catch (e) {
+      throw Exception(_getFirebaseErrorMessage(e));
+    } catch (e) {
+      throw Exception('Firebase sign in failed: ${e.toString()}');
+    }
+  }
+
+  // ============================================================================
   // SIGN OUT
   // ============================================================================
 
@@ -285,6 +338,10 @@ class FirebaseAuthService {
         return 'This email is already linked to your account.';
       case 'credential-already-in-use':
         return 'This credential is already associated with another account.';
+      case 'wrong-password':
+        return 'Incorrect password.';
+      case 'user-not-found':
+        return 'No account found with this email.';
       
       // General Errors
       case 'network-request-failed':

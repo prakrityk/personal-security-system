@@ -11,6 +11,7 @@ import 'package:safety_app/services/biometric_service.dart';
 import 'package:safety_app/core/storage/secure_storage_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import 'package:safety_app/services/firebase/firebase_auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -25,6 +26,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final AuthApiService _authApiService = AuthApiService();
   final BiometricService _biometricService = BiometricService();
   final SecureStorageService _secureStorage = SecureStorageService();
+  final FirebaseAuthService _firebaseAuthService = FirebaseAuthService();
 
   bool _isLoading = false;
   bool _showBiometricOption = false;
@@ -149,7 +151,20 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  /// Handle regular password login
+  // ============================================================================
+  // 🔐 LOGIN — tries normal first, falls back to Firebase if 401
+  // ============================================================================
+
+  /// Handle regular password login.
+  /// Flow:
+  ///   1. Try POST /auth/login (phone + password against DB hash)
+  ///   2. If 401 → password might have been reset via Firebase.
+  ///      Fall back to Firebase login:
+  ///        a. Sign into Firebase with email + new password
+  ///        b. Get Firebase ID token
+  ///        c. POST /auth/firebase/login with token + password
+  ///           → backend verifies token, syncs password hash, returns JWTs
+  ///   3. Navigate on success.
   Future<void> _handleLogin() async {
     final phone = _phoneController.text.trim();
     final password = _passwordController.text.trim();
@@ -162,33 +177,54 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      print('📱 Logging in with phone: $phone');
-      
-      final response = await _authApiService.login(
-        phoneNumber: phone,
-        password: password,
-      );
+      print('📱 Attempting normal login with phone: $phone');
 
+      dynamic response;
+
+      try {
+        // ── Step 1: Try normal login ──────────────────────────────────
+        response = await _authApiService.login(
+          phoneNumber: phone,
+          password: password,
+        );
+        print('✅ Normal login succeeded');
+
+      } catch (e) {
+        // ── Step 2: If 401, try Firebase fallback ─────────────────────
+        final errorMsg = e.toString();
+        print('⚠️ Normal login failed: $errorMsg');
+
+        if (errorMsg.contains('Invalid phone number or password') ||
+            errorMsg.contains('Invalid credentials')) {
+          print('🔥 Trying Firebase login fallback (password may have been reset)...');
+          response = await _firebaseFallbackLogin(phone, password);
+        } else {
+          // Not a credentials error — rethrow as-is
+          rethrow;
+        }
+      }
+
+      // ── Step 3: Success — navigate ────────────────────────────────
       if (!mounted) return;
 
       final user = response.user;
 
       if (user != null) {
         print('✅ Login successful for: ${user.fullName}');
-        
+
         // Save phone for future reference
         await _secureStorage.saveLastLoginPhone(phone);
-        
+
         _showSuccess("Welcome back, ${user.fullName}!");
 
         // Check if we should prompt for biometric setup
         final deviceSupports = await _biometricService.isBiometricAvailable();
         final biometricEnabled = await _secureStorage.isBiometricEnabled();
-        
+
         print('🔐 Post-login biometric check:');
         print('   Device supports: $deviceSupports');
         print('   Already enabled: $biometricEnabled');
-        
+
         // Navigate first
         if (user.hasRole) {
           context.go('/home');
@@ -214,6 +250,193 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) setState(() => _isLoading = false);
     }
   }
+
+  /// Firebase fallback login.
+  /// Called when normal /auth/login returns 401 — likely means password was
+  /// reset via Firebase but the DB hash is still the old one.
+  ///
+  /// Signs into Firebase with email + password to prove the password is valid
+  /// on Firebase's side, grabs a Firebase ID token, then sends both to
+  /// /auth/firebase/login which syncs the DB and issues JWTs.
+  ///
+  /// We need the user's email for Firebase sign-in. We look it up from the
+  /// phone number — if Firebase sign-in fails it means the password really
+  /// is wrong (not a reset scenario) and we surface a clean error.
+  Future<dynamic> _firebaseFallbackLogin(String phone, String password) async {
+    try {
+      // We don't have the email in the login form, so we ask for it.
+      // Show a quick dialog to get the email.
+      final email = await _askForEmail();
+      if (email == null) {
+        // User cancelled
+        throw Exception('Login cancelled');
+      }
+
+      print('🔥 Signing into Firebase with email: $email');
+
+      // Sign into Firebase → this will throw if password is truly wrong
+      final firebaseToken = await _firebaseAuthService.signInWithEmail(
+        email: email,
+        password: password,
+      );
+
+      print('✅ Firebase sign-in succeeded, sending token to backend');
+
+      // Send token + password to backend — it verifies, syncs hash, issues JWTs
+      final response = await _authApiService.firebaseLogin(
+        firebaseToken: firebaseToken,
+        password: password,
+      );
+
+      print('✅ Firebase fallback login complete');
+      return response;
+
+    } catch (e) {
+      print('❌ Firebase fallback failed: $e');
+      // Clean up the error message for the user
+      final msg = e.toString().replaceAll('Exception: ', '');
+      if (msg.contains('Incorrect password') || msg.contains('wrong-password')) {
+        throw Exception('Invalid phone number or password');
+      }
+      throw Exception(msg);
+    }
+  }
+
+  /// Show a small dialog that asks the user for their email.
+  /// Returns null if the user cancels.
+  Future<String?> _askForEmail() async {
+    final emailController = TextEditingController();
+    String? result;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text("Verify Your Email"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "It looks like your password was recently reset. Please enter your email to continue.",
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: emailController,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(
+                labelText: "Email",
+                hintText: "you@example.com",
+                prefixIcon: Icon(Icons.email_outlined),
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryGreen,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              result = emailController.text.trim();
+              Navigator.of(dialogContext).pop();
+            },
+            child: const Text("Continue"),
+          ),
+        ],
+      ),
+    );
+
+    emailController.dispose();
+
+    if (result != null && result!.isEmpty) return null;
+    return result;
+  }
+
+  // ============================================================================
+  // FORGOT PASSWORD
+  // ============================================================================
+
+  /// Show a dialog asking for email, then fire Firebase reset email
+  Future<void> _handleForgotPassword() async {
+    final emailController = TextEditingController();
+
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text("Reset Password"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Enter your registered email. We'll send you a link to reset your password.",
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: emailController,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(
+                labelText: "Email",
+                hintText: "you@example.com",
+                prefixIcon: Icon(Icons.email_outlined),
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryGreen,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text("Send Link"),
+          ),
+        ],
+      ),
+    );
+
+    if (result != true) return;
+
+    final email = emailController.text.trim();
+    emailController.dispose();
+
+    if (email.isEmpty) {
+      _showError("Please enter your email.");
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      await _firebaseAuthService.sendPasswordResetEmail(email);
+
+      if (mounted) {
+        // Always show this message — even if email doesn't exist (security)
+        _showSuccess("If this email is registered, you'll receive a reset link.");
+      }
+    } catch (e) {
+      if (mounted) {
+        _showError(e.toString().replaceAll('Exception: ', ''));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
 
   /// Prompt user to enable biometric
   Future<void> _promptEnableBiometric() async {
@@ -464,7 +687,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                     // PASSWORD LOGIN FIELDS
                     AppTextField(
-                      label: "Phone",
+                      label: "Phone Number",
                       hint: "+977XXXXXXXX",
                       controller: _phoneController,
                       enabled: !_isLoading,
@@ -482,11 +705,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton(
-                        onPressed: _isLoading
-                            ? null
-                            : () {
-                                // TODO: Navigate to forgot password
-                              },
+                        onPressed: _isLoading ? null : _handleForgotPassword,
                         child: Text(
                           "Forgot password?",
                           style: AppTextStyles.caption.copyWith(

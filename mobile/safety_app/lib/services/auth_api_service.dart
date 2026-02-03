@@ -321,6 +321,85 @@ class AuthApiService {
   }
 
   // ============================================================================
+  // 🔥 FIREBASE LOGIN — fallback after password reset
+  // ============================================================================
+
+  /// Login via Firebase token when normal login fails after a password reset.
+  /// Sends firebase_token + password to /auth/firebase/login.
+  /// Backend verifies identity via token, syncs the new password hash, issues JWTs.
+  Future<AuthResponseModel> firebaseLogin({
+    required String firebaseToken,
+    required String password,
+  }) async {
+    try {
+      print('🔥 Attempting Firebase login fallback...');
+
+      final response = await _dioClient.post(
+        ApiEndpoints.firebaseLogin,
+        data: {
+          'firebase_token': firebaseToken,
+          'password': password,
+        },
+      );
+
+      print('✅ Firebase login successful');
+      print('📦 Response: ${response.data}');
+
+      final authResponse = AuthResponseModel.fromJson(response.data);
+
+      // Save tokens
+      if (authResponse.token != null) {
+        await _storage.saveAccessToken(authResponse.token!.accessToken);
+        if (authResponse.token!.refreshToken != null) {
+          await _storage.saveRefreshToken(authResponse.token!.refreshToken!);
+        }
+        print('✅ Firebase login tokens saved');
+      }
+
+      // Save user data
+      if (authResponse.user != null) {
+        await _storage.saveUserData(authResponse.user!.toJson());
+        print('✅ Firebase login user data saved');
+      }
+
+      return authResponse;
+    } catch (e) {
+      print('❌ Firebase login error: $e');
+
+      if (e is DioException) {
+        if (e.response?.statusCode == 401) {
+          throw Exception('Firebase verification failed');
+        } else if (e.response?.statusCode == 404) {
+          throw Exception('User not found');
+        } else if (e.response?.statusCode == 403) {
+          throw Exception('Account is deactivated');
+        }
+      }
+
+      rethrow;
+    }
+  }
+
+  // ============================================================================
+  // END OF FIREBASE LOGIN
+  // ============================================================================
+
+  /// Sync new password to DB after Firebase password reset
+  /// Called silently after a successful login
+  Future<void> updatePassword(String password) async {
+    try {
+      await _dioClient.put(
+        ApiEndpoints.updatePassword,
+        data: {'password': password},
+      );
+      print('✅ Password synced to DB');
+    } catch (e) {
+      // Silent fail — login already succeeded, don't block the user
+      print('⚠️ Password sync failed (non-critical): $e');
+    }
+  }
+
+  // ============================================================================
   // END OF LOGIN METHOD
   // ============================================================================
 

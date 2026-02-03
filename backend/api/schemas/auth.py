@@ -55,24 +55,43 @@ class FirebaseRegistrationComplete(BaseModel):
         }
 
 
+class PasswordUpdateRequest(BaseModel):
+    password: str
+
+    @field_validator('password')
+    def validate_password(cls, v):
+        if len(v) < 8:
+            raise ValueError('Password must be at least 8 characters long')
+        if not any(char.islower() for char in v):
+            raise ValueError('Password must contain at least one lowercase letter')
+        if not any(char.isupper() for char in v):
+            raise ValueError('Password must contain at least one uppercase letter')
+        if not any(char.isdigit() for char in v):
+            raise ValueError('Password must contain at least one number')
+        if not any(char in '@$!%*?&#' for char in v):
+            raise ValueError('Password must contain at least one special character (@$!%*?&#)')
+        return v
+
 # =====================================================
 # TRADITIONAL LOGIN (Email/Password)
 # =====================================================
 
 class UserLogin(BaseModel):
     """Schema for user login with email/password"""
-    email: str = Field(..., description="Email or phone number")
+    phone_number: str = Field(..., description="Email or phone number")
     password: str = Field(..., description="Password")
     
     class Config:
         json_schema_extra = {
             "example": {
-                "email": "john.doe@example.com",
+                "phone_number": "+9779865463894",
                 "password": "SecurePass123!"
             }
         }
 
-
+class FirebaseLoginRequest(BaseModel):
+    firebase_token: str
+    password: str
 # =====================================================
 # TOKEN SCHEMAS
 # =====================================================

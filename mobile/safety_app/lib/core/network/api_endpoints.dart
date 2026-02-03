@@ -4,12 +4,16 @@ class ApiEndpoints {
   //static const String baseUrl = 'http://172.18.240.1:8000/api';
 
   // ============================================================================
-  // 🔥 FIREBASE AUTHENTICATION (NEW)
+  // 🔥 FIREBASE AUTHENTICATION
   // ============================================================================
   
   /// Complete registration with Firebase token
   /// This is the MAIN endpoint for new Firebase registration flow
   static const String completeFirebaseRegistration = '/auth/firebase/complete-registration';
+
+  /// Firebase login — used after password reset when normal login fails
+  /// Verifies Firebase token, finds user, syncs password, issues JWTs
+  static const String firebaseLogin = '/auth/firebase/login';
 
   // ============================================================================
   // AUTH ENDPOINTS (EXISTING - KEEP THESE)
@@ -20,6 +24,7 @@ class ApiEndpoints {
   static const String verifyPhone = '/auth/verify-phone';
   static const String checkPhone = '/auth/check-phone';
   static const String checkEmail = '/auth/check-email';
+  static const String updatePassword = '/auth/update-password';
   
   // Old registration (replaced by Firebase flow)
   static const String register = '/auth/register';

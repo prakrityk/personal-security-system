@@ -15,6 +15,7 @@ from models.user_roles import UserRole
 from api.schemas.auth import (
     FirebaseTokenVerification,
     FirebaseRegistrationComplete,
+    FirebaseLoginRequest,
     UserLogin,
     UserResponse,
     UserWithTokens,
@@ -23,7 +24,8 @@ from api.schemas.auth import (
     EmailCheckResponse,
     PhoneCheckResponse,
     RoleSelectRequest,
-    RoleInfo
+    RoleInfo,
+    PasswordUpdateRequest,
 )
 from services.firebase_service import firebase_service
 from api.utils.auth_utils import (
@@ -299,6 +301,145 @@ async def complete_firebase_registration(
 
 
 # =====================================================
+# 🔥 FIREBASE LOGIN (for after password reset)
+# =====================================================
+
+@router.post("/firebase/login", response_model=UserWithTokens)
+async def firebase_login(
+    request: FirebaseLoginRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Login via Firebase token + sync new password into DB.
+    
+    Called when normal /login fails after a Firebase password reset.
+    Flutter signs into Firebase with the new password, gets a Firebase ID token,
+    and sends it here along with the new password.
+    
+    This endpoint:
+      1. Verifies the Firebase token (proves identity)
+      2. Finds the user by firebase_uid
+      3. Re-hashes and updates hashed_password in DB (syncs the reset password)
+      4. Issues fresh JWT tokens
+    """
+    logger.info("="*80)
+    logger.info("🔥 FIREBASE LOGIN REQUEST")
+    logger.info("="*80)
+
+    # ============================================================================
+    # VERIFY FIREBASE TOKEN
+    # ============================================================================
+    try:
+        firebase_user = await asyncio.to_thread(
+            firebase_service.verify_firebase_token,
+            request.firebase_token
+        )
+        logger.info(f"✅ Firebase token verified for UID: {firebase_user.get('uid')}")
+    except Exception as e:
+        logger.error(f"❌ Firebase login: token verification failed: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Firebase verification failed"
+        )
+
+    # ============================================================================
+    # FIND USER BY firebase_uid
+    # ============================================================================
+    user = db.query(User).filter(
+        User.firebase_uid == firebase_user['uid']
+    ).first()
+
+    if not user:
+        logger.error(f"❌ Firebase login: no user found for UID {firebase_user['uid']}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is deactivated"
+        )
+
+    # ============================================================================
+    # SYNC PASSWORD — update hashed_password so normal login works next time
+    # ============================================================================
+    logger.info(f"🔐 Syncing new password for user {user.id}...")
+    user.hashed_password = hash_password(request.password)
+    db.commit()
+    logger.info(f"✅ Password synced for user {user.id}")
+
+    # ============================================================================
+    # ISSUE JWT TOKENS
+    # ============================================================================
+    access_token = create_access_token(data={"sub": str(user.id)})
+    refresh_token_str = create_refresh_token(data={"sub": str(user.id)})
+
+    refresh_token_record = RefreshToken(
+        user_id=user.id,
+        token=refresh_token_str,
+        expires_at=datetime.utcnow() + timedelta(days=30)
+    )
+    db.add(refresh_token_record)
+    db.commit()
+
+    user_roles = [
+        RoleInfo(
+            id=ur.role.id,
+            role_name=ur.role.role_name,
+            role_description=ur.role.role_description
+        )
+        for ur in user.user_roles
+    ]
+
+    logger.info("="*80)
+    logger.info(f"✅ FIREBASE LOGIN COMPLETE for user {user.id}")
+    logger.info("="*80)
+
+    return UserWithTokens(
+        user=UserResponse(
+            id=user.id,
+            email=user.email,
+            full_name=user.full_name,
+            phone_number=user.phone_number,
+            roles=user_roles
+        ),
+        tokens=TokenResponse(
+            access_token=access_token,
+            refresh_token=refresh_token_str,
+            token_type="bearer",
+            expires_in=1800
+        )
+    )
+
+
+# =====================================================
+# 🔐 PASSWORD UPDATE (for forgot-password sync)
+# =====================================================
+
+@router.put("/update-password")
+def update_password(
+    request: PasswordUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Update hashed_password in DB after Firebase password reset.
+    Protected — requires valid access token (user must be logged in).
+    Called from Flutter after user logs in with their new password.
+    """
+    logger.info(f"🔐 Password update request for user {current_user.id}")
+
+    hashed_pw = hash_password(request.password)
+    current_user.hashed_password = hashed_pw
+    db.commit()
+
+    logger.info(f"✅ Password updated for user {current_user.id}")
+
+    return {"success": True, "message": "Password updated successfully"}
+
+# =====================================================
 # TRADITIONAL LOGIN (PASSWORD-BASED)
 # =====================================================
 
@@ -309,8 +450,8 @@ def login_user(
 ):
     """Login user with email/phone and password"""
     user = db.query(User).filter(
-        (User.email == request.email_or_phone) |
-        (User.phone_number == request.email_or_phone)
+       
+        (User.phone_number == request.phone_number)
     ).first()
     
     if not user:
