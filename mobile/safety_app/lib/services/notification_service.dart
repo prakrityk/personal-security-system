@@ -39,6 +39,10 @@ class NotificationService {
 
   static bool _isFlutterLocalNotificationsInitialized = false;
 
+  // Simple in-memory dedupe for rapid duplicate SOS notifications.
+  static String? _lastNotificationKey;
+  static DateTime? _lastNotificationAt;
+
   static const String _tokenKey = 'fcm_token';
   static const String _tokenSentKey = 'fcm_token_sent';
 
@@ -256,6 +260,19 @@ class NotificationService {
     final eventId = message.data['event_id']?.toString();
 
     debugPrint('📨 Showing notification: $title - $body');
+
+    // Dedupe: if the same SOS/motion notification arrives multiple times in a
+    // very short window, only show it once to the user.
+    final dedupeKey = '$type:$eventId:$title:$body';
+    final now = DateTime.now();
+    if (_lastNotificationKey == dedupeKey &&
+        _lastNotificationAt != null &&
+        now.difference(_lastNotificationAt!).inSeconds < 2) {
+      debugPrint('⏭️ Skipping duplicate notification for key: $dedupeKey');
+      return;
+    }
+    _lastNotificationKey = dedupeKey;
+    _lastNotificationAt = now;
 
     // Determine channel and priority based on type
     String channelId;

@@ -16,6 +16,7 @@ import 'package:safety_app/features/home/family/widgets/emergency_contatcs_secti
 import 'package:safety_app/models/dependent_model.dart';
 import 'package:safety_app/services/collaborator_service.dart';
 import 'package:safety_app/services/dependent_profile_service.dart';
+import 'package:safety_app/services/dependent_safety_service.dart';
 import 'package:safety_app/features/home/family/widgets/collaborator_invitation_dialog.dart';
 
 class FamilyMemberDetailScreen extends ConsumerStatefulWidget {
@@ -32,6 +33,7 @@ class _FamilyMemberDetailScreenState
     extends ConsumerState<FamilyMemberDetailScreen> {
   final CollaboratorService _collaboratorService = CollaboratorService();
   final DependentProfileService _profileService = DependentProfileService();
+  final DependentSafetyService _safetyService = DependentSafetyService();
 
   List<Map<String, dynamic>> _collaborators = [];
   bool _isLoadingCollaborators = false;
@@ -85,13 +87,35 @@ class _FamilyMemberDetailScreenState
   }
 
   Future<void> _loadSafetySettings() async {
-    // TODO: Load actual settings from backend
-    setState(() {
-      _liveLocationTracking = true;
-      _audioRecording = false;
-      _motionDetection = true;
-      _autoRecording = false;
-    });
+    try {
+      print(
+        '📡 Loading safety settings for dependent ${widget.dependent.dependentId}',
+      );
+      final settings = await _safetyService.getDependentSafetySettings(
+        widget.dependent.dependentId,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _liveLocationTracking = settings.liveLocation;
+        _audioRecording = settings.audioRecording;
+        _motionDetection = settings.motionDetection;
+        _autoRecording = settings.autoRecording;
+      });
+
+      print(
+        '✅ Safety settings loaded: '
+        'location=$_liveLocationTracking, '
+        'audio=$_audioRecording, '
+        'motion=$_motionDetection, '
+        'auto_recording=$_autoRecording',
+      );
+    } catch (e) {
+      print('❌ Failed to load safety settings: $e');
+      if (!mounted) return;
+      _showErrorSnackbar('Failed to load safety settings');
+    }
   }
 
   // ==================== PROFILE PICTURE METHODS ====================
@@ -294,7 +318,26 @@ class _FamilyMemberDetailScreenState
   // ==================== OTHER METHODS ====================
 
   Future<void> _updateSafetySetting(String setting, bool value) async {
-    // TODO: Update backend
+    // Map local setting keys to backend field names
+    String? fieldName;
+    switch (setting) {
+      case 'location':
+        fieldName = 'live_location';
+        break;
+      case 'audio':
+        fieldName = 'audio_recording';
+        break;
+      case 'motion':
+        fieldName = 'motion_detection';
+        break;
+      case 'recording':
+        fieldName = 'auto_recording';
+        break;
+      default:
+        return;
+    }
+
+    // Optimistically update local UI state
     setState(() {
       switch (setting) {
         case 'location':
@@ -312,7 +355,37 @@ class _FamilyMemberDetailScreenState
       }
     });
 
-    _showSuccessSnackbar('Setting updated successfully');
+    try {
+      await _safetyService.updateDependentSafetySettings(
+        dependentId: widget.dependent.dependentId,
+        updates: {fieldName: value},
+      );
+      if (!mounted) return;
+      _showSuccessSnackbar('Setting updated successfully');
+    } catch (e) {
+      print('❌ Failed to update safety setting: $e');
+      if (!mounted) return;
+
+      // Revert optimistic update on failure
+      setState(() {
+        switch (setting) {
+          case 'location':
+            _liveLocationTracking = !value;
+            break;
+          case 'audio':
+            _audioRecording = !value;
+            break;
+          case 'motion':
+            _motionDetection = !value;
+            break;
+          case 'recording':
+            _autoRecording = !value;
+            break;
+        }
+      });
+
+      _showErrorSnackbar('Failed to update setting');
+    }
   }
 
   Future<void> _inviteCollaborator() async {

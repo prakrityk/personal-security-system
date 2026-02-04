@@ -354,9 +354,11 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
       );
 
       print('✅ SOS event created: $eventId');
+      if (!mounted) return;
       _showSOSActivatedConfirmation(context, isDark);
     } catch (e) {
       print('❌ Failed to create SOS event: $e');
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to send SOS. Please try again.'),
@@ -529,6 +531,7 @@ class _CountdownDialogState extends State<_CountdownDialog> {
           onPressed: () {
             _timer?.cancel();
             Navigator.of(context).pop(); // close countdown dialog
+            if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: const Text('SOS cancelled'),

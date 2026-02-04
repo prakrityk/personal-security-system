@@ -12,24 +12,11 @@ import 'package:safety_app/core/providers/theme_provider.dart';
 import 'package:safety_app/core/providers/auth_provider.dart';
 import 'package:safety_app/services/notification_service.dart';
 import 'package:safety_app/services/motion_detection_service.dart';
+import 'package:safety_app/services/dependent_safety_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// ✅ IMPORTANT: GlobalKey for navigation
+// (Optional) GlobalKey for navigation if you decide to hook it up later.
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
-
-/// 🔥 TOP-LEVEL FUNCTION: Handle background notifications
-/// This MUST be a top-level function (not inside a class)
-@pragma('vm:entry-point')
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // Initialize Firebase if not already initialized
-  await Firebase.initializeApp();
-
-  // Initialize notification service to display the notification
-  await NotificationService.setupFlutterNotifications();
-  await NotificationService.showNotification(message);
-
-  debugPrint('🔔 Background message handled: ${message.notification?.title}');
-}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -38,10 +25,6 @@ void main() async {
     // 🔥 Initialize Firebase (CRITICAL - Must be done before anything else)
     await Firebase.initializeApp();
     debugPrint('✅ Firebase initialized');
-
-    // 🔥 Register background message handler
-    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-    debugPrint('✅ Background message handler registered');
 
     // Initialize SharedPreferences
     final sharedPreferences = await SharedPreferences.getInstance();
@@ -155,6 +138,37 @@ class _SOSAppState extends ConsumerState<SOSApp> {
     ref.listen(authStateProvider, (previous, next) async {
       final user = next.value;
       final prefs = ref.read(sharedPreferencesProvider);
+
+      // If the logged-in user is a dependent, always respect the guardian's
+      // per-dependent settings from the backend.
+      if (user != null && user.isDependent) {
+        try {
+          final safetyService = DependentSafetyService();
+          final safety = await safetyService.getMySafetySettings();
+          final motionEnabled = safety.motionDetection;
+
+          await prefs.setBool('motion_detection_enabled', motionEnabled);
+
+          if (motionEnabled) {
+            debugPrint(
+              '🎯 Dependent logged in - motion detection enabled by guardian, starting service',
+            );
+            MotionDetectionService.instance.start();
+          } else {
+            debugPrint(
+              '🛑 Dependent logged in - motion detection disabled by guardian, stopping service',
+            );
+            MotionDetectionService.instance.stop();
+          }
+        } catch (e, st) {
+          debugPrint(
+            '❌ Failed to load dependent safety settings for motion detection: $e',
+          );
+          debugPrint(st.toString());
+          // In case of failure, fall back to local preference below.
+        }
+      }
+
       final enabled = prefs.getBool('motion_detection_enabled') ?? false;
 
       if (user != null && enabled) {

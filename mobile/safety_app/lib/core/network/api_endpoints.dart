@@ -81,6 +81,20 @@ class ApiEndpoints {
   static const String deleteDependentEmergencyContact =
       '/dependent/emergency-contacts'; // /{id}
 
+  // ==================== SAFETY SETTINGS (PER-DEPENDENT) ====================
+  //
+  // Primary guardians configure per-dependent safety features. Dependents and
+  // collaborator guardians read the resolved settings.
+  //
+  // Guardian -> Dependent safety settings:
+  //   GET  /api/guardian/dependents/{id}/safety-settings
+  //   PATCH  /api/guardian/dependents/{id}/safety-settings
+  //
+  // Dependent -> Own resolved safety settings:
+  //   GET  /api/dependent/my-safety-settings
+  static const String dependentSafetySettings = '/guardian/dependents';
+  static const String mySafetySettings = '/dependent/my-safety-settings';
+
   // SOS Event endpoints (manual + motion)
   static const String createSosEvent = '/sos/events';
   // Other endpoints (add as needed)
