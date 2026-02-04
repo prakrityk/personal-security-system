@@ -9,7 +9,9 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:safety_app/core/theme/app_theme.dart';
 import 'package:safety_app/routes/app_router.dart';
 import 'package:safety_app/core/providers/theme_provider.dart';
+import 'package:safety_app/core/providers/auth_provider.dart';
 import 'package:safety_app/services/notification_service.dart';
+import 'package:safety_app/services/motion_detection_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // ✅ IMPORTANT: GlobalKey for navigation
@@ -148,6 +150,25 @@ class _SOSAppState extends ConsumerState<SOSApp> {
   @override
   Widget build(BuildContext context) {
     final themeMode = ref.watch(themeModeProvider);
+
+    // ✅ FIXED: Listen to auth changes in build method instead of initState
+    ref.listen(authStateProvider, (previous, next) async {
+      final user = next.value;
+      final prefs = ref.read(sharedPreferencesProvider);
+      final enabled = prefs.getBool('motion_detection_enabled') ?? false;
+
+      if (user != null && enabled) {
+        debugPrint(
+          '🎯 User logged in and motion detection enabled - starting service',
+        );
+        MotionDetectionService.instance.start();
+      } else {
+        debugPrint(
+          '🛑 User logged out or motion detection disabled - stopping service',
+        );
+        MotionDetectionService.instance.stop();
+      }
+    });
 
     // ✅ CRITICAL: Use MaterialApp.router to provide MaterialLocalizations
     return MaterialApp.router(
