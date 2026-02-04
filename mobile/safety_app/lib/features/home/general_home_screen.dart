@@ -140,10 +140,7 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
     return Scaffold(
       // Only show app bar for Home tab (index 0)
       appBar: _currentIndex == 0
-          ? const HomeAppBar(
-              notificationCount: 3,
-              onNotificationTap: null, // TODO: Navigate to notifications
-            )
+          ? const HomeAppBar()
           : null,
       body: Stack(
         children: [
