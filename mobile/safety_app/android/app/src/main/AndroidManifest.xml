@@ -6,6 +6,11 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- ✅ Needed for foreground background service with motion detection -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
+
     
     <!-- Camera feature (optional - app works without camera) -->
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
@@ -36,7 +41,20 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        
+<!-- 🚨 FCM DEFAULT CHANNEL: Use SOS Alerts as default for critical notifications -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="sos_alerts" />
+
+        <!-- 🔔 FCM DEFAULT NOTIFICATION ICON -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@mipmap/ic_launcher" />
+
+        <!-- 🎨 FCM DEFAULT NOTIFICATION COLOR (Red for emergency) -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@android:color/holo_red_dark" />
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

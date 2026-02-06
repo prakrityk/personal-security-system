@@ -3,7 +3,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:safety_app/core/navigation/role_navigation_guard.dart';
 import 'package:safety_app/core/providers/auth_provider.dart';
 import 'package:safety_app/features/account/screens/account_screen.dart';
 import 'package:safety_app/features/account/screens/profile_edit_screen.dart';
@@ -13,6 +12,7 @@ import 'package:safety_app/features/auth/screens/registration_screen.dart';
 import 'package:safety_app/features/auth/screens/email_verification_screen.dart';
 import 'package:safety_app/features/home/family/screens/family_member_detail_screen.dart';
 import 'package:safety_app/features/home/general_home_screen.dart';
+import 'package:safety_app/features/notifications/screens/notification_list_screen.dart';
 import 'package:safety_app/features/onboarding/screens/lets_get_started_screen.dart';
 import 'package:safety_app/features/auth/screens/phone_number_screen.dart';
 import 'package:safety_app/features/intent/screens/role_intent_screen.dart';
@@ -156,6 +156,14 @@ class AppRouter {
       },
 
       routes: [
+        GoRoute(
+          path: '/notifications',
+          name: 'notifications',
+          pageBuilder: (context, state) => MaterialPage(
+            key: state.pageKey,
+            child: const NotificationListScreen(),
+          ),
+        ),
         // ==================== AUTH FLOW ====================
 
         // Splash Screen

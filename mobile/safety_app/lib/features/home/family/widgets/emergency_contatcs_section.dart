@@ -940,10 +940,10 @@ class _EmergencyContactsSectionState
       final success = _isPersonalMode
           ? await ref
                 .read(emergencyContactNotifierProvider.notifier)
-                .deleteContact(contact.id!)
+                .deleteContact(contact.id)
           : await ref
                 .read(emergencyContactNotifierProvider.notifier)
-                .deleteDependentContact(contact.id!);
+                .deleteDependentContact(contact.id);
 
       if (mounted && success) {
         ScaffoldMessenger.of(context).showSnackBar(

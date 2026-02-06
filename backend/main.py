@@ -14,6 +14,8 @@ from api.routes import guardian
 from api.routes import dependent
 from api.routes import emergency_contact
 from api.routes import guardian_auto_contacts
+from api.routes import device
+from api.routes import sos
 
 
 
@@ -70,6 +72,8 @@ app.include_router(guardian.router,prefix="/api/guardian",tags=["guardian"])
 app.include_router(dependent.router,prefix="/api/dependent",tags=["dependent"])
 app.include_router(emergency_contact.router, prefix="/api", tags=["emergency"]) 
 app.include_router(guardian_auto_contacts.router, prefix="/api/guardian", tags=["guardian_auto_contacts"])  
+app.include_router(device.router, prefix="/api", tags=["devices"])
+app.include_router(sos.router, prefix="/api", tags=["sos"])
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

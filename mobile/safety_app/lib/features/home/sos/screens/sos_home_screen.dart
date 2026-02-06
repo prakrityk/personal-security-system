@@ -1,5 +1,8 @@
 // lib/features/home/sos/screens/sos_home_screen_improved.dart
 // ✅ FIXED: Uses SEPARATE provider for personal contacts to prevent state pollution
+// ✅ FIXED: Countdown timer now properly uses setState instead of markNeedsBuild
+
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +13,7 @@ import 'package:safety_app/core/providers/auth_provider.dart';
 import 'package:safety_app/core/providers/personal_emergency_contact_provider.dart';
 import 'package:safety_app/core/providers/permission_provider.dart';
 import 'package:safety_app/features/home/sos/widgets/personal_emergency_contacts_widget.dart';
+import 'package:safety_app/services/sos_event_service.dart';
 import '../widgets/sos_button.dart';
 
 class SosHomeScreen extends ConsumerStatefulWidget {
@@ -20,6 +24,9 @@ class SosHomeScreen extends ConsumerStatefulWidget {
 }
 
 class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
+  final SosEventService _sosService = SosEventService();
+  static const int _countdownSeconds = 5;
+
   @override
   void initState() {
     super.initState();
@@ -215,9 +222,6 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
           ElevatedButton.icon(
             onPressed: () {
               ref.invalidate(permissionSummaryProvider);
-              ref
-                  .read(personalContactsNotifierProvider.notifier)
-                  .loadMyContacts();
             },
             icon: const Icon(Icons.refresh),
             label: const Text('Retry'),
@@ -255,13 +259,13 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Icon(
-                Icons.emergency,
+                Icons.warning_amber,
                 color: AppColors.sosRed,
                 size: 24,
               ),
             ),
             const SizedBox(width: 12),
-            const Expanded(child: Text('Activate SOS')),
+            const Expanded(child: Text('Confirm SOS Alert')),
           ],
         ),
         content: Column(
@@ -269,7 +273,7 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Send emergency alert to all ${contactsState.contacts.length} contact${contactsState.contacts.length != 1 ? 's' : ''}?',
+              'This will immediately alert all your emergency contacts.',
               style: AppTextStyles.bodyMedium,
             ),
             const SizedBox(height: 16),
@@ -278,7 +282,10 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
               decoration: BoxDecoration(
                 color: Colors.orange.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                border: Border.all(
+                  color: Colors.orange.withOpacity(0.3),
+                  width: 1,
+                ),
               ),
               child: Row(
                 children: [
@@ -290,7 +297,7 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Your contacts will receive your location and an emergency notification.',
+                      'You will have $_countdownSeconds seconds to cancel before SOS is sent.',
                       style: AppTextStyles.caption.copyWith(
                         color: Colors.orange.shade800,
                       ),
@@ -308,20 +315,62 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
           ),
           ElevatedButton(
             onPressed: () {
-              // TODO: Implement SOS activation
               Navigator.pop(context);
-              _showSOSActivatedConfirmation(context, isDark);
+              _showCountdownAndSend(context, isDark);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.sosRed,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
-            child: const Text('Send Alert'),
+            child: const Text('Continue'),
           ),
         ],
       ),
     );
+  }
+
+  void _showCountdownAndSend(BuildContext context, bool isDark) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return _CountdownDialog(
+          countdownSeconds: _countdownSeconds,
+          isDark: isDark,
+          onComplete: () => _sendSosEvent(context, isDark),
+        );
+      },
+    );
+  }
+
+  Future<void> _sendSosEvent(BuildContext context, bool isDark) async {
+    try {
+      // Minimal MVP: no location yet, just record + notify.
+      final eventId = await _sosService.createSosEvent(
+        triggerType: 'manual',
+        eventType: 'panic_button',
+        appState: 'foreground',
+      );
+
+      print('✅ SOS event created: $eventId');
+      if (!mounted) return;
+      _showSOSActivatedConfirmation(context, isDark);
+    } catch (e) {
+      print('❌ Failed to create SOS event: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to send SOS. Please try again.'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          margin: const EdgeInsets.all(16),
+        ),
+      );
+    }
   }
 
   void _showNoContactsDialog(BuildContext context, bool isDark) {
@@ -399,6 +448,107 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
       ),
+    );
+  }
+}
+
+/// Separate StatefulWidget for countdown to properly handle timer and state
+class _CountdownDialog extends StatefulWidget {
+  final int countdownSeconds;
+  final bool isDark;
+  final VoidCallback onComplete;
+
+  const _CountdownDialog({
+    required this.countdownSeconds,
+    required this.isDark,
+    required this.onComplete,
+  });
+
+  @override
+  State<_CountdownDialog> createState() => _CountdownDialogState();
+}
+
+class _CountdownDialogState extends State<_CountdownDialog> {
+  late int _remaining;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _remaining = widget.countdownSeconds;
+    _startCountdown();
+  }
+
+  void _startCountdown() {
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+
+      setState(() {
+        _remaining--;
+      });
+
+      if (_remaining <= 0) {
+        timer.cancel();
+        if (mounted) {
+          Navigator.of(context).pop(); // close countdown dialog
+          widget.onComplete();
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: const Text('Sending SOS...'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'SOS will be sent in $_remaining seconds.',
+            style: AppTextStyles.bodyMedium,
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Tap "Cancel" if you are safe.',
+            style: AppTextStyles.caption,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () {
+            _timer?.cancel();
+            Navigator.of(context).pop(); // close countdown dialog
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text('SOS cancelled'),
+                backgroundColor: widget.isDark
+                    ? AppColors.darkSurface
+                    : AppColors.lightSurface,
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                margin: const EdgeInsets.all(16),
+              ),
+            );
+          },
+          child: const Text('Cancel'),
+        ),
+      ],
     );
   }
 }

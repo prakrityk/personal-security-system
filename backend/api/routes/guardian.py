@@ -7,6 +7,8 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from pydantic import BaseModel
+from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from pathlib import Path
@@ -51,6 +53,7 @@ from models.guardian_dependent import GuardianDependent
 from models.role import Role
 from models.user_roles import UserRole
 from models.collaborator_invitation import CollaboratorInvitation
+from models.dependent_safety_settings import DependentSafetySettings
 
 # Dependencies
 from api.dependencies.auth import get_current_user
@@ -693,7 +696,70 @@ async def get_my_dependents(
         )
 # ... (Keep all other endpoints from your original file until accept_invitation)
 
+# ====================================================================
+# NEW ENDPOINT: Add to guardian.py
+# ====================================================================
+# Location: Add this AFTER the get_collaborators function (around line 982)
+# This is a BRAND NEW endpoint that won't affect existing code
+# ====================================================================
 
+@router.get("/dependent/{dependent_id}/all-guardians", response_model=List[CollaboratorInfo])
+async def get_all_guardians(
+    dependent_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get ALL guardians for a dependent (both primary and collaborators)
+    
+    ✅ NEW ENDPOINT - Doesn't affect existing /collaborators endpoint
+    ✅ Accessible by BOTH primary guardians AND collaborators
+    ✅ Returns everyone in one call (primary + all collaborators)
+    """
+    print(f"📥 Fetching ALL guardians for dependent {dependent_id}")
+    print(f"   Requested by user {current_user.id}")
+    
+    # Allow any guardian (primary OR collaborator) to view all guardians
+    verify_any_guardian(current_user, dependent_id, db)
+    
+    # Get ALL guardian relationships (both primary and collaborators)
+    all_guardians = db.query(GuardianDependent).filter(
+        GuardianDependent.dependent_id == dependent_id
+    ).all()
+    
+    result = []
+    for rel in all_guardians:
+        guardian = db.query(User).filter(User.id == rel.guardian_id).first()
+        if guardian:
+            result.append(CollaboratorInfo(
+                relationship_id=rel.id,
+                guardian_id=rel.guardian_id,
+                guardian_name=guardian.full_name,
+                guardian_email=guardian.email,
+                phone_number=guardian.phone_number,
+                profile_picture=guardian.profile_picture,
+                joined_at=rel.created_at,
+                guardian_type=rel.guardian_type,  # "primary" or "collaborator"
+                is_primary=rel.is_primary  # ✅ CRITICAL FLAG
+            ))
+    
+    print(f"✅ Found {len(result)} total guardians (primary + collaborators)")
+    return result
+
+
+# ====================================================================
+# ENDPOINT DETAILS:
+# ====================================================================
+# URL: GET /api/guardian/dependent/{dependent_id}/all-guardians
+# Auth: Required (any guardian of this dependent)
+# Response: List of CollaboratorInfo with ALL guardians
+#
+# This endpoint:
+# - Doesn't modify existing /collaborators endpoint
+# - Returns primary guardian + all collaborators in one call
+# - Includes is_primary flag to identify who is primary
+# - Works for both primary guardians and collaborators
+# ====================================================================
 # ================================================
 # COLLABORATOR INVITATION - ACCEPT (FIXED)
 # ================================================
@@ -1007,6 +1073,107 @@ async def revoke_collaborator(
     print(f"✅ Collaborator access revoked for relationship {relationship_id}")
     
     return {"success": True, "message": "Collaborator access revoked successfully"}
+
+
+# ================================================
+# DEPENDENT SAFETY SETTINGS (per-dependent)
+# Primary guardian: GET + PATCH; Collaborator: GET only
+# ================================================
+
+class SafetySettingsResponse(BaseModel):
+    live_location: bool
+    audio_recording: bool
+    motion_detection: bool
+    auto_recording: bool
+
+    class Config:
+        from_attributes = True
+
+
+class SafetySettingsUpdate(BaseModel):
+    """Partial update; only provided fields are updated."""
+    live_location: Optional[bool] = None
+    audio_recording: Optional[bool] = None
+    motion_detection: Optional[bool] = None
+    auto_recording: Optional[bool] = None
+
+
+def _get_or_create_safety_settings(dependent_id: int, db: Session) -> DependentSafetySettings:
+    """Get existing row or create one with defaults."""
+    row = db.query(DependentSafetySettings).filter(
+        DependentSafetySettings.dependent_id == dependent_id
+    ).first()
+    if row:
+        return row
+    row = DependentSafetySettings(
+        dependent_id=dependent_id,
+        live_location=False,
+        audio_recording=False,
+        motion_detection=False,
+        auto_recording=False,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@router.get(
+    "/dependents/{dependent_id}/safety-settings",
+    response_model=SafetySettingsResponse,
+    summary="Get dependent safety settings",
+    description="Get safety settings for a dependent. Primary and collaborator guardians can view.",
+)
+async def get_dependent_safety_settings(
+    dependent_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Any guardian (primary or collaborator) can view this dependent's safety settings."""
+    verify_any_guardian(current_user, dependent_id, db)
+
+    row = _get_or_create_safety_settings(dependent_id, db)
+    return SafetySettingsResponse(
+        live_location=row.live_location,
+        audio_recording=row.audio_recording,
+        motion_detection=row.motion_detection,
+        auto_recording=row.auto_recording,
+    )
+
+
+@router.patch(
+    "/dependents/{dependent_id}/safety-settings",
+    response_model=SafetySettingsResponse,
+    summary="Update dependent safety settings",
+    description="Update safety settings for a dependent. Primary guardian only.",
+)
+async def update_dependent_safety_settings(
+    dependent_id: int,
+    body: SafetySettingsUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Only primary guardian can update this dependent's safety settings."""
+    verify_primary_guardian(current_user, dependent_id, db)
+
+    row = _get_or_create_safety_settings(dependent_id, db)
+    if body.live_location is not None:
+        row.live_location = body.live_location
+    if body.audio_recording is not None:
+        row.audio_recording = body.audio_recording
+    if body.motion_detection is not None:
+        row.motion_detection = body.motion_detection
+    if body.auto_recording is not None:
+        row.auto_recording = body.auto_recording
+    db.commit()
+    db.refresh(row)
+    return SafetySettingsResponse(
+        live_location=row.live_location,
+        audio_recording=row.audio_recording,
+        motion_detection=row.motion_detection,
+        auto_recording=row.auto_recording,
+    )
+
 
 # Configure upload directory
 UPLOAD_DIR = Path("uploads/profile_pictures")

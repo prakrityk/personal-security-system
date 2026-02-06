@@ -1,11 +1,9 @@
 // lib/services/permission_service.dart
 import 'package:flutter/material.dart';
 import 'package:safety_app/models/user_model.dart';
-import 'package:safety_app/models/role_info.dart';
 import 'package:safety_app/services/auth_service.dart';
 import 'package:safety_app/services/guardian_service.dart';
 import 'package:safety_app/services/family_service.dart';
-import 'package:safety_app/models/dependent_model.dart';
 
 /// Permission Service - Handles role-based permissions and access control
 class PermissionService {

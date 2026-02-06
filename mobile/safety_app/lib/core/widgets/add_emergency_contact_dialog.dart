@@ -314,7 +314,7 @@ class _AddEmergencyContactDialogState
 
                 // Relationship Dropdown
                 DropdownButtonFormField<String>(
-                  value: _selectedRelationship,
+                  initialValue: _selectedRelationship,
                   decoration: InputDecoration(
                     labelText: 'Relationship',
                     prefixIcon: const Icon(Icons.people_outline),

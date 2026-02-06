@@ -124,14 +124,18 @@ class AcceptInvitationResponse(BaseModel):
         }
 
 
+# ✅ UPDATED CLASS - Added 3 new fields
 class CollaboratorInfo(BaseModel):
     """Info about a collaborator guardian"""
     relationship_id: int
     guardian_id: int
     guardian_name: str
     guardian_email: str
+    phone_number: Optional[str] = None  # ✅ ADDED
+    profile_picture: Optional[str] = None  # ✅ ADDED
     joined_at: datetime
     guardian_type: str = "collaborator"
+    is_primary: bool = False  # ✅ ADDED - CRITICAL!
     
     class Config:
         from_attributes = True

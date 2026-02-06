@@ -1,7 +1,11 @@
 class ApiEndpoints {
-  // Use your laptop's IP address for physical device
+  // ✅ Use your laptop's IP address for physical device
+  // Change this to match your actual backend server IP
   static const String baseUrl = 'http://localhost:8000/api';
-  //static const String baseUrl = 'http://192.168.21.102:8000/api';
+  //'http://192.168.21.102:8000/api';
+
+  // For emulator testing, use: 'http://10.0.2.2:8000/api'
+  // For localhost web testing, use: 'http://localhost:8000/api'
 
   // Auth endpoints
   static const String sendVerificationCode = '/auth/send-verification-code';
@@ -76,6 +80,23 @@ class ApiEndpoints {
       '/dependent/emergency-contacts'; // /{id}
   static const String deleteDependentEmergencyContact =
       '/dependent/emergency-contacts'; // /{id}
+
+  // ==================== SAFETY SETTINGS (PER-DEPENDENT) ====================
+  //
+  // Primary guardians configure per-dependent safety features. Dependents and
+  // collaborator guardians read the resolved settings.
+  //
+  // Guardian -> Dependent safety settings:
+  //   GET  /api/guardian/dependents/{id}/safety-settings
+  //   PATCH  /api/guardian/dependents/{id}/safety-settings
+  //
+  // Dependent -> Own resolved safety settings:
+  //   GET  /api/dependent/my-safety-settings
+  static const String dependentSafetySettings = '/guardian/dependents';
+  static const String mySafetySettings = '/dependent/my-safety-settings';
+
+  // SOS Event endpoints (manual + motion)
+  static const String createSosEvent = '/sos/events';
   // Other endpoints (add as needed)
   // Family Service endpoints
   static const String getFamilyStats =
@@ -87,10 +108,16 @@ class ApiEndpoints {
   // static const String updateProfile = '/user/profile';
   // static const String uploadAvatar = '/user/avatar';
 
-  
   // ==================== DEPENDENT PROFILE PICTURE ====================
 
   /// Upload/Update profile picture for a dependent (Primary Guardian only)
   /// POST /api/guardian/dependents/{dependent_id}/profile-picture
   static const String uploadDependentProfilePicture = '/guardian/dependents';
+
+  static const String deviceRegister = '/devices/register';
+  static const String deviceUnregister = '/devices/unregister';
+
+  // Timeouts
+  static const Duration connectTimeout = Duration(seconds: 10);
+  static const Duration receiveTimeout = Duration(seconds: 10);
 }

@@ -1,6 +1,3 @@
-// ===================================================================
-// FIXED: home_app_bar.dart - Proper Profile Picture URL
-// ===================================================================
 // lib/features/home/home_app_bar.dart
 
 import 'package:flutter/material.dart';
@@ -9,30 +6,19 @@ import 'package:go_router/go_router.dart';
 import 'package:safety_app/core/theme/app_colors.dart';
 import 'package:safety_app/core/theme/app_text_styles.dart';
 import 'package:safety_app/core/providers/auth_provider.dart';
-import 'package:safety_app/features/account/screens/account_screen.dart';
+import 'package:safety_app/core/providers/notification_provider.dart';
 import 'package:safety_app/core/widgets/profile_picture_widget.dart';
-import 'package:safety_app/routes/app_router.dart'; // ✅ Add this import
+import 'package:safety_app/routes/app_router.dart';
 
 class HomeAppBar extends ConsumerWidget implements PreferredSizeWidget {
-  final int notificationCount;
-  final VoidCallback? onNotificationTap;
-
-  const HomeAppBar({
-    super.key,
-    required this.notificationCount,
-    this.onNotificationTap,
-  });
+  const HomeAppBar({super.key});
 
   void _handleProfileTap(BuildContext context, bool isDependent) {
     if (isDependent) {
-      // ❌ Show message to dependents
+      // Show message to dependents
       _showDependentMessage(context);
     } else {
-      // ✅ Navigate to account screen for non-dependents
-      // Navigator.of(
-      //   context,
-      // ).push(MaterialPageRoute(builder: (_) => const AccountScreen()));
-      // ✅ NEW
+      // Navigate to account screen for non-dependents
       context.push(AppRouter.account);
     }
   }
@@ -89,6 +75,12 @@ class HomeAppBar extends ConsumerWidget implements PreferredSizeWidget {
     final roleName = user?.currentRole?.roleName;
     final isDependent = roleName == 'child' || roleName == 'elderly';
 
+    // ✅ Watch notification count
+    final unreadCount = ref.watch(unreadNotificationCountProvider);
+
+    // ✅ Check if user can see notifications (guardian or personal only)
+    final canSeeNotifications = !isDependent; // Hide for dependents
+
     return AppBar(
       elevation: 0,
       backgroundColor: Colors.transparent,
@@ -99,12 +91,17 @@ class HomeAppBar extends ConsumerWidget implements PreferredSizeWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // ✅ FIXED: Use ProfilePictureWidget instead of manual CircleAvatar
-            ProfilePictureWidget(
-              profilePicturePath: user?.profilePicture,
-              fullName: userName,
-              radius: 20,
-              showBorder: false,
+            // Profile Picture with Notification Badge
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                ProfilePictureWidget(
+                  profilePicturePath: user?.profilePicture,
+                  fullName: userName,
+                  radius: 20,
+                  showBorder: false,
+                ),
+              ],
             ),
 
             const SizedBox(width: 10),
@@ -125,7 +122,7 @@ class HomeAppBar extends ConsumerWidget implements PreferredSizeWidget {
                     overflow: TextOverflow.ellipsis,
                     maxLines: 1,
                   ),
-                  // ✅ Show dependent badge if applicable
+                  // Show dependent badge if applicable
                   if (isDependent)
                     Text(
                       'Managed Account',
@@ -141,41 +138,47 @@ class HomeAppBar extends ConsumerWidget implements PreferredSizeWidget {
         ),
       ),
       actions: [
-        // Notifications
-        Stack(
-          alignment: Alignment.topRight,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.notifications_outlined),
-              onPressed: onNotificationTap,
-            ),
-            if (notificationCount > 0)
-              Positioned(
-                right: 10,
-                top: 8,
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  constraints: const BoxConstraints(
-                    minWidth: 18,
-                    minHeight: 18,
-                  ),
-                  decoration: const BoxDecoration(
-                    color: AppColors.sosRed,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Text(
-                    notificationCount > 9 ? '9+' : '$notificationCount',
-                    style: AppTextStyles.caption.copyWith(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
+        // ✅ Notifications Button - Only show for guardians and personal users
+        if (canSeeNotifications)
+          Stack(
+            alignment: Alignment.topRight,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.notifications_outlined),
+                onPressed: () {
+                  // Navigate to notifications screen
+                  context.push('/notifications');
+                },
+                tooltip: 'Notifications',
+              ),
+              // Unread badge
+              if (unreadCount > 0)
+                Positioned(
+                  right: 10,
+                  top: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    constraints: const BoxConstraints(
+                      minWidth: 18,
+                      minHeight: 18,
                     ),
-                    textAlign: TextAlign.center,
+                    decoration: const BoxDecoration(
+                      color: AppColors.sosRed,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text(
+                      unreadCount > 9 ? '9+' : '$unreadCount',
+                      style: AppTextStyles.caption.copyWith(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
                   ),
                 ),
-              ),
-          ],
-        ),
+            ],
+          ),
         const SizedBox(width: 8),
       ],
     );

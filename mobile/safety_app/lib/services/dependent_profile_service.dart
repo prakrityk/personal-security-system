@@ -15,13 +15,13 @@ class DependentProfileService {
   final DioClient _dioClient = DioClient();
 
   /// Upload profile picture for a dependent (Primary Guardian only)
-  /// 
+  ///
   /// Parameters:
   /// - dependentId: ID of the dependent user
   /// - imageFile: Image file to upload
-  /// 
+  ///
   /// Returns: Updated user model with new profile picture
-  /// 
+  ///
   /// Throws:
   /// - Exception if user is not primary guardian
   /// - Exception if file is too large (>5MB)
@@ -45,9 +45,9 @@ class DependentProfileService {
       // Check file size (5MB limit)
       final fileSize = await imageFile.length();
       const maxSize = 5 * 1024 * 1024; // 5MB
-      
+
       print('File size: ${(fileSize / 1024 / 1024).toStringAsFixed(2)}MB');
-      
+
       if (fileSize > maxSize) {
         throw Exception('File too large. Maximum size is 5MB');
       }
@@ -55,7 +55,7 @@ class DependentProfileService {
       // Prepare multipart file
       final fileName = imageFile.path.split('/').last;
       final fileExtension = fileName.split('.').last.toLowerCase();
-      
+
       // Determine content type
       String contentType;
       switch (fileExtension) {
@@ -84,13 +84,11 @@ class DependentProfileService {
       });
 
       // Upload to backend
-      final endpoint = '${ApiEndpoints.uploadDependentProfilePicture}/$dependentId/profile-picture';
+      final endpoint =
+          '${ApiEndpoints.uploadDependentProfilePicture}/$dependentId/profile-picture';
       print('Endpoint: $endpoint');
 
-      final response = await _dioClient.post(
-        endpoint,
-        data: formData,
-      );
+      final response = await _dioClient.post(endpoint, data: formData);
 
       print('✅ Upload successful');
       print('Response: ${response.data}');
@@ -106,7 +104,6 @@ class DependentProfileService {
       print('═══════════════════════════════════════════════════');
 
       return updatedUser;
-      
     } on DioException catch (e) {
       print('❌ DioException uploading dependent profile picture');
       print('Status code: ${e.response?.statusCode}');
@@ -114,17 +111,15 @@ class DependentProfileService {
 
       if (e.response?.statusCode == 403) {
         throw Exception(
-          e.response?.data['detail'] ?? 
-          'Only primary guardians can update dependent profile pictures'
+          e.response?.data['detail'] ??
+              'Only primary guardians can update dependent profile pictures',
         );
       } else if (e.response?.statusCode == 404) {
         throw Exception('Dependent not found');
       } else if (e.response?.statusCode == 413) {
         throw Exception('File too large. Maximum size is 5MB');
       } else if (e.response?.statusCode == 400) {
-        throw Exception(
-          e.response?.data['detail'] ?? 'Invalid image file'
-        );
+        throw Exception(e.response?.data['detail'] ?? 'Invalid image file');
       }
 
       rethrow;
@@ -135,20 +130,20 @@ class DependentProfileService {
   }
 
   /// Delete profile picture for a dependent (Primary Guardian only)
-  Future<void> deleteDependentProfilePicture(int dependentId) async {
+  Future<void> deleteDependentProfilePicture({required int dependentId}) async {
     try {
       print('═══════════════════════════════════════════════════');
       print('🗑️ DELETING DEPENDENT PROFILE PICTURE');
       print('═══════════════════════════════════════════════════');
       print('Dependent ID: $dependentId');
 
-      final endpoint = '${ApiEndpoints.uploadDependentProfilePicture}/$dependentId/profile-picture';
-      
+      final endpoint =
+          '${ApiEndpoints.uploadDependentProfilePicture}/$dependentId/profile-picture';
+
       await _dioClient.delete(endpoint);
 
       print('✅ Dependent profile picture deleted successfully');
       print('═══════════════════════════════════════════════════');
-      
     } on DioException catch (e) {
       print('❌ DioException deleting dependent profile picture');
       print('Status code: ${e.response?.statusCode}');
@@ -156,7 +151,7 @@ class DependentProfileService {
 
       if (e.response?.statusCode == 403) {
         throw Exception(
-          'Only primary guardians can delete dependent profile pictures'
+          'Only primary guardians can delete dependent profile pictures',
         );
       } else if (e.response?.statusCode == 404) {
         throw Exception('Dependent not found');
