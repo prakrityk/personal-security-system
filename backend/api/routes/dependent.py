@@ -20,6 +20,7 @@ from models.user import User
 from models.pending_dependent import PendingDependent
 from models.qr_invitation import QRInvitation
 from models.guardian_dependent import GuardianDependent
+from models.dependent_safety_settings import DependentSafetySettings
 from models.role import Role
 from models.user_roles import UserRole
 
@@ -315,6 +316,43 @@ async def get_my_guardians(
 # ================================================
 # REMOVE GUARDIAN (FIXED)
 # ================================================
+
+# ================================================
+# MY SAFETY SETTINGS (dependent device reads guardian-configured settings)
+# ================================================
+
+@router.get("/my-safety-settings")
+async def get_my_safety_settings(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get the current user's (dependent's) resolved safety settings.
+    These are configured by the primary guardian; the dependent's app
+    uses them for motion detection etc.
+    """
+    verify_dependent_role(current_user, db)
+
+    row = db.query(DependentSafetySettings).filter(
+        DependentSafetySettings.dependent_id == current_user.id
+    ).first()
+
+    if not row:
+        # Return defaults if no row yet (primary may not have set any)
+        return {
+            "live_location": False,
+            "audio_recording": False,
+            "motion_detection": False,
+            "auto_recording": False,
+        }
+
+    return {
+        "live_location": row.live_location,
+        "audio_recording": row.audio_recording,
+        "motion_detection": row.motion_detection,
+        "auto_recording": row.auto_recording,
+    }
+
 
 @router.delete("/remove-guardian/{relationship_id}")
 async def remove_guardian(

@@ -3,7 +3,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:safety_app/core/navigation/role_navigation_guard.dart';
 import 'package:safety_app/core/providers/auth_provider.dart';
 import 'package:safety_app/features/account/screens/account_screen.dart';
 import 'package:safety_app/features/account/screens/profile_edit_screen.dart';

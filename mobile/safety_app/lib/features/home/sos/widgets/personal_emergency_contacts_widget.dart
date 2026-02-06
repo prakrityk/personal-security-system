@@ -608,7 +608,7 @@ class _PersonalEmergencyContactsWidgetState
     if (confirmed == true) {
       final success = await ref
           .read(personalContactsNotifierProvider.notifier)
-          .deleteContact(contact.id!);
+          .deleteContact(contact.id);
 
       if (mounted && success) {
         ScaffoldMessenger.of(context).showSnackBar(

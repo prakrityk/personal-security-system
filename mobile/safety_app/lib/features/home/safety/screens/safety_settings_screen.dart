@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:safety_app/core/theme/app_colors.dart';
-import 'package:safety_app/core/theme/app_text_styles.dart';
 import 'package:safety_app/features/home/widgets/home_section_header.dart';
 import '../widgets/safety_toggle_tile.dart';
 import 'package:shared_preferences/shared_preferences.dart';

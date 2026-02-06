@@ -46,7 +46,7 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<UserModel?>> {
 
       state = AsyncValue.data(user);
       print('✅ AuthProvider: State updated successfully');
-    } catch (e, stack) {
+    } catch (e) {
       print('❌ AuthProvider: Error refreshing user - $e');
     }
   }
@@ -65,7 +65,7 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<UserModel?>> {
       await _authService.logout();
       state = const AsyncValue.data(null);
       print('✅ AuthStateNotifier: Logout successful - User state cleared');
-    } catch (e, stack) {
+    } catch (e) {
       print('⚠️ AuthStateNotifier: Logout error: $e');
       state = const AsyncValue.data(null);
       print('✅ AuthStateNotifier: State reset despite error');
@@ -91,7 +91,7 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<UserModel?>> {
         debugPrint('⚠️ [AuthProvider] No access token found in secure storage');
         return null;
       }
-    } catch (e, stack) {
+    } catch (e) {
       debugPrint('❌ [AuthProvider] Error getting access token: $e');
       return null;
     }

@@ -36,6 +36,8 @@ try:
     from models.refresh_token import RefreshToken
     from models.qr_invitation import QRInvitation  # Depends on pending_dependent
     from models.guardian_dependent import GuardianDependent  # Depends on pending_dependent
+    from models.dependent_safety_settings import DependentSafetySettings
+    from models.device import Device
     from models.sos_event import SOSEvent
 
     print("\n✅ Successfully imported all models!")
@@ -76,6 +78,7 @@ def create_database():
         print("   6. refresh_tokens - JWT refresh tokens ✨ NEW")
         print("   7. qr_invitations - QR codes for linking ✨ NEW")
         print("   8. guardian_dependents - Approved guardian-dependent relationships ✨ NEW")
+        print("   9. devices - Device tokens for push notifications ✨ NEW")
         print("   9. sos_events - SOS events (manual/motion) ✨ NEW")
         print("\n🔍 Verify in DBeaver - refresh and check!")
         
@@ -173,6 +176,7 @@ def verify_tables():
             'refresh_tokens',
             'qr_invitations',
             'guardian_dependents',
+            'devices',
             'sos_events',
         ]
         

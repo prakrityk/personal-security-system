@@ -314,7 +314,7 @@ class EmergencyContactsListWidget extends ConsumerWidget {
               child: _buildContactCard(context, isDark, contact, ref),
             ),
           );
-        }).toList(),
+        }),
       ],
     );
   }
@@ -778,10 +778,10 @@ class EmergencyContactsListWidget extends ConsumerWidget {
       final success = dependentId != null
           ? await ref
                 .read(emergencyContactNotifierProvider.notifier)
-                .deleteDependentContact(contact.id!)
+                .deleteDependentContact(contact.id)
           : await ref
                 .read(emergencyContactNotifierProvider.notifier)
-                .deleteContact(contact.id!);
+                .deleteContact(contact.id);
 
       // Success message is handled by the listener
     }

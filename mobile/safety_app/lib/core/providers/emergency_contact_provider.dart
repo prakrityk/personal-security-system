@@ -107,7 +107,7 @@ class EmergencyContactNotifier extends StateNotifier<EmergencyContactsState> {
         currentDependentId: null,
       );
       print('✅ Loaded ${contacts.length} personal emergency contacts');
-    } catch (e, stack) {
+    } catch (e) {
       print('❌ Error loading personal contacts: $e');
       state = state.copyWith(
         isLoading: false,
@@ -129,7 +129,7 @@ class EmergencyContactNotifier extends StateNotifier<EmergencyContactsState> {
         currentDependentId: dependentId,
       );
       print('✅ Loaded ${contacts.length} contacts for dependent $dependentId');
-    } catch (e, stack) {
+    } catch (e) {
       print('❌ Error loading dependent contacts: $e');
       state = state.copyWith(
         isLoading: false,
