@@ -13,7 +13,7 @@ class DioClient {
         connectTimeout: const Duration(seconds: 30),
         receiveTimeout: const Duration(seconds: 30),
         headers: {
-          'Content-Type': 'application/json',
+          // 'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
       ),
@@ -121,6 +121,33 @@ class DioClient {
       throw _handleError(e);
     }
   }
+
+  // POST multipart/form-data (for file uploads)
+ // POST multipart/form-data (for file uploads)
+Future<Response> postFormData(
+  String path, {
+  required dynamic data, // file and any other fields
+  Map<String, dynamic>? queryParameters, // query params like user_id, sample_number
+}) async {
+  try {
+    final requestData = data is FormData ? data : FormData.fromMap(data);
+
+    // Make POST request
+    final response = await _dio.post(
+      path,
+      data: requestData,
+      queryParameters: queryParameters, // query params
+      options: Options(
+        contentType: 'multipart/form-data', // Important!
+      ),
+    );
+
+    return response;
+  } on DioException catch (e) {
+    throw _handleError(e); // your existing error handler
+  }
+}
+
 
   // Error handler
   Exception _handleError(DioException error) {

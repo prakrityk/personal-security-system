@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:safety_app/services/auth_service.dart';
 import '../services/voice_record_service.dart';
 import 'package:audioplayers/audioplayers.dart';
 
@@ -16,11 +17,14 @@ class _VoiceRegistrationScreenState extends State<VoiceRegistrationScreen> {
   final AudioPlayer _audioPlayer = AudioPlayer();
 
   bool isRecording = false;
-  int sampleCount = 0; // total samples recorded
-  String? lastSamplePath; // path of the latest recorded sample
-  String statusText = "Press record & speak clearly";
+  bool isRetaking = false; // IMPORTANT FLAG
 
-  bool registrationCompleted = false; // ✅ tracks completion
+  int sampleCount = 0; // total finalized samples (max 3)
+  String? latestSamplePath;
+
+  bool registrationCompleted = false;
+
+  String statusText = "Press record & speak clearly";
 
   @override
   void initState() {
@@ -28,8 +32,9 @@ class _VoiceRegistrationScreenState extends State<VoiceRegistrationScreen> {
     Permission.microphone.request();
   }
 
+  //  START RECORDING 
   void startRecording() async {
-    if (sampleCount >= 3) return; // max 3 samples
+    if (sampleCount >= 3) return;
 
     bool allowed = await _recordService.hasPermission();
     if (!allowed) {
@@ -39,56 +44,97 @@ class _VoiceRegistrationScreenState extends State<VoiceRegistrationScreen> {
       return;
     }
 
-    // Start recording the next sample
+    isRetaking = false; //  this is a NEW sample
+
     final path = await _recordService.startRecording(sampleCount + 1);
 
     setState(() {
       isRecording = true;
-      lastSamplePath = path; // always update latest sample
-      statusText = "Recording sample ${sampleCount + 1}... Speak now";
+      latestSamplePath = path;
+      statusText = "Recording sample ${sampleCount + 1}...";
     });
   }
 
+  //STOP RECORDING 
   void stopRecording() async {
     await _recordService.stopRecording();
 
     setState(() {
       isRecording = false;
-      sampleCount++; // increment total samples
+
+      //  Increase count ONLY if not retaking
+      if (!isRetaking) {
+        sampleCount++;
+      }
+
       if (sampleCount == 3) {
-        registrationCompleted = true; // ✅ all 3 samples done
-        statusText = "✅ All 3 samples recorded. Registration completed!";
+        registrationCompleted = true;
+        statusText = "Voice registration completed!";
       } else {
         statusText =
-            "Sample $sampleCount recorded. You can play or retake the latest sample.";
+            "Sample $sampleCount saved. You may play or retake the latest sample.";
       }
+
+      isRetaking = false; // reset
+      
+    });
+    if (latestSamplePath != null) {
+      final user = await AuthService().getCurrentUser();
+      if (user != null) {
+        final userId = int.tryParse(user.id) ?? 0; // fix user.id red line safely
+
+        try{
+          final response = await AuthService().uploadVoice(
+            userId: userId,
+            sampleNumber: sampleCount,
+            filePath: latestSamplePath!,
+         );
+        setState(() {
+          statusText = response
+              ? "Sample $sampleCount uploaded successfully"
+              : "Upload failed for sample $sampleCount";
+        });
+        }catch(e){
+           setState(() {
+            statusText = "Upload failed for sample $sampleCount: $e";
+          });
+        }
+      } else {
+        setState(() {
+          statusText = "Error: User not found for upload";
+        });
+      }
+    }
+  }
+
+  // PLAY LATEST SAMPLE 
+  void playLatestSample() async {
+    if (latestSamplePath == null) return;
+
+    await _audioPlayer.stop();
+    await _audioPlayer.play(DeviceFileSource(latestSamplePath!));
+
+    setState(() {
+      statusText = "Playing latest sample...";
     });
   }
 
-  void playLatestSample() async {
-    if (lastSamplePath != null) {
-      await _audioPlayer.play(DeviceFileSource(lastSamplePath!));
-      setState(() {
-        statusText = "Playing latest sample...";
-      });
-    }
-  }
-
+  // RETAKE LATEST SAMPLE
   void retakeLatestSample() async {
-    if (lastSamplePath != null && sampleCount > 0) {
-      setState(() {
-        statusText = "Retaking latest sample...";
-      });
+    if (sampleCount == 0 || latestSamplePath == null) return;
 
-      // Start recording again for the same sample number (overwrite)
-      final path = await _recordService.startRecording(sampleCount);
-      setState(() {
-        isRecording = true;
-        lastSamplePath = path; // overwrite latest sample
-      });
-    }
+    isRetaking = true;
+
+    final path = await _recordService.startRecording(sampleCount);
+
+    setState(() {
+      isRecording = true;
+      latestSamplePath = path; // overwrite same file
+      statusText = "Retaking sample $sampleCount...";
+    });
   }
 
+  // UI 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -102,33 +148,40 @@ class _VoiceRegistrationScreenState extends State<VoiceRegistrationScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
-              "Voice Samples Recorded: $sampleCount / 3",
+              "Samples: $sampleCount / 3",
               style: const TextStyle(fontSize: 18),
             ),
             const SizedBox(height: 16),
             Text(
               statusText,
+              textAlign: TextAlign.center,
               style: const TextStyle(color: Colors.grey),
             ),
             const SizedBox(height: 40),
+
+            //  RECORD BUTTON 
             if (!registrationCompleted)
               ElevatedButton(
                 onPressed: isRecording ? stopRecording : startRecording,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: isRecording ? Colors.grey : Colors.red,
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 30, vertical: 14),
+                      const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
                 ),
-                child: Text(isRecording ? "Stop Recording" : "Start Recording"),
+                child:
+                    Text(isRecording ? "Stop Recording" : "Start Recording"),
               ),
+
             const SizedBox(height: 20),
-            if (lastSamplePath != null && !registrationCompleted)
+
+            //  LATEST SAMPLE ACTIONS 
+            if (latestSamplePath != null && !registrationCompleted)
               Column(
                 children: [
                   const Text(
-                    "Latest Sample Actions",
+                    "Latest Sample Only",
                     style: TextStyle(
-                        fontWeight: FontWeight.bold, color: Colors.black87),
+                        fontWeight: FontWeight.bold, fontSize: 16),
                   ),
                   const SizedBox(height: 12),
                   Row(
@@ -136,30 +189,32 @@ class _VoiceRegistrationScreenState extends State<VoiceRegistrationScreen> {
                     children: [
                       ElevatedButton(
                         onPressed: playLatestSample,
-                        style:
-                            ElevatedButton.styleFrom(backgroundColor: Colors.blue),
-                        child: const Text("Play Latest Sample"),
+                        style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue),
+                        child: const Text("Play"),
                       ),
                       const SizedBox(width: 16),
                       ElevatedButton(
                         onPressed: retakeLatestSample,
                         style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.orange),
-                        child: const Text("Retake Latest Sample"),
+                        child: const Text("Retake"),
                       ),
                     ],
                   ),
                 ],
               ),
+
+            //  COMPLETION MESSAGE 
             if (registrationCompleted)
               const Padding(
-                padding: EdgeInsets.only(top: 24),
+                padding: EdgeInsets.only(top: 30),
                 child: Text(
-                  "🎉 Voice Registration Completed!",
+                  "🎉 Voice Registration Completed",
                   style: TextStyle(
                       color: Colors.green,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18),
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold),
                 ),
               ),
           ],

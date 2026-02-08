@@ -2,7 +2,7 @@ class ApiEndpoints {
   // Use your laptop's IP address for physical device
 
   static const String baseUrl = 'http://localhost:8000/api';
-  //static const String baseUrl = 'http://192.168.21.102:8000/api';
+  // static const String baseUrl = 'http://192.168.21.102:8000/api';
   // static const String baseUrl = "http://10.0.2.2:8000/api";
 
   // Auth endpoints
@@ -24,4 +24,7 @@ class ApiEndpoints {
   // Other endpoints (add as needed)
   // static const String updateProfile = '/user/profile';
   // static const String uploadAvatar = '/user/avatar';
+
+  // for voice registration
+  static const String voiceRegister ='/voice/voice/register';
 }

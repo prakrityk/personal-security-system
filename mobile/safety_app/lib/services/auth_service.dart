@@ -380,7 +380,7 @@ class AuthService {
     try {
       await _dioClient.post(ApiEndpoints.selectRole, data: {"role_id": roleId});
 
-      print('✅ Role assigned successfully');
+      print(' Role assigned successfully');
 
       // Refresh user after role assignment
       final updatedUser = await fetchCurrentUser();
@@ -390,4 +390,42 @@ class AuthService {
       rethrow;
     }
   }
+
+  /// Upload a voice sample for the current user
+Future<bool> uploadVoice({
+  required int userId,
+  required int sampleNumber,
+  required String filePath,
+}) async {
+  try {
+    // Only the file goes in FormData
+    final formData = FormData.fromMap({
+      'file': await MultipartFile.fromFile(
+        filePath,
+        filename: 'sample_$sampleNumber.wav',
+      ),
+    });
+
+    // user_id and sample_number must go in queryParameters
+    final response = await _dioClient.postFormData(
+      ApiEndpoints.voiceRegister,
+      data: formData,
+      queryParameters: {
+        'user_id': userId,
+        'sample_number': sampleNumber,
+      },
+    );
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      print('✅ Voice sample uploaded successfully');
+      return true;
+    } else {
+      print('❌ Failed to upload voice sample: ${response.data}');
+      return false;
+    }
+  } catch (e) {
+    print('❌ Error uploading voice sample: $e');
+    return false;
+  }
+}
 }
