@@ -5,6 +5,8 @@ Main entry point with Firebase Admin SDK initialization
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from api.routes import evidence_routes
+
 
 # Import Firebase service
 from services.firebase_service import FirebaseService
@@ -69,12 +71,12 @@ def health_check():
 
 
 # Include routers
-from api.routes import auth
+from api.routes import auth,guardian,dependent,pending_dependent
 
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
-# app.include_router(guardian.router, prefix="/api/guardian", tags=["Guardian"])
-# app.include_router(dependent.router, prefix="/api/dependent", tags=["Dependent"])
-
+app.include_router(guardian.router, prefix="/api/guardian", tags=["Guardian"])
+app.include_router(dependent.router, prefix="/api/dependent", tags=["Dependent"])
+app.include_router(evidence_routes.router, prefix="/api/evidence", tags=["Evidence"])
 
 if __name__ == "__main__":
     import uvicorn

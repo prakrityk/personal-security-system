@@ -36,6 +36,8 @@ try:
     from models.refresh_token import RefreshToken
     from models.qr_invitation import QRInvitation  # Depends on pending_dependent
     from models.guardian_dependent import GuardianDependent  # Depends on pending_dependent
+    from models.evidence import Evidence  #
+
 
     print("\n✅ Successfully imported all models!")
 except ImportError as e:

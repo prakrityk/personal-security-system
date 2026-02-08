@@ -1,0 +1,222 @@
+[1mdiff --git a/backend/database/init_db.py b/backend/database/init_db.py[m
+[1mindex 2d855fa..9e6a2ee 100644[m
+[1m--- a/backend/database/init_db.py[m
+[1m+++ b/backend/database/init_db.py[m
+[36m@@ -36,6 +36,8 @@[m [mtry:[m
+     from models.refresh_token import RefreshToken[m
+     from models.qr_invitation import QRInvitation  # Depends on pending_dependent[m
+     from models.guardian_dependent import GuardianDependent  # Depends on pending_dependent[m
+[32m+[m[32m    from models.evidence import Evidence  #[m
+[32m+[m
+ [m
+     print("\n✅ Successfully imported all models!")[m
+ except ImportError as e:[m
+[1mdiff --git a/backend/main.py b/backend/main.py[m
+[1mindex 316e220..f6441dd 100644[m
+[1m--- a/backend/main.py[m
+[1m+++ b/backend/main.py[m
+[36m@@ -5,6 +5,8 @@[m [mMain entry point with Firebase Admin SDK initialization[m
+ from fastapi import FastAPI[m
+ from fastapi.middleware.cors import CORSMiddleware[m
+ from contextlib import asynccontextmanager[m
+[32m+[m[32mfrom api.routes import evidence_routes[m
+[32m+[m
+ [m
+ # Import Firebase service[m
+ from services.firebase_service import FirebaseService[m
+[36m@@ -69,12 +71,12 @@[m [mdef health_check():[m
+ [m
+ [m
+ # Include routers[m
+[31m-from api.routes import auth[m
+[32m+[m[32mfrom api.routes import auth,guardian,dependent,pending_dependent[m
+ [m
+ app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])[m
+[31m-# app.include_router(guardian.router, prefix="/api/guardian", tags=["Guardian"])[m
+[31m-# app.include_router(dependent.router, prefix="/api/dependent", tags=["Dependent"])[m
+[31m-[m
+[32m+[m[32mapp.include_router(guardian.router, prefix="/api/guardian", tags=["Guardian"])[m
+[32m+[m[32mapp.include_router(dependent.router, prefix="/api/dependent", tags=["Dependent"])[m
+[32m+[m[32mapp.include_router(evidence_routes.router, prefix="/api/evidence", tags=["Evidence"])[m
+ [m
+ if __name__ == "__main__":[m
+     import uvicorn[m
+[1mdiff --git a/backend/models/user.py b/backend/models/user.py[m
+[1mindex 3afef4d..ac12a31 100644[m
+[1m--- a/backend/models/user.py[m
+[1m+++ b/backend/models/user.py[m
+[36m@@ -61,6 +61,11 @@[m [mclass User(Base):[m
+         secondary="user_roles",[m
+         back_populates="users"[m
+     )[m
+[32m+[m[32m    evidences = relationship([m
+[32m+[m[32m        "Evidence",[m
+[32m+[m[32m        back_populates="user",[m
+[32m+[m[32m        cascade="all, delete-orphan"[m
+[32m+[m[32m    )[m
+ [m
+     def __repr__(self):[m
+         return f"<User(id={self.id}, firebase_uid={self.firebase_uid}, email={self.email}, full_name={self.full_name}, biometric_enabled={self.biometric_enabled})>"[m
+\ No newline at end of file[m
+[1mdiff --git a/mobile/.gitignore b/mobile/.gitignore[m
+[1mindex 617550c..3ae41b9 100644[m
+[1m--- a/mobile/.gitignore[m
+[1m+++ b/mobile/.gitignore[m
+[36m@@ -182,4 +182,11 @@[m [mDesktop.ini[m
+ *.tmp[m
+ *.temp[m
+ *.old[m
+[31m-*.swp[m
+\ No newline at end of file[m
+[32m+[m[32m*.swp[m
+[32m+[m
+[32m+[m
+[32m+[m[32m```[m
+[32m+[m[32m# Google Service Account[m
+[32m+[m[32massets/credentials/[m
+[32m+[m[32mservice_account.json[m
+[32m+[m[32m*service-account*.json[m
+\ No newline at end of file[m
+[1mdiff --git a/mobile/safety_app/.gitignore b/mobile/safety_app/.gitignore[m
+[1mindex 829d3ec..46cf361 100644[m
+[1m--- a/mobile/safety_app/.gitignore[m
+[1m+++ b/mobile/safety_app/.gitignore[m
+[36m@@ -213,4 +213,142 @@[m [mfirebase-debug.*.log*[m
+ *.tmp[m
+ *.temp[m
+ *.old[m
+[31m-*.orig[m
+\ No newline at end of file[m
+[32m+[m[32m*.orig[m
+[32m+[m
+[32m+[m
+[32m+[m[32m# ============================================[m
+[32m+[m[32m# ADD THESE LINES TO YOUR .gitignore FILE[m
+[32m+[m[32m# ============================================[m
+[32m+[m
+[32m+[m[32m# Google Service Account Credentials (CRITICAL - DO NOT COMMIT)[m
+[32m+[m[32massets/credentials/[m
+[32m+[m[32m*.json[m
+[32m+[m[32mservice_account.json[m
+[32m+[m[32m*service-account*.json[m
+[32m+[m
+[32m+[m[32m# If you already have other .gitignore entries, just add the above lines[m
+[32m+[m[32m# to your existing .gitignore file[m
+[32m+[m
+[32m+[m[32m# ============================================[m
+[32m+[m[32m# COMPLETE .gitignore for Flutter (if you need a full one)[m
+[32m+[m[32m# ============================================[m
+[32m+[m
+[32m+[m[32m# Miscellaneous[m
+[32m+[m[32m*.class[m
+[32m+[m[32m*.log[m
+[32m+[m[32m*.pyc[m
+[32m+[m[32m*.swp[m
+[32m+[m[32m.DS_Store[m
+[32m+[m[32m.atom/[m
+[32m+[m[32m.buildlog/[m
+[32m+[m[32m.history[m
+[32m+[m[32m.svn/[m
+[32m+[m[32mmigrate_working_dir/[m
+[32m+[m
+[32m+[m[32m# IntelliJ related[m
+[32m+[m[32m*.iml[m
+[32m+[m[32m*.ipr[m
+[32m+[m[32m*.iws[m
+[32m+[m[32m.idea/[m
+[32m+[m
+[32m+[m[32m# VS Code[m
+[32m+[m[32m.vscode/[m
+[32m+[m
+[32m+[m[32m# Flutter/Dart/Pub related[m
+[32m+[m[32m**/doc/api/[m
+[32m+[m[32m**/ios/Flutter/.last_build_id[m
+[32m+[m[32m.dart_tool/[m
+[32m+[m[32m.flutter-plugins[m
+[32m+[m[32m.flutter-plugins-dependencies[m
+[32m+[m[32m.packages[m
+[32m+[m[32m.pub-cache/[m
+[32m+[m[32m.pub/[m
+[32m+[m[32m/build/[m
+[32m+[m
+[32m+[m[32m# Symbolication related[m
+[32m+[m[32mapp.*.symbols[m
+[32m+[m
+[32m+[m[32m# Obfuscation related[m
+[32m+[m[32mapp.*.map.json[m
+[32m+[m
+[32m+[m[32m# Android Studio will place build artifacts here[m
+[32m+[m[32m/android/app/debug[m
+[32m+[m[32m/android/app/profile[m
+[32m+[m[32m/android/app/release[m
+[32m+[m
+[32m+[m[32m# iOS[m
+[32m+[m[32m**/ios/**/*.mode1v3[m
+[32m+[m[32m**/ios/**/*.mode2v3[m
+[32m+[m[32m**/ios/**/*.moved-aside[m
+[32m+[m[32m**/ios/**/*.pbxuser[m
+[32m+[m[32m**/ios/**/*.perspectivev3[m
+[32m+[m[32m**/ios/**/*sync/[m
+[32m+[m[32m**/ios/**/.sconsign.dblite[m
+[32m+[m[32m**/ios/**/.tags*[m
+[32m+[m[32m**/ios/**/.vagrant/[m
+[32m+[m[32m**/ios/**/DerivedData/[m
+[32m+[m[32m**/ios/**/Icon?[m
+[32m+[m[32m**/ios/**/Pods/[m
+[32m+[m[32m**/ios/**/.symlinks/[m
+[32m+[m[32m**/ios/**/profile[m
+[32m+[m[32m**/ios/**/xcuserdata[m
+[32m+[m[32m**/ios/.generated/[m
+[32m+[m[32m**/ios/Flutter/.last_build_id[m
+[32m+[m[32m**/ios/Flutter/App.framework[m
+[32m+[m[32m**/ios/Flutter/Flutter.framework[m
+[32m+[m[32m**/ios/Flutter/Flutter.podspec[m
+[32m+[m[32m**/ios/Flutter/Generated.xcconfig[m
+[32m+[m[32m**/ios/Flutter/ephemeral[m
+[32m+[m[32m**/ios/Flutter/app.flx[m
+[32m+[m[32m**/ios/Flutter/app.zip[m
+[32m+[m[32m**/ios/Flutter/flutter_assets/[m
+[32m+[m[32m**/ios/Flutter/flutter_export_environment.sh[m
+[32m+[m[32m**/ios/ServiceDefinitions.json[m
+[32m+[m[32m**/ios/Runner/GeneratedPluginRegistrant.*[m
+[32m+[m
+[32m+[m[32m# Android[m
+[32m+[m[32m**/android/**/gradle-wrapper.jar[m
+[32m+[m[32m**/android/.gradle[m
+[32m+[m[32m**/android/captures/[m
+[32m+[m[32m**/android/gradlew[m
+[32m+[m[32m**/android/gradlew.bat[m
+[32m+[m[32m**/android/local.properties[m
+[32m+[m[32m**/android/**/GeneratedPluginRegistrant.java[m
+[32m+[m[32m**/android/key.properties[m
+[32m+[m[32m*.jks[m
+[32m+[m
+[32m+[m[32m# CRITICAL: Google Service Account & API Keys[m
+[32m+[m[32massets/credentials/[m
+[32m+[m[32mservice_account.json[m
+[32m+[m[32m*service-account*.json[m
+[32m+[m[32mgoogle-services.json[m
+[32m+[m[32mGoogleService-Info.plist[m
+[32m+[m
+[32m+[m[32m# Environment variables[m
+[32m+[m[32m.env[m
+[32m+[m[32m.env.local[m
+[32m+[m[32m.env.*.local[m
+[32m+[m
+[32m+[m[32m# Firebase[m
+[32m+[m[32m.firebase/[m
+[32m+[m[32mfirebase-debug.log[m
+[32m+[m[32mfirestore-debug.log[m
+[32m+[m[32mui-debug.log[m
+[32m+[m
+[32m+[m[32m# Web[m
+[32m+[m[32m/web/*.js.map[m
+[32m+[m
+[32m+[m[32m# Exceptions to above rules[m
+[32m+[m[32m!**/ios/**/default.mode1v3[m
+[32m+[m[32m!**/ios/**/default.mode2v3[m
+[32m+[m[32m!**/ios/**/default.pbxuser[m
+[32m+[m[32m!**/ios/**/default.perspectivev3[m
+[32m+[m
+[32m+[m[32m```[m
+[32m+[m[32m# Google
