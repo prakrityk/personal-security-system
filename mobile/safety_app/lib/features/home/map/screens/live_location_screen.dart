@@ -1,195 +1,145 @@
 // lib/features/home/live_location_screen.dart
 
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:safety_app/core/theme/app_colors.dart';
 import 'package:safety_app/core/theme/app_text_styles.dart';
 import 'package:safety_app/features/home/widgets/home_section_header.dart';
 
-class LiveLocationScreen extends StatelessWidget {
+class LiveLocationScreen extends StatefulWidget {
   const LiveLocationScreen({super.key});
+
+  @override
+  State<LiveLocationScreen> createState() => _LiveLocationScreenState();
+}
+
+class _LiveLocationScreenState extends State<LiveLocationScreen> {
+  GoogleMapController? _mapController;
+  Position? _currentPosition;
+  StreamSubscription<Position>? _positionStream;
+
+  final Set<Marker> _markers = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _initLocation();
+  }
+
+  @override
+  void dispose() {
+    _positionStream?.cancel();
+    _mapController?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _initLocation() async {
+    // 1️⃣ Request location permission
+    var status = await Permission.location.request();
+    if (!status.isGranted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Location permission denied")),
+      );
+      return;
+    }
+
+    // 2️⃣ Get current position
+    _currentPosition = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.bestForNavigation,
+    );
+
+    // Add initial marker
+    _updateMarker(_currentPosition!);
+
+    // Move camera to current location
+    _mapController?.animateCamera(
+      CameraUpdate.newLatLng(
+        LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
+      ),
+    );
+
+    setState(() {});
+
+    // 3️⃣ Listen to location changes
+    _positionStream = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.bestForNavigation,
+        distanceFilter: 5, // update every 5 meters
+      ),
+    ).listen((Position position) {
+      _currentPosition = position;
+      _updateMarker(position);
+
+      // Move camera to follow user
+      _mapController?.animateCamera(
+        CameraUpdate.newLatLng(
+          LatLng(position.latitude, position.longitude),
+        ),
+      );
+
+      setState(() {});
+    });
+  }
+
+  void _updateMarker(Position position) {
+    _markers.clear();
+    _markers.add(
+      Marker(
+        markerId: const MarkerId('currentLocation'),
+        position: LatLng(position.latitude, position.longitude),
+        infoWindow: const InfoWindow(title: 'You are here'),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // Static map image URL
-    const mapImageUrl =
-        'https://cdn.mos.cms.futurecdn.net/jz58vQg4pyzq9LuhSGTPSk.jpg.webp';
-
-    // Sample user locations
-    final users = [
-      UserMarker(
-        name: 'You',
-        avatarUrl: null,
-        position: const Offset(0.5, 0.3),
-        isCurrentUser: true,
-      ),
-      UserMarker(
-        name: 'John',
-        avatarUrl: null,
-        position: const Offset(0.3, 0.4),
-      ),
-      UserMarker(
-        name: 'Alice',
-        avatarUrl: null,
-        position: const Offset(0.7, 0.5),
-      ),
-      UserMarker(
-        name: 'Bob',
-        avatarUrl: null,
-        position: const Offset(0.4, 0.7),
-      ),
-      UserMarker(
-        name: 'Sarah',
-        avatarUrl: null,
-        position: const Offset(0.8, 0.3),
-      ),
-    ];
-
-    return Stack(
-      children: [
-        // Map Background (Full Screen)
-        Positioned.fill(
-          child: Image.network(
-            mapImageUrl,
-            fit: BoxFit.cover,
-            loadingBuilder: (context, child, loadingProgress) {
-              if (loadingProgress == null) return child;
-              return Container(
-                color: isDark ? AppColors.darkBackground : Colors.grey[300],
-                child: Center(
-                  child: CircularProgressIndicator(
-                    color: AppColors.primaryGreen,
+    return Scaffold(
+      body: Stack(
+        children: [
+          _currentPosition == null
+              ? Center(
+                  child: CircularProgressIndicator(color: AppColors.primaryGreen),
+                )
+              : GoogleMap(
+                  initialCameraPosition: CameraPosition(
+                    target: LatLng(
+                        _currentPosition!.latitude, _currentPosition!.longitude),
+                    zoom: 16,
                   ),
+                  markers: _markers,
+                  myLocationEnabled: true,
+                  myLocationButtonEnabled: true,
+                  zoomControlsEnabled: false,
+                  onMapCreated: (GoogleMapController controller) {
+                    _mapController = controller;
+                  },
                 ),
-              );
-            },
-            errorBuilder: (context, error, stackTrace) {
-              return Container(
-                color: isDark ? AppColors.darkBackground : Colors.grey[300],
-                child: Center(
-                  child: Icon(
-                    Icons.map,
-                    size: 100,
-                    color: isDark ? AppColors.darkHint : AppColors.lightHint,
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
 
-        // User Markers
-        ...users.map((user) => _buildUserMarker(context, user)),
-
-        // Consistent Header (same style as other tabs)
-        Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          child: SafeArea(
-            bottom: false,
-            child: HomeSectionHeader(
-              icon: Icons.map,
-              title: 'Live Locations',
-              subtitle: 'Track family members in real-time',
-              transparent: true,
-              iconColor: AppColors.primaryGreen,
+          // Map header
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: HomeSectionHeader(
+                icon: Icons.map,
+                title: 'Live Location',
+                subtitle: 'Your real-time location',
+                transparent: true,
+                iconColor: AppColors.primaryGreen,
+              ),
             ),
           ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildUserMarker(BuildContext context, UserMarker user) {
-    final size = MediaQuery.of(context).size;
-
-    // Use SOS red for current user, primary green for others
-    final markerColor = user.isCurrentUser
-        ? AppColors.sosRed
-        : AppColors.primaryGreen;
-
-    return Positioned(
-      left: size.width * user.position.dx - 25,
-      top: size.height * user.position.dy - 25,
-      child: GestureDetector(
-        onTap: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('${user.name}\'s location'),
-              backgroundColor: markerColor,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-              duration: const Duration(seconds: 1),
-            ),
-          );
-        },
-        child: Column(
-          children: [
-            Container(
-              width: 50,
-              height: 50,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: markerColor,
-                border: Border.all(color: Colors.white, width: 3),
-                boxShadow: [
-                  BoxShadow(
-                    color: markerColor.withOpacity(0.4),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: user.avatarUrl != null
-                  ? ClipOval(
-                      child: Image.network(user.avatarUrl!, fit: BoxFit.cover),
-                    )
-                  : Icon(Icons.person, color: Colors.white, size: 28),
-            ),
-            const SizedBox(height: 4),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: markerColor,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Text(
-                user.name,
-                style: AppTextStyles.caption.copyWith(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }
-}
-
-class UserMarker {
-  final String name;
-  final String? avatarUrl;
-  final Offset position;
-  final bool isCurrentUser;
-
-  UserMarker({
-    required this.name,
-    this.avatarUrl,
-    required this.position,
-    this.isCurrentUser = false,
-  });
 }
