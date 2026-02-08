@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';  // ✅ Add this import
+import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/animated_bottom_button.dart';
 import '../../../core/widgets/intent_card.dart';
-import 'package:safety_app/routes/app_router.dart';
+
 enum GuardianSetupType { primary, collaborator }
 
 class GuardianSetupChoiceScreen extends StatefulWidget {
@@ -28,7 +28,7 @@ class _GuardianSetupChoiceScreenState extends State<GuardianSetupChoiceScreen> {
         break;
 
       case GuardianSetupType.collaborator:
-        context.push(AppRouter.guardianCollaborator);
+        context.push('/collaborator-join');
         break;
     }
   }
@@ -51,14 +51,51 @@ class _GuardianSetupChoiceScreenState extends State<GuardianSetupChoiceScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      "How would you like to add your loved one?",
-                      style: AppTextStyles.heading,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      "This helps us set things up correctly",
-                      style: AppTextStyles.body,
+                    const SizedBox(height: 20),
+
+                    // Header with icon
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            AppColors.primaryGreen.withOpacity(0.1),
+                            AppColors.accentGreen1.withOpacity(0.1),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryGreen.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(
+                              Icons.family_restroom,
+                              color: AppColors.primaryGreen,
+                              size: 32,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            "How would you like to add your loved one?",
+                            style: AppTextStyles.h2,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            "This helps us set things up correctly",
+                            style: AppTextStyles.bodyMedium.copyWith(
+                              color: isDark
+                                  ? AppColors.darkHint
+                                  : AppColors.lightHint,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 32),
 
@@ -68,7 +105,7 @@ class _GuardianSetupChoiceScreenState extends State<GuardianSetupChoiceScreen> {
                       description:
                           "Choose this if you're setting up their account for the first time. "
                           "You'll create their profile and generate a secure QR code.",
-                      icon: Icons.qr_code_2,
+                      icon: Icons.admin_panel_settings,
                       isSelected: _selectedType == GuardianSetupType.primary,
                       onTap: () {
                         setState(() {
@@ -85,7 +122,7 @@ class _GuardianSetupChoiceScreenState extends State<GuardianSetupChoiceScreen> {
                       description:
                           "Choose this if your loved one already has an account. "
                           "Connect by scanning or entering an existing invitation code.",
-                      icon: Icons.group_outlined,
+                      icon: Icons.groups,
                       isSelected:
                           _selectedType == GuardianSetupType.collaborator,
                       onTap: () {
@@ -99,9 +136,19 @@ class _GuardianSetupChoiceScreenState extends State<GuardianSetupChoiceScreen> {
               ),
             ),
 
-            // Fixed bottom button
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+            // Fixed bottom button with shadow
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, -4),
+                  ),
+                ],
+              ),
               child: AnimatedBottomButton(
                 label: "Continue",
                 usePositioned: false,
@@ -110,24 +157,6 @@ class _GuardianSetupChoiceScreenState extends State<GuardianSetupChoiceScreen> {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// 🔹 Placeholder – collaborator flow (scan / paste code)
-class GuardianCollaboratorLinkScreen extends StatelessWidget {
-  const GuardianCollaboratorLinkScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("Connect as Collaborator")),
-      body: const Center(
-        child: Text(
-          "Scan QR or enter invitation code",
-          style: TextStyle(fontSize: 18),
         ),
       ),
     );

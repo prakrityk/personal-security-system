@@ -4,7 +4,18 @@ Pydantic schemas for authentication endpoints
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional, List
-import re
+from pydantic import BaseModel
+
+class FirebaseTokenVerification(BaseModel):
+    """Schema for verifying Firebase ID token"""
+    firebase_token: str
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "firebase_token": "eyJhbGciOiJSUzI1NiIsImtpZCI6IjFmOD..."
+            }
+        }
 
 
 class UserRegister(BaseModel):
@@ -101,6 +112,7 @@ class UserResponse(BaseModel):
     email: str
     full_name: str
     phone_number: str
+    profile_picture: Optional[str] = None  
     roles: List[RoleInfo] = []
     
     class Config:
@@ -111,6 +123,7 @@ class UserResponse(BaseModel):
                 "email": "john.doe@example.com",
                 "full_name": "John Doe",
                 "phone_number": "+9779812345678",
+                 "profile_picture": "/uploads/profile_pictures/user_1_abc123.jpg",
                 "roles": []  # Empty until user selects path after login
             }
         }
@@ -155,3 +168,4 @@ class UserWithTokens(BaseModel):
     """User response with both tokens"""
     user: UserResponse
     tokens: TokenResponse
+

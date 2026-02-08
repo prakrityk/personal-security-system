@@ -1,9 +1,14 @@
 plugins {
     id("com.android.application")
     id("kotlin-android")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+
+    // Flutter plugin (must be AFTER android + kotlin)
     id("dev.flutter.flutter-gradle-plugin")
+
+    // Firebase
+    id("com.google.gms.google-services")
 }
+
 
 android {
     namespace = "com.example.safety_app"
@@ -13,6 +18,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        // Enable core library desugaring
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -41,4 +48,9 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // Core library desugaring dependency
+coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

@@ -25,6 +25,9 @@ class GuardianDependent(Base):
     # Is this the primary guardian?
     is_primary = Column(Boolean, default=False, nullable=False)
     
+    # ✨ NEW: Guardian type - "primary" or "collaborator"
+    guardian_type = Column(String(20), default="primary", nullable=False)
+    
     # Reference to original pending dependent (optional, for tracking)
     pending_dependent_id = Column(Integer, ForeignKey("pending_dependent.id", ondelete="SET NULL"), nullable=True)
     
@@ -37,4 +40,4 @@ class GuardianDependent(Base):
     pending_dependent = relationship("PendingDependent", backref="approved_relationships")
 
     def __repr__(self):
-        return f"<GuardianDependent(id={self.id}, guardian_id={self.guardian_id}, dependent_id={self.dependent_id}, relation={self.relation})>"
+        return f"<GuardianDependent(id={self.id}, guardian_id={self.guardian_id}, dependent_id={self.dependent_id}, relation={self.relation}, type={self.guardian_type})>"

@@ -1,19 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:safety_app/core/widgets/animated_bottom_button.dart';
 import 'package:safety_app/core/widgets/app_text_field.dart';
+import 'package:safety_app/core/providers/auth_provider.dart';
 import 'package:safety_app/services/auth_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 
-class LoginScreen extends StatefulWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final AuthService _authService = AuthService();
@@ -41,7 +43,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final response = await _authService.login(
-        email: phone, // if backend expects `phone_number`, update AuthService.login
+        email: phone,
         password: password,
       );
 
@@ -52,6 +54,12 @@ class _LoginScreenState extends State<LoginScreen> {
       if (user != null) {
         _showSuccess("Welcome back, ${user.fullName}!");
 
+        // ✅ FIX: Refresh auth state in provider
+        await ref.read(authStateProvider.notifier).refreshUser();
+
+        if (!mounted) return;
+
+        // ✅ FIX: Navigate based on role
         if (user.hasRole) {
           context.go('/home');
         } else {

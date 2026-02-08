@@ -1,7 +1,11 @@
 // lib/services/auth_service.dart
 // Complete authentication service with email verification support
+import 'dart:io';
+
 import 'package:dio/dio.dart';
+import 'package:http_parser/http_parser.dart';
 import 'package:safety_app/models/role_info.dart';
+import 'package:safety_app/services/permission_service.dart';
 import '../core/network/dio_client.dart';
 import '../core/network/api_endpoints.dart';
 import '../core/storage/secure_storage_service.dart';
@@ -426,4 +430,183 @@ class AuthService {
       rethrow;
     }
   }
+  // Add this method to your existing lib/services/auth_service.dart file
+
+  // ✅ ADD THIS METHOD to your AuthService class:
+
+  /// Update user profile
+  /// ✅ Automatically syncs guardian contacts for all dependents on backend
+  // lib/services/auth_service.dart (Updated updateProfile method)
+
+  /// Update user profile (Name only - email and phone cannot be changed)
+
+  // Add to auth_service.dart
+  // These are placeholders - need backend endpoints
+  //these are already in permission service
+  bool isPrimaryGuardianForDependent(int dependentId) {
+    // TODO: Implement with backend call
+    return false;
+  }
+
+  bool isCollaboratorGuardianForDependent(int dependentId) {
+    // TODO: Implement with backend call
+    return false;
+  }
+
+  // Instead, add a method to get PermissionService instance:
+  PermissionService getPermissionService() {
+    return PermissionService();
+  }
+
+  /// Returns: Updated user model with new profile_picture path
+  Future<UserModel> uploadProfilePicture(File imageFile) async {
+    try {
+      print('📸 Uploading profile picture...');
+
+      // Prepare multipart file
+      final fileName = imageFile.path.split('/').last;
+      final formData = FormData.fromMap({
+        'file': await MultipartFile.fromFile(
+          imageFile.path,
+          filename: fileName,
+          contentType: MediaType('image', 'jpeg'), // Adjust based on file type
+        ),
+      });
+
+      // Upload to backend
+      final response = await _dioClient.post(
+        ApiEndpoints.uploadProfilePicture, // '/auth/profile/picture'
+        data: formData,
+      );
+
+      print('✅ Profile picture uploaded successfully');
+
+      final user = UserModel.fromJson(response.data);
+
+      // Update stored user data
+      await _storage.saveUserData(user.toJson());
+
+      return user;
+    } on DioException catch (e) {
+      print(
+        '❌ Error uploading profile picture: ${e.response?.data ?? e.message}',
+      );
+
+      if (e.response?.statusCode == 400) {
+        throw Exception(e.response?.data['detail'] ?? 'Invalid image file');
+      } else if (e.response?.statusCode == 403) {
+        throw Exception(
+          'You do not have permission to update your profile picture',
+        );
+      } else if (e.response?.statusCode == 413) {
+        throw Exception('File too large. Maximum size is 5MB');
+      }
+
+      rethrow;
+    } catch (e) {
+      print('❌ Unexpected error uploading profile picture: $e');
+      rethrow;
+    }
+  }
+
+  /// Delete profile picture
+  Future<void> deleteProfilePicture() async {
+    try {
+      print('🗑️ Deleting profile picture...');
+
+      await _dioClient.delete(
+        ApiEndpoints.deleteProfilePicture, // '/auth/profile/picture'
+      );
+
+      print('✅ Profile picture deleted successfully');
+
+      // Refresh user data
+      final updatedUser = await fetchCurrentUser();
+      await _storage.saveUserData(updatedUser.toJson());
+    } on DioException catch (e) {
+      print(
+        '❌ Error deleting profile picture: ${e.response?.data ?? e.message}',
+      );
+
+      if (e.response?.statusCode == 400) {
+        throw Exception('No profile picture to delete');
+      } else if (e.response?.statusCode == 403) {
+        throw Exception(
+          'You do not have permission to delete your profile picture',
+        );
+      }
+
+      rethrow;
+    } catch (e) {
+      print('❌ Unexpected error deleting profile picture: $e');
+      rethrow;
+    }
+  }
+
+  /// Update user profile (Name only - email and phone cannot be changed)
+  Future<UserModel> updateProfile({String? fullName}) async {
+    try {
+      print('✏️ Updating user profile (name only)...');
+      print('   📝 Input fullName: "$fullName"');
+
+      // Prepare request data - only include fullName
+      final data = <String, dynamic>{};
+      if (fullName != null && fullName.isNotEmpty) {
+        data['full_name'] = fullName.trim();
+      }
+
+      if (data.isEmpty) {
+        throw Exception('No changes to update');
+      }
+
+      print('   📤 Sending to backend: $data');
+
+      // Call API
+      final response = await _dioClient.put(
+        ApiEndpoints.updateProfile, // '/auth/profile'
+        data: data,
+      );
+
+      print('✅ Profile (name) updated successfully');
+      print('   📥 Response status: ${response.statusCode}');
+      print('   📥 Response data: ${response.data}');
+
+      final user = UserModel.fromJson(response.data);
+
+      print('   👤 Parsed user:');
+      print('      - ID: ${user.id}');
+      print('      - Name: "${user.fullName}"');
+      print('      - Email: ${user.email}');
+      print('      - Profile Picture: ${user.profilePicture}');
+
+      // Update stored user data
+      await _storage.saveUserData(user.toJson());
+
+      print('   💾 Saved to storage');
+
+      // Verify what was saved
+      final savedData = await _storage.getUserData();
+      if (savedData != null) {
+        print('   ✅ Verified storage - Name: "${savedData['full_name']}"');
+      }
+
+      return user;
+    } on DioException catch (e) {
+      print('❌ Error updating profile: ${e.response?.data ?? e.message}');
+
+      if (e.response?.statusCode == 400) {
+        throw Exception(e.response?.data['detail'] ?? 'Invalid profile data');
+      } else if (e.response?.statusCode == 403) {
+        throw Exception('You do not have permission to update your profile');
+      }
+
+      rethrow;
+    } catch (e) {
+      print('❌ Unexpected error updating profile: $e');
+      rethrow;
+    }
+  }
+
+  // Add baseUrl getter for accessing images
+  String get baseUrl => ApiEndpoints.baseUrl;
 }

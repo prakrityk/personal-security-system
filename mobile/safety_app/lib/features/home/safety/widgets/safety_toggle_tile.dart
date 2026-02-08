@@ -95,7 +95,7 @@ class SafetyToggleTile extends StatelessWidget {
                 Switch(
                   value: isEnabled,
                   onChanged: onToggle,
-                  activeColor: AppColors.primaryGreen,
+                  activeThumbColor: AppColors.primaryGreen,
                   activeTrackColor: AppColors.primaryGreen.withOpacity(0.5),
                 ),
               ],

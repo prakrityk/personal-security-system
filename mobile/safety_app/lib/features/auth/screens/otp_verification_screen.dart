@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:safety_app/core/widgets/animated_bottom_button.dart';
 import 'package:safety_app/core/widgets/onboarding_progress_indicator.dart';
-import 'package:safety_app/features/auth/screens/registration_screen.dart';
 import 'package:safety_app/models/auth_response_model.dart';
 import 'package:safety_app/services/auth_service.dart';
 import '../../../core/theme/app_colors.dart';
