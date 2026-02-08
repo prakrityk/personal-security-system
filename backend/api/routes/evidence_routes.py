@@ -1,7 +1,7 @@
 """
 Evidence Routes
 Handles evidence collection operations: create, update, list, delete
-Only available for dependent users (child/elderly roles)
+Available for ALL authenticated users (guardian, child, elderly, global_user, admin)
 """
 
 from datetime import datetime, timezone
@@ -24,7 +24,7 @@ from models.role import Role
 from models.user_roles import UserRole
 
 # Dependencies
-from api.dependencies.auth import get_current_user
+from api.utils.auth_utils import get_current_user
 from database.connection import get_db
 
 # Create router without prefix (will be added in main.py)
@@ -35,18 +35,24 @@ router = APIRouter(tags=["evidence"])
 # HELPER FUNCTIONS
 # ================================================
 
-def verify_dependent_role(current_user: User, db: Session):
-    """Verify that the current user has child or elderly role"""
+def verify_evidence_access(current_user: User, db: Session):
+    """
+    Verify that the current user has permission to access evidence features
+    Allowed roles: guardian, child, elderly, global_user, admin
+    """
     user_roles = db.query(Role).join(UserRole).filter(
         UserRole.user_id == current_user.id
     ).all()
     
-    is_dependent = any(role.role_name in ["child", "elderly"] for role in user_roles)
+    # Check if user has any of the allowed roles
+    allowed_roles = ["guardian", "child", "elderly", "global_user", "admin"]
+    has_access = any(role.role_name in allowed_roles for role in user_roles)
     
-    if not is_dependent:
+    if not has_access:
+        user_role_names = [role.role_name for role in user_roles]
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Evidence collection only available for dependents (child/elderly roles)"
+            detail=f"Evidence collection not available for your role. Your roles: {user_role_names}"
         )
     
     return True
@@ -66,13 +72,13 @@ async def create_evidence(
     Create new evidence record after recording
     Stores metadata immediately, file upload happens later
     
-    Requires: child or elderly role
+    Requires: guardian, child, elderly, global_user, or admin role
     """
     try:
         print(f"📹 User {current_user.id} creating evidence: {evidence.evidence_type}")
         
-        # Verify user has dependent role
-        verify_dependent_role(current_user, db)
+        # Verify user has permission
+        verify_evidence_access(current_user, db)
         
         # Create evidence record
         db_evidence = Evidence(
@@ -176,8 +182,8 @@ async def get_pending_uploads(
     try:
         print(f"📋 Fetching pending uploads for user {current_user.id}")
         
-        # Verify dependent role
-        verify_dependent_role(current_user, db)
+        # Verify permission
+        verify_evidence_access(current_user, db)
         
         # Get pending evidence
         pending = db.query(Evidence).filter(
@@ -222,8 +228,8 @@ async def get_my_evidence(
     try:
         print(f"📂 Fetching evidence for user {current_user.id}")
         
-        # Verify dependent role
-        verify_dependent_role(current_user, db)
+        # Verify permission
+        verify_evidence_access(current_user, db)
         
         # Get evidence with pagination
         evidence = db.query(Evidence).filter(
