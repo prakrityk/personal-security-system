@@ -571,20 +571,30 @@ def check_email_availability(email: str, db: Session = Depends(get_db)):
     )
 
 
-@router.get("/check-phone/{phone_number}", response_model=PhoneCheckResponse)
-def check_phone_availability(phone_number: str, db: Session = Depends(get_db)):
-    """Check if phone number is available"""
-    existing = db.query(User).filter(User.phone_number == phone_number).first()
+@router.get("/check-phone", response_model=PhoneCheckResponse)
+def check_phone_availability(
+    phone_number: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Check if phone number exists in the system
+    ✅ UPDATED: Now returns email for Firebase fallback login
+    """
+    user = db.query(User).filter(User.phone_number == phone_number).first()
     
-    if existing:
+    if user:
+        logger.info(f"📧 Phone check: {phone_number} exists, email: {user.email}")
         return PhoneCheckResponse(
-            available=False,
-            message="Phone number already registered"
+            exists=True,
+            email=user.email,  # ✅ NEW: Return email for auto-fetch
+            has_role=user.selected_role_id is not None if hasattr(user, 'selected_role_id') else False
         )
     
+    logger.info(f"📧 Phone check: {phone_number} not found")
     return PhoneCheckResponse(
-        available=True,
-        message="Phone number available"
+        exists=False,
+        email=None,
+        has_role=False
     )
 
 

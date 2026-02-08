@@ -1,5 +1,5 @@
 // lib/features/auth/screens/login_screen.dart
-// FIXED VERSION - Better biometric state management and error handling
+// FIXED VERSION - Automatic email lookup for Firebase fallback login
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -30,7 +30,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _isLoading = false;
   bool _showBiometricOption = false;
-  bool _isBiometricCheckComplete = false; // ✅ Track if check is done
+  bool _isBiometricCheckComplete = false;
 
   @override
   void initState() {
@@ -47,10 +47,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   /// Initialize biometric check and debug
   Future<void> _initializeBiometric() async {
-    // ✅ Run debug first
     await _debugBiometricSetup();
-    
-    // Then check availability
     await _checkBiometricAvailability();
   }
 
@@ -61,34 +58,27 @@ class _LoginScreenState extends State<LoginScreen> {
     print('╚═══════════════════════════════════════════════════╝\n');
     
     try {
-      // 1. Device support
       final canCheck = await _biometricService.canCheckBiometrics();
       print('1️⃣  Can check biometrics: $canCheck');
       
-      // 2. Available biometrics
       final available = await _biometricService.getAvailableBiometrics();
       print('2️⃣  Available biometrics: $available');
       
-      // 3. Is available (device + enrolled)
       final isAvailable = await _biometricService.isBiometricAvailable();
       print('3️⃣  Biometric is available: $isAvailable');
       
-      // 4. Refresh token
       final refreshToken = await _secureStorage.getRefreshToken();
       print('4️⃣  Refresh token exists: ${refreshToken != null}');
       if (refreshToken != null && refreshToken.isNotEmpty) {
         print('    Token length: ${refreshToken.length}');
       }
       
-      // 5. Biometric flag
       final biometricEnabled = await _secureStorage.isBiometricEnabled();
       print('5️⃣  Biometric enabled flag: $biometricEnabled');
       
-      // 6. Last phone
       final lastPhone = await _secureStorage.getLastLoginPhone();
       print('6️⃣  Last login phone: $lastPhone');
       
-      // 7. Access token (for current session)
       final accessToken = await _secureStorage.getAccessToken();
       print('7️⃣  Access token exists: ${accessToken != null}');
       
@@ -100,29 +90,21 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   /// Check if biometric option should be shown
-  /// Show if: Device supports + Has refresh token + User enabled biometric
   Future<void> _checkBiometricAvailability() async {
     try {
       print('🔍 Checking biometric availability...');
       
-      // Check device support
       final deviceSupports = await _biometricService.isBiometricAvailable();
-      
-      // Check if user has refresh token (means they logged in before)
       final refreshToken = await _secureStorage.getRefreshToken();
       final hasRefreshToken = refreshToken != null && refreshToken.isNotEmpty;
-      
-      // Check if user explicitly enabled biometric
       final biometricEnabled = await _secureStorage.isBiometricEnabled();
       
-      // Show biometric if all conditions are met
       final shouldShow = deviceSupports && hasRefreshToken && biometricEnabled;
       
-      // ✅ Update state with checked flag
       if (mounted) {
         setState(() {
           _showBiometricOption = shouldShow;
-          _isBiometricCheckComplete = true; // Mark check as done
+          _isBiometricCheckComplete = true;
         });
       }
 
@@ -132,7 +114,6 @@ class _LoginScreenState extends State<LoginScreen> {
       print('   ✓ Biometric enabled: $biometricEnabled');
       print('   → Show biometric button: $shouldShow\n');
 
-      // Pre-fill phone if available
       if (shouldShow) {
         final lastPhone = await _secureStorage.getLastLoginPhone();
         if (lastPhone != null && lastPhone.isNotEmpty && mounted) {
@@ -160,9 +141,10 @@ class _LoginScreenState extends State<LoginScreen> {
   ///   1. Try POST /auth/login (phone + password against DB hash)
   ///   2. If 401 → password might have been reset via Firebase.
   ///      Fall back to Firebase login:
-  ///        a. Sign into Firebase with email + new password
-  ///        b. Get Firebase ID token
-  ///        c. POST /auth/firebase/login with token + password
+  ///        a. Auto-fetch user's email from backend using phone
+  ///        b. Sign into Firebase with email + new password
+  ///        c. Get Firebase ID token
+  ///        d. POST /auth/firebase/login with token + password
   ///           → backend verifies token, syncs password hash, returns JWTs
   ///   3. Navigate on success.
   Future<void> _handleLogin() async {
@@ -251,30 +233,46 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  /// Firebase fallback login.
+  /// Firebase fallback login - FIXED VERSION
+  /// 
   /// Called when normal /auth/login returns 401 — likely means password was
   /// reset via Firebase but the DB hash is still the old one.
   ///
-  /// Signs into Firebase with email + password to prove the password is valid
-  /// on Firebase's side, grabs a Firebase ID token, then sends both to
-  /// /auth/firebase/login which syncs the DB and issues JWTs.
+  /// NEW BEHAVIOR:
+  ///   1. First tries to auto-fetch the email from backend using phone number
+  ///   2. If email found, proceeds silently with Firebase login
+  ///   3. Only shows email dialog if auto-fetch fails
   ///
-  /// We need the user's email for Firebase sign-in. We look it up from the
-  /// phone number — if Firebase sign-in fails it means the password really
-  /// is wrong (not a reset scenario) and we surface a clean error.
+  /// This eliminates the annoying "enter your email" dialog for users who
+  /// just reset their password and are trying to login with the new one.
   Future<dynamic> _firebaseFallbackLogin(String phone, String password) async {
     try {
-      // We don't have the email in the login form, so we ask for it.
-      // Show a quick dialog to get the email.
-      final email = await _askForEmail();
-      if (email == null) {
-        // User cancelled
-        throw Exception('Login cancelled');
+      String? email;
+
+      // ✅ STEP 1: Try to auto-fetch email from backend
+      print('🔍 Attempting to fetch email for phone: $phone');
+      try {
+        email = await _authApiService.getEmailByPhone(phone);
+        if (email != null && email.isNotEmpty) {
+          print('✅ Auto-fetched email: $email');
+        }
+      } catch (e) {
+        print('⚠️ Could not auto-fetch email: $e');
+        email = null;
+      }
+
+      // ✅ STEP 2: If auto-fetch failed, ask user for email
+      if (email == null || email.isEmpty) {
+        print('📧 Asking user for email...');
+        email = await _askForEmail();
+        if (email == null) {
+          throw Exception('Login cancelled');
+        }
       }
 
       print('🔥 Signing into Firebase with email: $email');
 
-      // Sign into Firebase → this will throw if password is truly wrong
+      // ✅ STEP 3: Sign into Firebase → this will throw if password is truly wrong
       final firebaseToken = await _firebaseAuthService.signInWithEmail(
         email: email,
         password: password,
@@ -282,7 +280,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       print('✅ Firebase sign-in succeeded, sending token to backend');
 
-      // Send token + password to backend — it verifies, syncs hash, issues JWTs
+      // ✅ STEP 4: Send token + password to backend — it verifies, syncs hash, issues JWTs
       final response = await _authApiService.firebaseLogin(
         firebaseToken: firebaseToken,
         password: password,
@@ -293,7 +291,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
     } catch (e) {
       print('❌ Firebase fallback failed: $e');
-      // Clean up the error message for the user
       final msg = e.toString().replaceAll('Exception: ', '');
       if (msg.contains('Incorrect password') || msg.contains('wrong-password')) {
         throw Exception('Invalid phone number or password');
@@ -302,7 +299,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  /// Show a small dialog that asks the user for their email.
+  /// Show a dialog asking for email - only used as fallback
   /// Returns null if the user cancels.
   Future<String?> _askForEmail() async {
     final emailController = TextEditingController();
@@ -425,7 +422,6 @@ class _LoginScreenState extends State<LoginScreen> {
       await _firebaseAuthService.sendPasswordResetEmail(email);
 
       if (mounted) {
-        // Always show this message — even if email doesn't exist (security)
         _showSuccess("If this email is registered, you'll receive a reset link.");
       }
     } catch (e) {
@@ -436,7 +432,6 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) setState(() => _isLoading = false);
     }
   }
-
 
   /// Prompt user to enable biometric
   Future<void> _promptEnableBiometric() async {
@@ -520,13 +515,11 @@ class _LoginScreenState extends State<LoginScreen> {
       if (authenticated) {
         print('✅ User authenticated with biometric');
         
-        // Save biometric enabled flag
         await _secureStorage.setBiometricEnabled(true);
         print('✅ Biometric enabled flag saved');
         
         _showSuccess("Biometric login enabled! You can use it on next login.");
         
-        // ✅ Update UI immediately
         if (mounted) {
           setState(() {
             _showBiometricOption = true;
@@ -550,8 +543,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       print('Step 1️⃣: Authenticating with biometric...');
-      // Note: The button already handles the biometric prompt
-      // This is called AFTER the button successfully authenticates
       
       print('Step 2️⃣: Calling API biometricLogin()...');
       final response = await _authApiService.biometricLogin();
@@ -575,13 +566,11 @@ class _LoginScreenState extends State<LoginScreen> {
       
       print('❌ Biometric login failed: $e');
       
-      // If token is invalid/expired
       if (e.toString().contains('Session expired') || 
           e.toString().contains('Invalid token') ||
           e.toString().contains('refresh')) {
         print('⚠️ Token expired, clearing biometric...');
         
-        // Clear tokens and biometric
         await _secureStorage.delete('access_token');
         await _secureStorage.delete('refresh_token');
         await _secureStorage.setBiometricEnabled(false);
@@ -649,7 +638,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     Text("Login to continue", style: AppTextStyles.body),
                     const SizedBox(height: 40),
 
-                    // ✅ BIOMETRIC BUTTON (only show if check is complete)
+                    // BIOMETRIC BUTTON
                     if (_isBiometricCheckComplete && _showBiometricOption) ...[
                       Center(
                         child: BiometricLoginButton(

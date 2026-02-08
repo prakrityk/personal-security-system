@@ -89,9 +89,13 @@ class UserLogin(BaseModel):
             }
         }
 
+
 class FirebaseLoginRequest(BaseModel):
+    """Schema for Firebase login after password reset"""
     firebase_token: str
     password: str
+
+
 # =====================================================
 # TOKEN SCHEMAS
 # =====================================================
@@ -184,9 +188,22 @@ class EmailCheckResponse(BaseModel):
 
 
 class PhoneCheckResponse(BaseModel):
-    """Response for phone number availability check"""
-    available: bool
-    message: str
+    """
+    Response for phone number availability check
+    ✅ UPDATED: Now includes email field for Firebase fallback login
+    """
+    exists: bool  # Changed from 'available' to match backend logic
+    email: Optional[str] = None  # ✅ NEW: Email address if user exists
+    has_role: bool = False  # Whether user has selected a role
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "exists": True,
+                "email": "john.doe@example.com",
+                "has_role": True
+            }
+        }
 
 
 # =====================================================
