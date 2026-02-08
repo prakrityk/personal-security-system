@@ -14,6 +14,9 @@ import 'package:safety_app/core/providers/theme_provider.dart';
 import 'package:safety_app/core/providers/auth_provider.dart';
 import 'package:safety_app/services/notification_service.dart';
 import 'package:safety_app/services/motion_detection_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 
 // ✅ Global navigator key
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -25,7 +28,16 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // ❗ Web does NOT support background handlers
   if (kIsWeb) return;
 
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  // Set system UI overlay style
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+    ),
+  );
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
 
   await NotificationService.setupFlutterNotifications();
   await NotificationService.showNotification(message);

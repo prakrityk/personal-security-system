@@ -1,14 +1,13 @@
 plugins {
     id("com.android.application")
+    // START: FlutterFire Configuration
+    id("com.google.gms.google-services")
+    // END: FlutterFire Configuration
     id("kotlin-android")
 
     // Flutter plugin (must be AFTER android + kotlin)
     id("dev.flutter.flutter-gradle-plugin")
-
-    // Firebase
-    id("com.google.gms.google-services")
 }
-
 
 android {
     namespace = "com.example.safety_app"

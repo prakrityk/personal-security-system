@@ -2,15 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:safety_app/core/widgets/animated_bottom_button.dart';
 import 'package:safety_app/core/widgets/onboarding_progress_indicator.dart';
-import 'package:safety_app/models/auth_response_model.dart';
-import 'package:safety_app/services/auth_service.dart';
+import 'package:safety_app/services/firebase/firebase_auth_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 
 class OtpVerificationScreen extends StatefulWidget {
   final String phoneNumber;
+  final String verificationId;
 
-  const OtpVerificationScreen({super.key, required this.phoneNumber});
+  const OtpVerificationScreen({
+    super.key,
+    required this.phoneNumber,
+    required this.verificationId,
+  });
 
   @override
   State<OtpVerificationScreen> createState() => _OtpVerificationScreenState();
@@ -20,11 +24,11 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   final int otpLength = 6;
   late List<TextEditingController> controllers;
   late List<FocusNode> focusNodes;
-  final AuthService _authService = AuthService();
+  final FirebaseAuthService _firebaseAuthService = FirebaseAuthService();
 
   bool _isLoading = false;
   bool _canResend = false;
-  int _remainingSeconds = 120; // 2 minutes
+  int _remainingSeconds = 60; // 1 minute for Firebase OTP
 
   @override
   void initState() {
@@ -61,40 +65,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     return controllers.map((c) => c.text).join();
   }
 
-  // Future<void> _verifyOTP() async {
-  //   final otpCode = _getOtpCode();
-
-  //   if (otpCode.length != otpLength) {
-  //     _showError("Please enter complete OTP");
-  //     return;
-  //   }
-
-  //   setState(() => _isLoading = true);
-
-  //   try {
-  //     final otpResponse = await _authService.verifyPhone(
-  //       phoneNumber: widget.phoneNumber,
-  //       verificationCode: otpCode,
-  //     );
-
-  //     if (!mounted) return;
-
-  //     _showSuccess("Phone verified successfully!");
-
-  //     // Navigate to registration - backend now marks phone as verified
-  //     Navigator.pushReplacement(
-  //       context,
-  //       MaterialPageRoute(
-  //         builder: (_) => RegistrationScreen(phoneNumber: widget.phoneNumber),
-  //       ),
-  //     );
-  //   } catch (e) {
-  //     if (!mounted) return;
-  //     _showError(e.toString().replaceAll('Exception: ', ''));
-  //   } finally {
-  //     if (mounted) setState(() => _isLoading = false);
-  //   }
-  // }
   Future<void> _verifyOTP() async {
     final otpCode = _getOtpCode();
 
@@ -106,27 +76,23 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // 1️⃣ Verify OTP via backend
-      await _authService.verifyPhone(
-        phoneNumber: widget.phoneNumber,
-        verificationCode: otpCode,
+      // 🔥 Verify OTP with Firebase
+      await _firebaseAuthService.verifyPhoneOTP(
+        verificationId: widget.verificationId,
+        otpCode: otpCode,
       );
-
-      // 2️⃣ Check if phone is marked as verified
-      final PhoneCheckResponse check = await _authService.checkPhone(
-        widget.phoneNumber,
-      );
-      if (!check.prefill) {
-        _showError("Phone not verified yet. Please try again.");
-        return;
-      }
 
       if (!mounted) return;
 
       _showSuccess("Phone verified successfully!");
 
-      // 3️⃣ Navigate to registration screen
-      context.pushReplacement('/registration', extra: widget.phoneNumber);
+      // Navigate to email verification screen
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (!mounted) return;
+
+      context.pushReplacement('/email-verification', extra: {
+        'phoneNumber': widget.phoneNumber,
+      });
     } catch (e) {
       if (!mounted) return;
       _showError(e.toString().replaceAll('Exception: ', ''));
@@ -136,27 +102,43 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   }
 
   Future<void> _resendOTP() async {
+    if (!_canResend) return;
+
     setState(() => _isLoading = true);
 
     try {
-      await _authService.sendVerificationCode(widget.phoneNumber);
+      // 🔥 Resend OTP via Firebase
+      await _firebaseAuthService.sendPhoneOTP(
+        phoneNumber: widget.phoneNumber,
+        onCodeSent: (String verificationId, int? resendToken) {
+          if (!mounted) return;
 
-      if (!mounted) return;
+          _showSuccess("OTP resent successfully");
 
-      _showSuccess("OTP resent successfully");
+          // Reset timer
+          setState(() {
+            _remainingSeconds = 60;
+            _canResend = false;
+          });
+          _startTimer();
 
-      // Reset timer
-      setState(() {
-        _remainingSeconds = 120;
-        _canResend = false;
-      });
-      _startTimer();
+          // Clear OTP fields
+          for (final controller in controllers) {
+            controller.clear();
+          }
+          focusNodes[0].requestFocus();
 
-      // Clear OTP fields
-      for (final controller in controllers) {
-        controller.clear();
-      }
-      focusNodes[0].requestFocus();
+          // Navigate to new OTP screen with new verificationId
+          context.pushReplacement('/otp-verification', extra: {
+            'phoneNumber': widget.phoneNumber,
+            'verificationId': verificationId,
+          });
+        },
+        onVerificationFailed: (String error) {
+          if (!mounted) return;
+          _showError(error);
+        },
+      );
     } catch (e) {
       if (!mounted) return;
       _showError(e.toString().replaceAll('Exception: ', ''));
@@ -203,6 +185,17 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       backgroundColor: isDark
           ? AppColors.darkBackground
           : AppColors.lightBackground,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: Icon(
+            Icons.arrow_back,
+            color: isDark ? Colors.white : Colors.black,
+          ),
+          onPressed: () => context.pop(),
+        ),
+      ),
       body: SafeArea(
         child: Column(
           children: [
@@ -223,7 +216,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                     const SizedBox(height: 8),
 
                     Text(
-                      "Enter the OTP sent to ${widget.phoneNumber}",
+                      "Enter the 6-digit code sent to ${widget.phoneNumber}",
                       style: AppTextStyles.bodyMedium,
                     ),
 
@@ -308,6 +301,37 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                           ),
                       ],
                     ),
+
+                    const SizedBox(height: 24),
+
+                    // Info box
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryGreen.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.info_outline,
+                            color: AppColors.primaryGreen,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              "The code is valid for 1 minute",
+                              style: AppTextStyles.caption.copyWith(
+                                color: isDark
+                                    ? AppColors.darkHint
+                                    : AppColors.lightHint,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -315,7 +339,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: OnboardingProgressIndicator(currentStep: 1, totalSteps: 3),
+              child: OnboardingProgressIndicator(currentStep: 1, totalSteps: 4),
             ),
 
             const SizedBox(height: 16),

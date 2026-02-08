@@ -1,0 +1,185 @@
+# ============================================
+# SENSITIVE FILES - NEVER COMMIT!
+# ============================================
+
+# Firebase Credentials
+**/firebase_credentials.json
+backend/firebase_credentials.json
+firebase_credentials.json
+firebase-credentials.json
+firebase-*.json
+**/firebase-adminsdk-*.json
+
+# Environment Variables
+.env
+.env.local
+.env.*.local
+*.env
+
+
+# ============================================
+# FIREBASE
+# ============================================
+
+# Firebase cache & debug
+.firebase/
+firebase-debug.log*
+firebase-debug.*.log*
+.firebaserc
+
+# DataConnect generated files
+.dataconnect
+
+
+# ============================================
+# NODE.JS / NPM / YARN
+# ============================================
+
+# Dependencies
+node_modules/
+bower_components/
+
+# Lock files (optional - uncomment if you want to ignore them)
+# package-lock.json
+# yarn.lock
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Compiled binary addons
+build/Release
+
+# NPM & Yarn
+.npm
+.yarn-integrity
+*.tgz
+
+# Optional caches
+.eslintcache
+.node_repl_history
+
+
+# ============================================
+# TESTING & COVERAGE
+# ============================================
+
+# Coverage directories
+coverage/
+.nyc_output/
+lib-cov/
+
+# Test artifacts
+*.lcov
+
+
+# ============================================
+# BUILD TOOLS
+# ============================================
+
+# Grunt
+.grunt
+
+# node-waf configuration
+.lock-wscript
+
+
+# ============================================
+# PYTHON (if applicable)
+# ============================================
+
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+dist/
+*.egg-info/
+
+
+# ============================================
+# FLUTTER / DART (if applicable)
+# ============================================
+
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+
+
+# ============================================
+# DATABASE
+# ============================================
+
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+
+
+# ============================================
+# IDE / EDITORS
+# ============================================
+
+# VSCode
+.vscode/
+*.code-workspace
+
+# IntelliJ / Android Studio
+.idea/
+*.iml
+*.iws
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+
+# ============================================
+# OPERATING SYSTEMS
+# ============================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+.directory
+
+
+# ============================================
+# BACKUPS & TEMPORARY FILES
+# ============================================
+
+*.bak
+*.tmp
+*.temp
+*.old
+*.swp

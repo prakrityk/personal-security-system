@@ -7,12 +7,37 @@ class ApiEndpoints {
   // For emulator testing, use: 'http://10.0.2.2:8000/api'
   // For localhost web testing, use: 'http://localhost:8000/api'
 
-  // Auth endpoints
+  // ============================================================================
+  // 🔥 FIREBASE AUTHENTICATION
+  // ============================================================================
+  
+  /// Complete registration with Firebase token
+  /// This is the MAIN endpoint for new Firebase registration flow
+  static const String completeFirebaseRegistration = '/auth/firebase/complete-registration';
+
+  /// Firebase login — used after password reset when normal login fails
+  /// Verifies Firebase token, finds user, syncs password, issues JWTs
+  static const String firebaseLogin = '/auth/firebase/login';
+
+  // ============================================================================
+  // AUTH ENDPOINTS (EXISTING - KEEP THESE)
+  // ============================================================================
+  
+  // Old phone verification (might deprecate later)
   static const String sendVerificationCode = '/auth/send-verification-code';
   static const String verifyPhone = '/auth/verify-phone';
   static const String checkPhone = '/auth/check-phone';
   static const String checkEmail = '/auth/check-email';
+  static const String updatePassword = '/auth/update-password';
+  
+  // Old registration (replaced by Firebase flow)
   static const String register = '/auth/register';
+  
+  // Email Verification Endpoints (OLD system)
+  static const String verifyEmail = '/auth/verify-email';
+  static const String resendEmailOTP = '/auth/resend-email-otp';
+  
+  // Daily login & token management (STILL USED)
   static const String login = '/auth/login';
   static const String me = '/auth/me';
   static const String refresh = '/auth/refresh';

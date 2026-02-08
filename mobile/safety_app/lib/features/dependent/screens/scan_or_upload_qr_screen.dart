@@ -498,10 +498,17 @@ class _ScanOrUploadQrScreenState extends State<ScanOrUploadQrScreen> {
                   ],
                 ),
               ),
-            ),
           ],
         ),
       ),
     );
+  }
+
+  String _getProcessingMessage() {
+    if (_scannedCode == null) {
+      return 'Analyzing image...';
+    } else {
+      return 'Linking with guardian...\nPlease wait';
+    }
   }
 }

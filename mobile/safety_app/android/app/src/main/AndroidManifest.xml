@@ -12,11 +12,17 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
 
     
+    <!-- 🔐 Biometric authentication permissions (NEWLY ADDED) -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
+    <uses-permission android:name="android.permission.USE_FINGERPRINT"/>
+    
+    
     <!-- Camera feature (optional - app works without camera) -->
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false"/>
     <!-- Add contacts permission --> 
     <uses-permission android:name="android.permission.READ_CONTACTS"/> 
+
     <application
         android:label="safety_app"
         android:name="${applicationName}"
@@ -55,6 +61,7 @@
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_color"
             android:resource="@android:color/holo_red_dark" />
+        
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

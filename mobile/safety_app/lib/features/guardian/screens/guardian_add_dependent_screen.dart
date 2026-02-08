@@ -9,15 +9,19 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:safety_app/core/widgets/animated_bottom_button.dart';
 import 'package:safety_app/models/pending_dependent_model.dart';
+import 'package:safety_app/models/pending_dependent_model.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/app_text_field.dart';
 import '../../../core/providers/guardian_provider.dart';
+import '../../../core/providers/guardian_provider.dart';
 
+class GuardianAddDependentScreen extends ConsumerStatefulWidget {
 class GuardianAddDependentScreen extends ConsumerStatefulWidget {
   const GuardianAddDependentScreen({super.key});
 
   @override
+  ConsumerState<GuardianAddDependentScreen> createState() =>
   ConsumerState<GuardianAddDependentScreen> createState() =>
       _GuardianAddDependentScreenState();
 }
@@ -27,8 +31,13 @@ class DependentEntry {
   final TextEditingController nameController = TextEditingController();
   final TextEditingController ageController = TextEditingController();
   String? selectedType;
+  final TextEditingController nameController = TextEditingController();
+  final TextEditingController ageController = TextEditingController();
+  String? selectedType;
   bool isExpanded;
   bool qrGenerated;
+  String? qrToken;
+  int? pendingDependentId;
   String? qrToken;
   int? pendingDependentId;
 
@@ -53,11 +62,41 @@ class DependentEntry {
       age: int.parse(ageController.text.trim()),
     );
   }
+
+  void dispose() {
+    nameController.dispose();
+    ageController.dispose();
+  }
+
+  bool get isValid {
+    return nameController.text.trim().isNotEmpty &&
+        selectedType != null &&
+        ageController.text.trim().isNotEmpty &&
+        int.tryParse(ageController.text.trim()) != null;
+  }
+
+  PendingDependentCreate toModel() {
+    return PendingDependentCreate(
+      dependentName: nameController.text.trim(),
+      relation: selectedType!,
+      age: int.parse(ageController.text.trim()),
+    );
+  }
 }
 
 class _GuardianAddDependentScreenState
     extends ConsumerState<GuardianAddDependentScreen> {
+    extends ConsumerState<GuardianAddDependentScreen> {
   final List<DependentEntry> _dependents = [DependentEntry(isExpanded: true)];
+  bool _isLoading = false;
+
+  @override
+  void dispose() {
+    for (var dependent in _dependents) {
+      dependent.dispose();
+    }
+    super.dispose();
+  }
   bool _isLoading = false;
 
   @override
@@ -386,9 +425,16 @@ class _GuardianAddDependentScreenState
 /// 🔹 Dependent Form
 class _DependentForm extends StatefulWidget {
   final DependentEntry dependent;
+  final DependentEntry dependent;
   final VoidCallback onGenerateQr;
   final bool isLoading;
+  final bool isLoading;
 
+  const _DependentForm({
+    required this.dependent,
+    required this.onGenerateQr,
+    required this.isLoading,
+  });
   const _DependentForm({
     required this.dependent,
     required this.onGenerateQr,
@@ -411,6 +457,11 @@ class _DependentFormState extends State<_DependentForm> {
           controller: widget.dependent.nameController,
           enabled: !widget.dependent.qrGenerated,
         ),
+        AppTextField(
+          label: "Dependent name",
+          controller: widget.dependent.nameController,
+          enabled: !widget.dependent.qrGenerated,
+        ),
         const SizedBox(height: 16),
 
         /// Dependent type dropdown
@@ -423,10 +474,24 @@ class _DependentFormState extends State<_DependentForm> {
                     widget.dependent.selectedType = value;
                   });
                 },
+          value: widget.dependent.selectedType,
+          onChanged: widget.dependent.qrGenerated
+              ? null
+              : (value) {
+                  setState(() {
+                    widget.dependent.selectedType = value;
+                  });
+                },
           isDark: isDark,
         ),
 
         const SizedBox(height: 16),
+        AppTextField(
+          label: "Age",
+          keyboardType: TextInputType.number,
+          controller: widget.dependent.ageController,
+          enabled: !widget.dependent.qrGenerated,
+        ),
         AppTextField(
           label: "Age",
           keyboardType: TextInputType.number,
@@ -464,6 +529,7 @@ class _DependentFormState extends State<_DependentForm> {
 /// 🔹 Dropdown (Child / Elderly)
 class _DependentTypeDropdown extends StatelessWidget {
   final String? value;
+  final ValueChanged<String?>? onChanged;
   final ValueChanged<String?>? onChanged;
   final bool isDark;
 

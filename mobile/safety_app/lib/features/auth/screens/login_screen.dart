@@ -1,12 +1,19 @@
+// lib/features/auth/screens/login_screen.dart
+// FIXED VERSION - Automatic email lookup for Firebase fallback login
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:safety_app/core/widgets/animated_bottom_button.dart';
 import 'package:safety_app/core/widgets/app_text_field.dart';
+import 'package:safety_app/features/auth/widgets/biometric_button.dart';
 import 'package:safety_app/core/providers/auth_provider.dart';
-import 'package:safety_app/services/auth_service.dart';
+import 'package:safety_app/services/auth_api_service.dart';
+import 'package:safety_app/services/biometric_service.dart';
+import 'package:safety_app/core/storage/secure_storage_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import 'package:safety_app/services/firebase/firebase_auth_service.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -15,12 +22,23 @@ class LoginScreen extends ConsumerStatefulWidget {
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends ConsumerState<LoginScreen> {
+class _LoginScreenState extends State<LoginScreen> {
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
-  final AuthService _authService = AuthService();
+  final AuthApiService _authApiService = AuthApiService();
+  final BiometricService _biometricService = BiometricService();
+  final SecureStorageService _secureStorage = SecureStorageService();
+  final FirebaseAuthService _firebaseAuthService = FirebaseAuthService();
 
   bool _isLoading = false;
+  bool _showBiometricOption = false;
+  bool _isBiometricCheckComplete = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeBiometric();
+  }
 
   @override
   void dispose() {
@@ -29,11 +47,112 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     super.dispose();
   }
 
+  /// Initialize biometric check and debug
+  Future<void> _initializeBiometric() async {
+    await _debugBiometricSetup();
+    await _checkBiometricAvailability();
+  }
+
+  /// Debug biometric setup - call this to diagnose issues
+  Future<void> _debugBiometricSetup() async {
+    print('\n╔═══════════════════════════════════════════════════╗');
+    print('║     BIOMETRIC SETUP DIAGNOSTIC (Login Screen)     ║');
+    print('╚═══════════════════════════════════════════════════╝\n');
+    
+    try {
+      final canCheck = await _biometricService.canCheckBiometrics();
+      print('1️⃣  Can check biometrics: $canCheck');
+      
+      final available = await _biometricService.getAvailableBiometrics();
+      print('2️⃣  Available biometrics: $available');
+      
+      final isAvailable = await _biometricService.isBiometricAvailable();
+      print('3️⃣  Biometric is available: $isAvailable');
+      
+      final refreshToken = await _secureStorage.getRefreshToken();
+      print('4️⃣  Refresh token exists: ${refreshToken != null}');
+      if (refreshToken != null && refreshToken.isNotEmpty) {
+        print('    Token length: ${refreshToken.length}');
+      }
+      
+      final biometricEnabled = await _secureStorage.isBiometricEnabled();
+      print('5️⃣  Biometric enabled flag: $biometricEnabled');
+      
+      final lastPhone = await _secureStorage.getLastLoginPhone();
+      print('6️⃣  Last login phone: $lastPhone');
+      
+      final accessToken = await _secureStorage.getAccessToken();
+      print('7️⃣  Access token exists: ${accessToken != null}');
+      
+      print('\n✅ DIAGNOSIS COMPLETE\n');
+      
+    } catch (e) {
+      print('❌ Error during diagnostic: $e\n');
+    }
+  }
+
+  /// Check if biometric option should be shown
+  Future<void> _checkBiometricAvailability() async {
+    try {
+      print('🔍 Checking biometric availability...');
+      
+      final deviceSupports = await _biometricService.isBiometricAvailable();
+      final refreshToken = await _secureStorage.getRefreshToken();
+      final hasRefreshToken = refreshToken != null && refreshToken.isNotEmpty;
+      final biometricEnabled = await _secureStorage.isBiometricEnabled();
+      
+      final shouldShow = deviceSupports && hasRefreshToken && biometricEnabled;
+      
+      if (mounted) {
+        setState(() {
+          _showBiometricOption = shouldShow;
+          _isBiometricCheckComplete = true;
+        });
+      }
+
+      print('🔍 Biometric availability check:');
+      print('   ✓ Device supports: $deviceSupports');
+      print('   ✓ Has refresh token: $hasRefreshToken');
+      print('   ✓ Biometric enabled: $biometricEnabled');
+      print('   → Show biometric button: $shouldShow\n');
+
+      if (shouldShow) {
+        final lastPhone = await _secureStorage.getLastLoginPhone();
+        if (lastPhone != null && lastPhone.isNotEmpty && mounted) {
+          print('✅ Pre-filling phone: $lastPhone');
+          _phoneController.text = lastPhone;
+        }
+      }
+    } catch (e) {
+      print('❌ Error checking biometric availability: $e\n');
+      if (mounted) {
+        setState(() {
+          _showBiometricOption = false;
+          _isBiometricCheckComplete = true;
+        });
+      }
+    }
+  }
+
+  // ============================================================================
+  // 🔐 LOGIN — tries normal first, falls back to Firebase if 401
+  // ============================================================================
+
+  /// Handle regular password login.
+  /// Flow:
+  ///   1. Try POST /auth/login (phone + password against DB hash)
+  ///   2. If 401 → password might have been reset via Firebase.
+  ///      Fall back to Firebase login:
+  ///        a. Auto-fetch user's email from backend using phone
+  ///        b. Sign into Firebase with email + new password
+  ///        c. Get Firebase ID token
+  ///        d. POST /auth/firebase/login with token + password
+  ///           → backend verifies token, syncs password hash, returns JWTs
+  ///   3. Navigate on success.
   Future<void> _handleLogin() async {
     final phone = _phoneController.text.trim();
     final password = _passwordController.text.trim();
 
-    // Validation
     if (phone.isEmpty || password.isEmpty) {
       _showError("Please fill all fields");
       return;
@@ -42,10 +161,393 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final response = await _authService.login(
-        email: phone,
+      print('📱 Attempting normal login with phone: $phone');
+
+      dynamic response;
+
+      try {
+        // ── Step 1: Try normal login ──────────────────────────────────
+        response = await _authApiService.login(
+          phoneNumber: phone,
+          password: password,
+        );
+        print('✅ Normal login succeeded');
+
+      } catch (e) {
+        // ── Step 2: If 401, try Firebase fallback ─────────────────────
+        final errorMsg = e.toString();
+        print('⚠️ Normal login failed: $errorMsg');
+
+        if (errorMsg.contains('Invalid phone number or password') ||
+            errorMsg.contains('Invalid credentials')) {
+          print('🔥 Trying Firebase login fallback (password may have been reset)...');
+          response = await _firebaseFallbackLogin(phone, password);
+        } else {
+          // Not a credentials error — rethrow as-is
+          rethrow;
+        }
+      }
+
+      // ── Step 3: Success — navigate ────────────────────────────────
+      if (!mounted) return;
+
+      final user = response.user;
+
+      if (user != null) {
+        print('✅ Login successful for: ${user.fullName}');
+
+        // Save phone for future reference
+        await _secureStorage.saveLastLoginPhone(phone);
+
+        _showSuccess("Welcome back, ${user.fullName}!");
+
+        // Check if we should prompt for biometric setup
+        final deviceSupports = await _biometricService.isBiometricAvailable();
+        final biometricEnabled = await _secureStorage.isBiometricEnabled();
+
+        print('🔐 Post-login biometric check:');
+        print('   Device supports: $deviceSupports');
+        print('   Already enabled: $biometricEnabled');
+
+        // Navigate first
+        if (user.hasRole) {
+          context.go('/home');
+        } else {
+          context.go('/role-intent');
+        }
+
+        // Prompt to enable biometric if device supports it and user hasn't enabled yet
+        if (deviceSupports && !biometricEnabled) {
+          print('💡 Prompting user to enable biometric...');
+          Future.delayed(const Duration(milliseconds: 800), () {
+            if (mounted) _promptEnableBiometric();
+          });
+        }
+      } else {
+        _showError("Login successful, but user data not found.");
+      }
+    } catch (e) {
+      if (!mounted) return;
+      print('❌ Login error: $e');
+      _showError(e.toString().replaceAll('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  /// Firebase fallback login - FIXED VERSION
+  /// 
+  /// Called when normal /auth/login returns 401 — likely means password was
+  /// reset via Firebase but the DB hash is still the old one.
+  ///
+  /// NEW BEHAVIOR:
+  ///   1. First tries to auto-fetch the email from backend using phone number
+  ///   2. If email found, proceeds silently with Firebase login
+  ///   3. Only shows email dialog if auto-fetch fails
+  ///
+  /// This eliminates the annoying "enter your email" dialog for users who
+  /// just reset their password and are trying to login with the new one.
+  Future<dynamic> _firebaseFallbackLogin(String phone, String password) async {
+    try {
+      String? email;
+
+      // ✅ STEP 1: Try to auto-fetch email from backend
+      print('🔍 Attempting to fetch email for phone: $phone');
+      try {
+        email = await _authApiService.getEmailByPhone(phone);
+        if (email != null && email.isNotEmpty) {
+          print('✅ Auto-fetched email: $email');
+        }
+      } catch (e) {
+        print('⚠️ Could not auto-fetch email: $e');
+        email = null;
+      }
+
+      // ✅ STEP 2: If auto-fetch failed, ask user for email
+      if (email == null || email.isEmpty) {
+        print('📧 Asking user for email...');
+        email = await _askForEmail();
+        if (email == null) {
+          throw Exception('Login cancelled');
+        }
+      }
+
+      print('🔥 Signing into Firebase with email: $email');
+
+      // ✅ STEP 3: Sign into Firebase → this will throw if password is truly wrong
+      final firebaseToken = await _firebaseAuthService.signInWithEmail(
+        email: email,
         password: password,
       );
+
+      print('✅ Firebase sign-in succeeded, sending token to backend');
+
+      // ✅ STEP 4: Send token + password to backend — it verifies, syncs hash, issues JWTs
+      final response = await _authApiService.firebaseLogin(
+        firebaseToken: firebaseToken,
+        password: password,
+      );
+
+      print('✅ Firebase fallback login complete');
+      return response;
+
+    } catch (e) {
+      print('❌ Firebase fallback failed: $e');
+      final msg = e.toString().replaceAll('Exception: ', '');
+      if (msg.contains('Incorrect password') || msg.contains('wrong-password')) {
+        throw Exception('Invalid phone number or password');
+      }
+      throw Exception(msg);
+    }
+  }
+
+  /// Show a dialog asking for email - only used as fallback
+  /// Returns null if the user cancels.
+  Future<String?> _askForEmail() async {
+    final emailController = TextEditingController();
+    String? result;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text("Verify Your Email"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "It looks like your password was recently reset. Please enter your email to continue.",
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: emailController,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(
+                labelText: "Email",
+                hintText: "you@example.com",
+                prefixIcon: Icon(Icons.email_outlined),
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryGreen,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              result = emailController.text.trim();
+              Navigator.of(dialogContext).pop();
+            },
+            child: const Text("Continue"),
+          ),
+        ],
+      ),
+    );
+
+    emailController.dispose();
+
+    if (result != null && result!.isEmpty) return null;
+    return result;
+  }
+
+  // ============================================================================
+  // FORGOT PASSWORD
+  // ============================================================================
+
+  /// Show a dialog asking for email, then fire Firebase reset email
+  Future<void> _handleForgotPassword() async {
+    final emailController = TextEditingController();
+
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text("Reset Password"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Enter your registered email. We'll send you a link to reset your password.",
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: emailController,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(
+                labelText: "Email",
+                hintText: "you@example.com",
+                prefixIcon: Icon(Icons.email_outlined),
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryGreen,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text("Send Link"),
+          ),
+        ],
+      ),
+    );
+
+    if (result != true) return;
+
+    final email = emailController.text.trim();
+    emailController.dispose();
+
+    if (email.isEmpty) {
+      _showError("Please enter your email.");
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      await _firebaseAuthService.sendPasswordResetEmail(email);
+
+      if (mounted) {
+        _showSuccess("If this email is registered, you'll receive a reset link.");
+      }
+    } catch (e) {
+      if (mounted) {
+        _showError(e.toString().replaceAll('Exception: ', ''));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  /// Prompt user to enable biometric
+  Future<void> _promptEnableBiometric() async {
+    if (!mounted) return;
+
+    final phone = _phoneController.text.trim();
+
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text("Enable Biometric Login?"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Login faster next time using your fingerprint or face.",
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.primaryGreen.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.phone_android,
+                    size: 16,
+                    color: AppColors.primaryGreen,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      phone,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primaryGreen,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text("Not Now"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryGreen,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text("Enable"),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true && mounted) {
+      _enableBiometric();
+    }
+  }
+
+  /// Enable biometric authentication
+  Future<void> _enableBiometric() async {
+    try {
+      print('🔐 Requesting biometric authentication for setup...');
+      
+      final authenticated = await _biometricService.authenticate(
+        reason: 'Authenticate to enable biometric login',
+      );
+
+      if (authenticated) {
+        print('✅ User authenticated with biometric');
+        
+        await _secureStorage.setBiometricEnabled(true);
+        print('✅ Biometric enabled flag saved');
+        
+        _showSuccess("Biometric login enabled! You can use it on next login.");
+        
+        if (mounted) {
+          setState(() {
+            _showBiometricOption = true;
+          });
+        }
+      } else {
+        print('❌ User cancelled biometric authentication');
+      }
+    } catch (e) {
+      print('❌ Error enabling biometric: $e');
+      _showError("Could not enable biometric: ${e.toString()}");
+    }
+  }
+
+  /// Handle biometric login
+  /// This is called when user taps the biometric button
+  Future<void> _handleBiometricLogin() async {
+    print('\n🔐 STARTING BIOMETRIC LOGIN FLOW\n');
+    
+    setState(() => _isLoading = true);
+
+    try {
+      print('Step 1️⃣: Authenticating with biometric...');
+      
+      print('Step 2️⃣: Calling API biometricLogin()...');
+      final response = await _authApiService.biometricLogin();
 
       if (!mounted) return;
 
@@ -68,15 +570,41 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       } else {
         _showError("Login successful, but user data not found.");
       }
+      
+      print('✅ BIOMETRIC LOGIN COMPLETE\n');
     } catch (e) {
       if (!mounted) return;
-      _showError(e.toString().replaceAll('Exception: ', ''));
+      
+      print('❌ Biometric login failed: $e');
+      
+      if (e.toString().contains('Session expired') || 
+          e.toString().contains('Invalid token') ||
+          e.toString().contains('refresh')) {
+        print('⚠️ Token expired, clearing biometric...');
+        
+        await _secureStorage.delete('access_token');
+        await _secureStorage.delete('refresh_token');
+        await _secureStorage.setBiometricEnabled(false);
+        
+        if (mounted) {
+          setState(() {
+            _showBiometricOption = false;
+          });
+        }
+        
+        _showError('Session expired. Please login with your password.');
+      } else {
+        _showError('Biometric login failed: ${e.toString()}');
+      }
+      
+      print('❌ BIOMETRIC LOGIN FAILED\n');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
   void _showError(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -88,6 +616,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   void _showSuccess(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -120,8 +649,45 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     Text("Login to continue", style: AppTextStyles.body),
                     const SizedBox(height: 40),
 
+                    // BIOMETRIC BUTTON
+                    if (_isBiometricCheckComplete && _showBiometricOption) ...[
+                      Center(
+                        child: BiometricLoginButton(
+                          isLoading: _isLoading,
+                          onSuccess: _handleBiometricLogin,
+                          onError: (error) {
+                            _showError(error);
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Divider(color: Colors.grey.shade400),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                            ),
+                            child: Text(
+                              "or",
+                              style: AppTextStyles.bodySmall.copyWith(
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: Divider(color: Colors.grey.shade400),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                    ],
+
+                    // PASSWORD LOGIN FIELDS
                     AppTextField(
-                      label: "Phone",
+                      label: "Phone Number",
                       hint: "+977XXXXXXXX",
                       controller: _phoneController,
                       enabled: !_isLoading,
@@ -139,11 +705,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton(
-                        onPressed: _isLoading
-                            ? null
-                            : () {
-                                // TODO: Navigate to forgot password screen
-                              },
+                        onPressed: _isLoading ? null : _handleForgotPassword,
                         child: Text(
                           "Forgot password?",
                           style: AppTextStyles.caption.copyWith(

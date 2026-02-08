@@ -33,7 +33,7 @@ class AppRouter {
   static const String phoneNumber = '/phone-number';
   static const String otpVerification = '/otp-verification';
   static const String registration = '/registration';
-  static const String emailVerification = '/email-verification';
+  static const String emailVerification = '/email-verification'; // 🆕 NEW
   static const String roleIntent = '/role-intent';
   static const String home = '/home';
   static const String account = '/account';
@@ -381,6 +381,149 @@ class AppRouter {
           ),
         ),
       ),
-    );
-  }
+
+      // Login Screen
+      GoRoute(
+        path: login,
+        name: 'login',
+        builder: (context, state) => const LoginScreen(),
+      ),
+
+      // Let's Get Started Screen
+      GoRoute(
+        path: letsGetStarted,
+        name: 'letsGetStarted',
+        builder: (context, state) => const LetsGetStartedScreen(),
+      ),
+
+      // Phone Number Screen
+      GoRoute(
+        path: phoneNumber,
+        name: 'phoneNumber',
+        builder: (context, state) => const PhoneNumberScreen(),
+      ),
+
+      // OTP Verification Screen (Phone)
+      // ✅ FIXED: Now passes verificationId parameter
+      GoRoute(
+        path: otpVerification,
+        name: 'otpVerification',
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>? ?? {};
+          final phoneNumber = extra['phoneNumber'] as String? ?? '';
+          final verificationId = extra['verificationId'] as String? ?? '';
+          
+          return OtpVerificationScreen(
+            phoneNumber: phoneNumber,
+            verificationId: verificationId,
+          );
+        },
+      ),
+
+      // Email Verification Screen (NEW)
+      // ✅ FIXED: Now passes phoneNumber (NOT email) parameter
+      GoRoute(
+        path: emailVerification,
+        name: 'emailVerification',
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>? ?? {};
+          final phoneNumber = extra['phoneNumber'] as String? ?? '';
+          
+          return EmailVerificationScreen(phoneNumber: phoneNumber);
+        },
+      ),
+
+      // Registration Screen
+      // ✅ FIXED: Now passes both phoneNumber and email parameters
+      GoRoute(
+        path: registration,
+        name: 'registration',
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>? ?? {};
+          final phoneNumber = extra['phoneNumber'] as String? ?? '';
+          final email = extra['email'] as String? ?? '';
+          final password = extra['password'] as String? ?? '';
+          
+          return RegistrationScreen(
+            phoneNumber: phoneNumber,
+            email: email,
+            password: password,
+          );
+        },
+      ),
+
+      // ==================== ROLE SELECTION ====================
+
+      // Role Intent Screen
+      GoRoute(
+        path: roleIntent,
+        name: 'roleIntent',
+        builder: (context, state) => const RoleIntentScreen(),
+      ),
+
+      // ==================== PERSONAL USER FLOW ====================
+
+      // Personal Onboarding Screen
+      GoRoute(
+        path: personalOnboarding,
+        name: 'personalOnboarding',
+        builder: (context, state) => const PersonalOnboardingScreen(),
+      ),
+
+      // ==================== GUARDIAN FLOW ====================
+
+      // Guardian Setup Choice Screen
+      GoRoute(
+        path: guardianSetup,
+        name: 'guardianSetup',
+        builder: (context, state) => const GuardianSetupChoiceScreen(),
+      ),
+
+      // Guardian Add Dependent Screen
+      GoRoute(
+        path: guardianAddDependent,
+        name: 'guardianAddDependent',
+        builder: (context, state) => const GuardianAddDependentScreen(),
+      ),
+
+      // Guardian Collaborator Link Screen
+      GoRoute(
+        path: guardianCollaborator,
+        name: 'guardianCollaborator',
+        builder: (context, state) => const GuardianCollaboratorLinkScreen(),
+      ),
+
+      // ==================== DEPENDENT FLOW ====================
+
+      // Dependent Type Selection Screen
+      GoRoute(
+        path: dependentTypeSelection,
+        name: 'dependentTypeSelection',
+        builder: (context, state) => const DependentTypeSelectionScreen(),
+      ),
+
+      // Scan or Upload QR Screen
+      GoRoute(
+        path: scanQr,
+        name: 'scanQr',
+        builder: (context, state) {
+          final dependentType = state.extra as DependentType;
+          return ScanOrUploadQrScreen(dependentType: dependentType);
+        },
+      ),
+
+      // ==================== HOME ====================
+
+      // Home Screen
+      GoRoute(
+        path: home,
+        name: 'home',
+        builder: (context, state) => const GeneralHomeScreen(),
+      ),
+    ],
+
+    // Error handler
+    errorBuilder: (context, state) =>
+        Scaffold(body: Center(child: Text('Page not found: ${state.uri}'))),
+  );
 }
