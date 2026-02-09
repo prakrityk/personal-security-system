@@ -9,7 +9,6 @@ import 'package:safety_app/services/auth_api_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 
-
 class RegistrationScreen extends StatefulWidget {
   final String phoneNumber;
   final String email;
@@ -57,7 +56,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
       // 2️⃣ Get Firebase ID token (single attempt, no retry)
       print('🔄 Getting Firebase token...');
-      
+
       final firebaseToken = await _firebaseAuthService.getFirebaseIdToken(
         forceRefresh: true,
       );
@@ -81,24 +80,36 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
       if (!mounted) return;
 
-      // Check if registration was successful
-      if (response['success'] == true) {
-        _showSuccess("Verification code sent to your email!");
+      // ✅ FIXED: Check for user and token instead of success field
+      print('📋 Registration Response:');
+      print('   Success: ${authResponse.success}');
+      print('   Message: ${authResponse.message}');
+      print('   User: ${authResponse.user?.fullName}');
 
-      // 4️⃣ Navigate based on user roles
-      await Future.delayed(const Duration(milliseconds: 500));
-      if (!mounted) return;
+      // Check if registration was successful by validating we have user and token
+      if (authResponse.user != null && authResponse.token != null) {
+        _showSuccess("Account created successfully!");
 
-      final user = authResponse.user;
+        // 4️⃣ Navigate based on user roles
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (!mounted) return;
 
-      if (user != null && user.hasRole) {
-        // User already has role assigned
-        print('✅ User has role, navigating to home...');
-        context.go('/home');
+        final user = authResponse.user!;
+
+        if (user.hasRole) {
+          // User already has role assigned
+          print('✅ User has role, navigating to home...');
+          context.go('/home');
+        } else {
+          // Navigate to role selection
+          print('ℹ️ User needs to select role, navigating to role-intent...');
+          context.go('/role-intent');
+        }
       } else {
-        // Navigate to role selection
-        print('ℹ️ User needs to select role, navigating to role-intent...');
-        context.go('/role-intent');
+        throw Exception(
+          authResponse.message ??
+              'Registration failed: Missing user or token data',
+        );
       }
     } catch (e) {
       if (!mounted) return;
@@ -215,9 +226,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                       // Email (read-only, already verified)
                       AppTextField(
                         label: "Email",
-                        controller: TextEditingController(
-                          text: widget.email,
-                        ),
+                        controller: TextEditingController(text: widget.email),
                         enabled: false,
                         suffixIcon: const Icon(
                           Icons.verified,
@@ -301,7 +310,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
               child: AnimatedBottomButton(
-                label: _isLoading ? "Creating Account..." : "Complete Registration",
+                label: _isLoading
+                    ? "Creating Account..."
+                    : "Complete Registration",
                 usePositioned: false,
                 onPressed: _isLoading ? () {} : _handleRegistration,
               ),
