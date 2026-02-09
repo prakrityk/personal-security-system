@@ -21,7 +21,7 @@ from api.routes import evidence_routes
 
 
 # Import Firebase service
-from services.firebase_service import FirebaseService
+from services.firebase_service import get_firebase_service
 
 # Import routes (you'll add these)
 # from api.routes import auth, guardian, dependent
@@ -36,7 +36,7 @@ async def lifespan(app: FastAPI):
     print("🚀 Starting Personal Security System API...")
     
     # Initialize Firebase Admin SDK
-    FirebaseService.initialize()
+    get_firebase_service()
     
     print("✅ Application startup complete!")
     yield
@@ -93,7 +93,6 @@ def health_check():
 from api.routes import auth,guardian,dependent,pending_dependent
 
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
-<<<<<<< HEAD
 app.include_router(pending_dependent.router, prefix="/api/pending-dependent", tags=["Pending Dependent"])
 app.include_router(guardian.router,prefix="/api/guardian",tags=["guardian"])
 app.include_router(dependent.router,prefix="/api/dependent",tags=["dependent"])
@@ -101,12 +100,6 @@ app.include_router(emergency_contact.router, prefix="/api", tags=["emergency"])
 app.include_router(guardian_auto_contacts.router, prefix="/api/guardian", tags=["guardian_auto_contacts"])  
 app.include_router(device.router, prefix="/api", tags=["devices"])
 app.include_router(sos.router, prefix="/api", tags=["sos"])
-=======
-app.include_router(guardian.router, prefix="/api/guardian", tags=["Guardian"])
-app.include_router(dependent.router, prefix="/api/dependent", tags=["Dependent"])
-app.include_router(evidence_routes.router, prefix="/api/evidence", tags=["Evidence"])
-
->>>>>>> PK/firebase
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(

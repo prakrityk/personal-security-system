@@ -60,9 +60,14 @@ dependencies:
   flutter_background_service: ^5.1.0
   flutter_background_service_android: ^6.3.1
   firebase_auth: ^6.1.4
-  firebase_core: ^4.4.0
   pinput: ^5.0.0
   local_auth: ^3.0.0
+  connectivity_plus: ^7.0.0
+  flutter_dotenv: ^6.0.0
+  googleapis: ^16.0.0
+  record: ^6.2.0
+  camera: ^0.11.3
+  googleapis_auth: ^2.0.0
 
 dev_dependencies:
   flutter_test:
