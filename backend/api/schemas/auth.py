@@ -89,9 +89,13 @@ class UserLogin(BaseModel):
             }
         }
 
+
 class FirebaseLoginRequest(BaseModel):
+    """Schema for Firebase login after password reset"""
     firebase_token: str
     password: str
+
+
 # =====================================================
 # TOKEN SCHEMAS
 # =====================================================
@@ -144,6 +148,7 @@ class UserResponse(BaseModel):
     email: str
     full_name: str
     phone_number: str
+    profile_picture: Optional[str] = None  
     roles: List[RoleInfo] = []
     biometric_enabled: bool = False  # 🔐 ADDED: Biometric authentication status
     
@@ -155,8 +160,8 @@ class UserResponse(BaseModel):
                 "email": "john.doe@example.com",
                 "full_name": "John Doe",
                 "phone_number": "+9779812345678",
-                "roles": [],
-                "biometric_enabled": False
+                 "profile_picture": "/uploads/profile_pictures/user_1_abc123.jpg",
+                "roles": []  # Empty until user selects path after login
             }
         }
 
@@ -184,9 +189,22 @@ class EmailCheckResponse(BaseModel):
 
 
 class PhoneCheckResponse(BaseModel):
-    """Response for phone number availability check"""
-    available: bool
-    message: str
+    """
+    Response for phone number availability check
+    ✅ UPDATED: Now includes email field for Firebase fallback login
+    """
+    exists: bool  # Changed from 'available' to match backend logic
+    email: Optional[str] = None  # ✅ NEW: Email address if user exists
+    has_role: bool = False  # Whether user has selected a role
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "exists": True,
+                "email": "john.doe@example.com",
+                "has_role": True
+            }
+        }
 
 
 # =====================================================

@@ -81,7 +81,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
       if (!mounted) return;
 
-      _showSuccess("Account created successfully!");
+      // Check if registration was successful
+      if (response['success'] == true) {
+        _showSuccess("Verification code sent to your email!");
 
       // 4️⃣ Navigate based on user roles
       await Future.delayed(const Duration(milliseconds: 500));

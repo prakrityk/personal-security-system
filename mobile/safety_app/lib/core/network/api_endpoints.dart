@@ -1,7 +1,11 @@
 class ApiEndpoints {
-  // Use your laptop's IP address for physical device
+  // ✅ Use your laptop's IP address for physical device
+  // Change this to match your actual backend server IP
   static const String baseUrl = 'http://localhost:8000/api';
-  //static const String baseUrl = 'http://172.18.240.1:8000/api';
+  //'http://192.168.21.102:8000/api';
+
+  // For emulator testing, use: 'http://10.0.2.2:8000/api'
+  // For localhost web testing, use: 'http://localhost:8000/api'
 
   // ============================================================================
   // 🔥 FIREBASE AUTHENTICATION
@@ -40,47 +44,105 @@ class ApiEndpoints {
   static const String logout = '/auth/logout';
   static const String logoutAll = '/auth/logout-all';
 
-  // ============================================================================
-  // 🔐 BIOMETRIC AUTHENTICATION (NEW)
-  // ============================================================================
-  
-  /// Enable biometric authentication for current user
-  /// Only available for guardian accounts
-  static const String enableBiometric = '/auth/enable-biometric';
-  
-  /// Disable biometric authentication for current user
-  static const String disableBiometric = '/auth/disable-biometric';
+  // ✅ ADD THIS PROFILE ENDPOINT
+  static const String updateProfile = '/auth/profile';
 
-  // ============================================================================
-  // ROLE ENDPOINTS
-  // ============================================================================
-  
+  // ✅ NEW: Profile Picture Endpoints
+  static const String uploadProfilePicture = '/auth/profile/picture';
+  static const String deleteProfilePicture = '/auth/profile/picture';
+  // Role endpoints
   static const String getRoles = '/auth/roles';
   static const String selectRole = '/auth/select-role';
 
-  // ============================================================================
-  // GUARDIAN ENDPOINTS
-  // ============================================================================
-  
+  // Guardian endpoints
   static const String createPendingDependent = '/guardian/pending-dependents';
   static const String getPendingDependents = '/guardian/pending-dependents';
   static const String deletePendingDependent = '/guardian/pending-dependents';
   static const String generateQR = '/guardian/generate-qr';
   static const String getQRInvitation = '/guardian/qr-invitation';
-  static const String getPendingQRInvitations = '/guardian/pending-qr-invitations';
+  static const String getPendingQRInvitations =
+      '/guardian/pending-qr-invitations';
   static const String approveQR = '/guardian/approve-qr';
   static const String rejectQR = '/guardian/reject-qr';
   static const String getMyDependents = '/guardian/my-dependents';
 
-  // ============================================================================
-  // DEPENDENT ENDPOINTS
-  // ============================================================================
-  
+  // ✅ Dependent endpoints
   static const String scanQR = '/dependent/scan-qr';
   static const String getMyGuardians = '/dependent/my-guardians';
   static const String removeGuardian = '/dependent/remove-guardian';
 
+  // Email Verification Endpoints
+  static const String verifyEmail = '/auth/verify-email';
+  static const String resendEmailOTP = '/auth/resend-email-otp';
+
+  // 🆕 Collaborator endpoints
+  static const String inviteCollaborator = '/guardian/invite-collaborator';
+  static const String validateInvitation = '/guardian/validate-invitation';
+  static const String acceptInvitation = '/guardian/accept-invitation';
+  // Either make it clear:
+  static const String getCollaborators = '/guardian/dependent';
+
+  // Or fully define:
+  // static const String getCollaborators = '/guardian/dependent/{id}/collaborators';// /{id}/collaborators
+  static const String getPendingInvitations =
+      '/guardian/dependent'; // /{id}/pending-invitations
+  static const String revokeCollaborator = '/guardian/collaborator'; // /{id}
+
+  // Emergency Contact endpoints
+  static const String getMyEmergencyContacts = '/my-emergency-contacts';
+  static const String createMyEmergencyContact = '/my-emergency-contacts';
+  static const String updateMyEmergencyContact =
+      '/my-emergency-contacts'; // /{id}
+  static const String deleteMyEmergencyContact =
+      '/my-emergency-contacts'; // /{id}
+  static const String bulkImportContacts = '/my-emergency-contacts/bulk';
+
+  static const String getDependentEmergencyContacts =
+      '/dependent'; // /{id}/emergency-contacts
+  static const String createDependentEmergencyContact =
+      '/dependent/emergency-contacts';
+  static const String updateDependentEmergencyContact =
+      '/dependent/emergency-contacts'; // /{id}
+  static const String deleteDependentEmergencyContact =
+      '/dependent/emergency-contacts'; // /{id}
+
+  // ==================== SAFETY SETTINGS (PER-DEPENDENT) ====================
+  //
+  // Primary guardians configure per-dependent safety features. Dependents and
+  // collaborator guardians read the resolved settings.
+  //
+  // Guardian -> Dependent safety settings:
+  //   GET  /api/guardian/dependents/{id}/safety-settings
+  //   PATCH  /api/guardian/dependents/{id}/safety-settings
+  //
+  // Dependent -> Own resolved safety settings:
+  //   GET  /api/dependent/my-safety-settings
+  static const String dependentSafetySettings = '/guardian/dependents';
+  static const String mySafetySettings = '/dependent/my-safety-settings';
+
+  // SOS Event endpoints (manual + motion)
+  static const String createSosEvent = '/sos/events';
   // Other endpoints (add as needed)
+  // Family Service endpoints
+  static const String getFamilyStats =
+      '/family/stats'; // If you create this endpoint
+  // Note: Family service uses existing endpoints from other services
+
+  // Permission endpoints (mostly client-side, but you might want backend validation)
+  // static const String verifyPermission = '/auth/verify-permission'; // Future enhancement
   // static const String updateProfile = '/user/profile';
   // static const String uploadAvatar = '/user/avatar';
+
+  // ==================== DEPENDENT PROFILE PICTURE ====================
+
+  /// Upload/Update profile picture for a dependent (Primary Guardian only)
+  /// POST /api/guardian/dependents/{dependent_id}/profile-picture
+  static const String uploadDependentProfilePicture = '/guardian/dependents';
+
+  static const String deviceRegister = '/devices/register';
+  static const String deviceUnregister = '/devices/unregister';
+
+  // Timeouts
+  static const Duration connectTimeout = Duration(seconds: 10);
+  static const Duration receiveTimeout = Duration(seconds: 10);
 }

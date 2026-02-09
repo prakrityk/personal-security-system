@@ -3,7 +3,19 @@ FastAPI Application - Personal Security System
 Main entry point with Firebase Admin SDK initialization
 """
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 from fastapi.middleware.cors import CORSMiddleware
+from api.routes import auth, pending_dependent
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import Depends
+from api.routes import guardian
+from api.routes import dependent
+from api.routes import emergency_contact
+from api.routes import guardian_auto_contacts
+from api.routes import device
+from api.routes import sos
+
 from contextlib import asynccontextmanager
 from api.routes import evidence_routes
 
@@ -49,6 +61,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Create uploads directory if it doesn't exist
+UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR.mkdir(exist_ok=True)
+
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
+print("✅ Static files mounted at /uploads")
 
 @app.get("/")
 def root():
@@ -74,10 +93,20 @@ def health_check():
 from api.routes import auth,guardian,dependent,pending_dependent
 
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+<<<<<<< HEAD
+app.include_router(pending_dependent.router, prefix="/api/pending-dependent", tags=["Pending Dependent"])
+app.include_router(guardian.router,prefix="/api/guardian",tags=["guardian"])
+app.include_router(dependent.router,prefix="/api/dependent",tags=["dependent"])
+app.include_router(emergency_contact.router, prefix="/api", tags=["emergency"]) 
+app.include_router(guardian_auto_contacts.router, prefix="/api/guardian", tags=["guardian_auto_contacts"])  
+app.include_router(device.router, prefix="/api", tags=["devices"])
+app.include_router(sos.router, prefix="/api", tags=["sos"])
+=======
 app.include_router(guardian.router, prefix="/api/guardian", tags=["Guardian"])
 app.include_router(dependent.router, prefix="/api/dependent", tags=["Dependent"])
 app.include_router(evidence_routes.router, prefix="/api/evidence", tags=["Evidence"])
 
+>>>>>>> PK/firebase
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(

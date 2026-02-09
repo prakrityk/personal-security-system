@@ -1,8 +1,8 @@
 // lib/services/dependent_service.dart
 
-import 'package:dio/dio.dart';
 import '../core/network/dio_client.dart';
 import '../core/network/api_endpoints.dart';
+import '../models/guardian_model.dart';
 
 /// Dependent Service - handles dependent-related API calls
 class DependentService {
@@ -27,14 +27,15 @@ class DependentService {
   }
 
   /// Get all guardians linked to current dependent
-  Future<List<Map<String, dynamic>>> getMyGuardians() async {
+  Future<List<GuardianModel>> getMyGuardians() async {
     try {
       print('📥 Fetching my guardians...');
 
       final response = await _dioClient.get(ApiEndpoints.getMyGuardians);
 
-      final List<Map<String, dynamic>> guardians =
-          List<Map<String, dynamic>>.from(response.data);
+      final List<GuardianModel> guardians = (response.data as List)
+          .map((json) => GuardianModel.fromJson(json))
+          .toList();
 
       print('✅ Fetched ${guardians.length} guardians');
       return guardians;
@@ -49,9 +50,7 @@ class DependentService {
     try {
       print('🗑️ Removing guardian relationship $relationshipId');
 
-      await _dioClient.delete(
-        '${ApiEndpoints.removeGuardian}/$relationshipId',
-      );
+      await _dioClient.delete('${ApiEndpoints.removeGuardian}/$relationshipId');
 
       print('✅ Guardian relationship removed');
     } catch (e) {

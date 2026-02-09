@@ -1,0 +1,12 @@
+// lib/core/providers/index.dart
+export 'app_providers.dart';
+export 'auth_provider.dart';
+export 'guardian_provider.dart';
+export 'dependent_provider.dart';
+export 'collaborator_provider.dart';
+export 'family_provider.dart';
+export 'permission_provider.dart';
+export 'emergency_contact_provider.dart';
+export 'theme_provider.dart';
+//export 'dependent_guardian_provider.dart';
+export 'guardian_state_provider.dart'; 

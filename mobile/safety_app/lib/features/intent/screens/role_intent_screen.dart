@@ -1,6 +1,7 @@
 // lib/features/intent/screens/role_intent_screen.dart
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:safety_app/core/widgets/animated_bottom_button.dart';
 import 'package:safety_app/models/role_info.dart';
@@ -15,11 +16,11 @@ import 'package:safety_app/routes/app_router.dart';
 
 enum UserIntent { personal, guardian, dependent }
 
-class RoleIntentScreen extends StatefulWidget {
+class RoleIntentScreen extends ConsumerStatefulWidget {
   const RoleIntentScreen({super.key});
 
   @override
-  State<RoleIntentScreen> createState() => _RoleIntentScreenState();
+  ConsumerState<RoleIntentScreen> createState() => _RoleIntentScreenState();
 }
 
 class _RoleIntentScreenState extends State<RoleIntentScreen> {
@@ -81,9 +82,54 @@ class _RoleIntentScreenState extends State<RoleIntentScreen> {
     }
   }
 
-  // ============================================================================
-  // 🔐 NEW BIOMETRIC FLOW FOR GUARDIANS
-  // ============================================================================
+  // Future<void> _navigateBasedOnIntent(UserIntent intent) async {
+  //   // ✅ For dependent, just navigate without assigning role
+  //   if (intent == UserIntent.dependent) {
+  //     _navigateToNextScreen(intent);
+  //     return;
+  //   }
+
+  //   // ✅ For personal and guardian, assign role first
+  //   setState(() => _isLoading = true);
+
+  //   try {
+  //     final role = _getRoleForIntent(intent);
+
+  //     if (role == null) {
+  //       throw Exception('Role not found for selected intent');
+  //     }
+
+  //     // Assign role in backend
+  //     await _authService.selectRole(role.id);
+
+  //     if (!mounted) return;
+
+  //     // ✅ CRITICAL FIX: Refresh auth state to get updated user with role
+  //     print('🔄 Refreshing auth state after role assignment...');
+  //     await ref.read(authStateProvider.notifier).refreshUser();
+  //     print('✅ Auth state refreshed');
+
+  //     if (!mounted) return;
+
+  //     _navigateToNextScreen(intent);
+  //   } catch (e) {
+  //     if (!mounted) return;
+
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       SnackBar(
+  //         content: Text('Failed to select role: ${e.toString()}'),
+  //         backgroundColor: Colors.red,
+  //       ),
+  //     );
+  //     setState(() => _isLoading = false);
+  //   }
+  // }
+  // Future<void> _navigateBasedOnIntent(UserIntent intent) async {
+  //   // ✅ For dependent, just navigate without assigning role
+  //   if (intent == UserIntent.dependent) {
+  //     _navigateToNextScreen(intent);
+  //     return;
+  //   }
 
   /// Handle role selection based on intent
   Future<void> _navigateBasedOnIntent(UserIntent intent) async {
@@ -217,7 +263,7 @@ class _RoleIntentScreenState extends State<RoleIntentScreen> {
         // Small delay to show success message
         await Future.delayed(const Duration(milliseconds: 500));
         if (!mounted) return;
-        
+        navigateToNextScreen(intent);
         context.go(AppRouter.personalOnboarding);
       }
     } catch (e) {
@@ -237,6 +283,25 @@ class _RoleIntentScreenState extends State<RoleIntentScreen> {
     }
   }
 
+  /// Navigate to appropriate screen based on intent
+  void _navigateToNextScreen(UserIntent intent) {
+    switch (intent) {
+      case UserIntent.personal:
+        // ✅ For personal users, go directly to home after role is assigned
+        print('🚀 Navigating to home for personal user...');
+        context.go(AppRouter.home);
+        break;
+      case UserIntent.guardian:
+        // ✅ For guardians, go to setup screen
+        print('🚀 Navigating to guardian setup...');
+        context.go(AppRouter.guardianSetup);
+        break;
+      case UserIntent.dependent:
+        // ✅ For dependents, go to type selection
+        print('🚀 Navigating to dependent type selection...');
+        context.go(AppRouter.dependentTypeSelection);
+        break;
+    }
   /// Show MANDATORY biometric setup dialog for guardians
   /// Returns true if biometric was successfully authenticated, false otherwise
   Future<bool> _showBiometricSetupDialog() async {

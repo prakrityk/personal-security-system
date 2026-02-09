@@ -13,11 +13,7 @@ class PendingDependentCreate {
   });
 
   Map<String, dynamic> toJson() {
-    return {
-      'dependent_name': dependentName,
-      'relation': relation,
-      'Age': age, // ✅ Backend expects 'Age' with capital A
-    };
+    return {'dependent_name': dependentName, 'relation': relation, 'age': age};
   }
 }
 
@@ -45,7 +41,7 @@ class PendingDependentResponse {
       guardianId: json['guardian_id'],
       dependentName: json['dependent_name'],
       relation: json['relation'],
-      age: json['Age'] ?? json['age'], // ✅ Backend returns 'Age'
+      age: json['Age'] ?? json['age'],
       createdAt: DateTime.parse(json['created_at']),
     );
   }
@@ -92,7 +88,7 @@ class PendingDependentWithQR {
       guardianId: json['guardian_id'],
       dependentName: json['dependent_name'],
       relation: json['relation'],
-      age: json['Age'] ?? json['age'], // ✅ Handle both for safety
+      age: json['Age'] ?? json['age'],
       createdAt: DateTime.parse(json['created_at']),
       hasQr: json['has_qr'] ?? false,
       qrStatus: json['qr_status'],
@@ -112,7 +108,7 @@ class GenerateQRRequest {
   }
 }
 
-/// Model for QR generation response
+/// ✅ FIXED: Model for QR generation response - matches actual backend response
 class GenerateQRResponse {
   final bool success;
   final String message;
@@ -130,11 +126,21 @@ class GenerateQRResponse {
 
   factory GenerateQRResponse.fromJson(Map<String, dynamic> json) {
     return GenerateQRResponse(
-      success: json['success'],
-      message: json['message'],
-      qrToken: json['qr_token'],
-      expiresAt: DateTime.parse(json['expires_at']),
-      pendingDependentId: json['pending_dependent_id'],
+      success: json['success'] as bool,
+      message: json['message'] as String,
+      qrToken: json['qr_token'] as String,
+      expiresAt: DateTime.parse(json['expires_at'] as String),
+      pendingDependentId: json['pending_dependent_id'] as int,
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'success': success,
+      'message': message,
+      'qr_token': qrToken,
+      'expires_at': expiresAt.toIso8601String(),
+      'pending_dependent_id': pendingDependentId,
+    };
   }
 }

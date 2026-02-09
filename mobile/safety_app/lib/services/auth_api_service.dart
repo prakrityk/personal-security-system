@@ -78,6 +78,45 @@ class AuthApiService {
     }
   }
 
+  // ============================================================================
+  // ✅ NEW: GET EMAIL BY PHONE NUMBER (for Firebase fallback login)
+  // ============================================================================
+
+  /// Fetch user's email by phone number
+  /// Used for automatic Firebase fallback login after password reset
+  /// Returns null if phone not found or on error
+  Future<String?> getEmailByPhone(String phoneNumber) async {
+    try {
+      print('📧 Fetching email for phone: $phoneNumber');
+      
+      final response = await _dioClient.get(
+        ApiEndpoints.checkPhone,
+        queryParameters: {'phone_number': phoneNumber},
+      );
+
+      if (response.statusCode == 200 && response.data != null) {
+        final data = response.data;
+        
+        // Check if user exists and has email
+        if (data['exists'] == true && data['email'] != null) {
+          print('✅ Found email: ${data['email']}');
+          return data['email'] as String;
+        }
+      }
+      
+      print('⚠️ No email found for phone: $phoneNumber');
+      return null;
+      
+    } catch (e) {
+      print('❌ Error fetching email by phone: $e');
+      return null;
+    }
+  }
+
+  // ============================================================================
+  // END OF NEW METHOD
+  // ============================================================================
+
   /// Register new user - creates pending user and sends email OTP
   Future<Map<String, dynamic>> register({
     required String email,
@@ -239,7 +278,7 @@ class AuthApiService {
         if (e.response?.statusCode == 404) {
           throw Exception('No pending registration found for this email');
         } else if (e.response?.statusCode == 429) {
-          throw Exception('Too many attempts. Please try again later.');
+          throw Exception('Too many requests. Please wait before trying again.');
         }
       }
 
@@ -247,18 +286,13 @@ class AuthApiService {
     }
   }
 
-  // ============================================================================
-  // 🔐 LOGIN METHOD - Phone + Password
-  // ============================================================================
-
-  /// Login with phone number and password
-  /// Called from login screen when user enters credentials
+  /// Login user
   Future<AuthResponseModel> login({
     required String phoneNumber,
     required String password,
   }) async {
     try {
-      print('📱 Logging in with phone: $phoneNumber');
+      print('🔐 Logging in with phone: $phoneNumber');
 
       final response = await _dioClient.post(
         ApiEndpoints.login,
@@ -269,50 +303,31 @@ class AuthApiService {
       );
 
       print('✅ Login successful');
-      print('📦 Response: ${response.data}');
 
       final authResponse = AuthResponseModel.fromJson(response.data);
 
-      // Save tokens to secure storage
+      // Save tokens and user data
       if (authResponse.token != null) {
         await _storage.saveAccessToken(authResponse.token!.accessToken);
         if (authResponse.token!.refreshToken != null) {
           await _storage.saveRefreshToken(authResponse.token!.refreshToken!);
         }
-        print('✅ Tokens saved to secure storage');
       }
 
-      // Save user data to secure storage
       if (authResponse.user != null) {
         await _storage.saveUserData(authResponse.user!.toJson());
         print('✅ User data saved');
-        print('👤 User: ${authResponse.user!.fullName}');
-        print('📧 Email: ${authResponse.user!.email}');
-        
-        // ✅ Save phone number for future biometric login
-        await _storage.saveLastLoginPhone(phoneNumber);
-        print('✅ Login phone saved for biometric');
       }
 
       return authResponse;
     } catch (e) {
-      print('❌ Login error: $e');
+      print('❌ Error logging in: $e');
 
       if (e is DioException) {
         if (e.response?.statusCode == 401) {
           throw Exception('Invalid phone number or password');
         } else if (e.response?.statusCode == 403) {
-          throw Exception('Account is deactivated');
-        } else if (e.response?.statusCode == 404) {
-          throw Exception('User not found');
-        } else if (e.response?.statusCode == 400) {
-          final detail = e.response?.data['detail'];
-          throw Exception(detail ?? 'Invalid credentials');
-        } else if (e.type == DioExceptionType.connectionTimeout ||
-            e.type == DioExceptionType.receiveTimeout) {
-          throw Exception('Connection timeout. Please try again.');
-        } else if (e.type == DioExceptionType.connectionError) {
-          throw Exception('Network error. Please check your connection.');
+          throw Exception('Account is disabled');
         }
       }
 
@@ -321,18 +336,17 @@ class AuthApiService {
   }
 
   // ============================================================================
-  // 🔥 FIREBASE LOGIN — fallback after password reset
+  // 🔥 FIREBASE LOGIN (after password reset)
   // ============================================================================
 
-  /// Login via Firebase token when normal login fails after a password reset.
-  /// Sends firebase_token + password to /auth/firebase/login.
-  /// Backend verifies identity via token, syncs the new password hash, issues JWTs.
+  /// Firebase login - used when normal login fails after password reset
+  /// Verifies Firebase token, syncs password, and issues JWTs
   Future<AuthResponseModel> firebaseLogin({
     required String firebaseToken,
     required String password,
   }) async {
     try {
-      print('🔥 Attempting Firebase login fallback...');
+      print('🔥 Logging in via Firebase (post password reset)...');
 
       final response = await _dioClient.post(
         ApiEndpoints.firebaseLogin,
@@ -343,36 +357,31 @@ class AuthApiService {
       );
 
       print('✅ Firebase login successful');
-      print('📦 Response: ${response.data}');
 
       final authResponse = AuthResponseModel.fromJson(response.data);
 
-      // Save tokens
+      // Save tokens and user data
       if (authResponse.token != null) {
         await _storage.saveAccessToken(authResponse.token!.accessToken);
         if (authResponse.token!.refreshToken != null) {
           await _storage.saveRefreshToken(authResponse.token!.refreshToken!);
         }
-        print('✅ Firebase login tokens saved');
       }
 
-      // Save user data
       if (authResponse.user != null) {
         await _storage.saveUserData(authResponse.user!.toJson());
-        print('✅ Firebase login user data saved');
+        print('✅ User data saved after Firebase login');
       }
 
       return authResponse;
     } catch (e) {
-      print('❌ Firebase login error: $e');
+      print('❌ Error during Firebase login: $e');
 
       if (e is DioException) {
         if (e.response?.statusCode == 401) {
-          throw Exception('Firebase verification failed');
+          throw Exception('Firebase authentication failed');
         } else if (e.response?.statusCode == 404) {
           throw Exception('User not found');
-        } else if (e.response?.statusCode == 403) {
-          throw Exception('Account is deactivated');
         }
       }
 
@@ -381,33 +390,12 @@ class AuthApiService {
   }
 
   // ============================================================================
-  // END OF FIREBASE LOGIN
-  // ============================================================================
-
-  /// Sync new password to DB after Firebase password reset
-  /// Called silently after a successful login
-  Future<void> updatePassword(String password) async {
-    try {
-      await _dioClient.put(
-        ApiEndpoints.updatePassword,
-        data: {'password': password},
-      );
-      print('✅ Password synced to DB');
-    } catch (e) {
-      // Silent fail — login already succeeded, don't block the user
-      print('⚠️ Password sync failed (non-critical): $e');
-    }
-  }
-
-  // ============================================================================
-  // END OF LOGIN METHOD
+  // END FIREBASE LOGIN
   // ============================================================================
 
   /// Refresh access token using refresh token
   Future<String> refreshAccessToken() async {
     try {
-      print('🔄 Refreshing access token...');
-
       final refreshToken = await _storage.getRefreshToken();
 
       if (refreshToken == null || refreshToken.isEmpty) {
@@ -419,30 +407,16 @@ class AuthApiService {
         data: {'refresh_token': refreshToken},
       );
 
-      print('🔄 Token Refreshed');
-
-      // Backend returns TokenResponse
-      final tokenData = response.data;
-      final newAccessToken = tokenData['access_token'] as String;
-      final newRefreshToken = tokenData['refresh_token'] as String?;
-
-      // Save new tokens
+      final newAccessToken = response.data['access_token'] as String;
       await _storage.saveAccessToken(newAccessToken);
-      if (newRefreshToken != null) {
-        await _storage.saveRefreshToken(newRefreshToken);
-      }
 
+      print('✅ Access token refreshed');
       return newAccessToken;
     } catch (e) {
       print('❌ Error refreshing token: $e');
-
-      // If refresh fails, clear all data and force re-login
-      await logout();
-      throw Exception('Session expired. Please login again.');
+      rethrow;
     }
   }
-
-
 
   /// Get current user from storage
   Future<UserModel?> getCurrentUser() async {
