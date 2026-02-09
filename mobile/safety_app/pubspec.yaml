@@ -60,6 +60,10 @@ dependencies:
   flutter_background_service: ^5.1.0
   flutter_background_service_android: ^6.3.1
   firebase_auth: ^6.1.4
+<<<<<<< HEAD
+=======
+  # firebase_core: ^4.4.0
+>>>>>>> 5a5e2230534d389fcbdb2d3b3d58dc7e44978ee1
   pinput: ^5.0.0
   local_auth: ^3.0.0
   connectivity_plus: ^7.0.0

@@ -1,5 +1,7 @@
 // lib/routes/app_router.dart
 // ✅ MERGED: Combines Firebase auth flow with role-based navigation
+// lib/routes/app_router.dart
+// ✅ MERGED: Combines Firebase auth flow with role-based navigation
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -34,6 +36,7 @@ class AppRouter {
   static const String phoneNumber = '/phone-number';
   static const String otpVerification = '/otp-verification';
   static const String registration = '/registration';
+  static const String emailVerification = '/email-verification';
   static const String emailVerification = '/email-verification';
   static const String roleIntent = '/role-intent';
   static const String home = '/home';
@@ -158,6 +161,7 @@ class AppRouter {
 
       routes: [
         // ==================== NOTIFICATIONS ====================
+        // ==================== NOTIFICATIONS ====================
         GoRoute(
           path: '/notifications',
           name: 'notifications',
@@ -166,6 +170,7 @@ class AppRouter {
             child: const NotificationListScreen(),
           ),
         ),
+
 
         // ==================== AUTH FLOW ====================
 
@@ -203,10 +208,17 @@ class AppRouter {
 
         // ✅ OTP Verification Screen (Phone) - FRIEND'S VERSION
         // Passes verificationId from Firebase
+        // ✅ OTP Verification Screen (Phone) - FRIEND'S VERSION
+        // Passes verificationId from Firebase
         GoRoute(
           path: otpVerification,
           name: 'otpVerification',
           pageBuilder: (context, state) {
+            final extra = state.extra as Map<String, dynamic>? ?? {};
+            final phoneNumber = extra['phoneNumber'] as String? ?? '';
+            final verificationId = extra['verificationId'] as String? ?? '';
+
+            // Redirect if missing required data
             final extra = state.extra as Map<String, dynamic>? ?? {};
             final phoneNumber = extra['phoneNumber'] as String? ?? '';
             final verificationId = extra['verificationId'] as String? ?? '';
@@ -218,7 +230,12 @@ class AppRouter {
               });
             }
 
+
             return MaterialPage(
+              child: OtpVerificationScreen(
+                phoneNumber: phoneNumber,
+                verificationId: verificationId,
+              ),
               child: OtpVerificationScreen(
                 phoneNumber: phoneNumber,
                 verificationId: verificationId,
@@ -229,10 +246,18 @@ class AppRouter {
 
         // ✅ Email Verification Screen - FRIEND'S VERSION
         // Passes phoneNumber (NOT email) parameter
+        // ✅ Email Verification Screen - FRIEND'S VERSION
+        // Passes phoneNumber (NOT email) parameter
         GoRoute(
           path: emailVerification,
           name: 'emailVerification',
+          path: emailVerification,
+          name: 'emailVerification',
           pageBuilder: (context, state) {
+            final extra = state.extra as Map<String, dynamic>? ?? {};
+            final phoneNumber = extra['phoneNumber'] as String? ?? '';
+
+            // Redirect if missing required data
             final extra = state.extra as Map<String, dynamic>? ?? {};
             final phoneNumber = extra['phoneNumber'] as String? ?? '';
 
@@ -243,7 +268,9 @@ class AppRouter {
               });
             }
 
+
             return MaterialPage(
+              child: EmailVerificationScreen(phoneNumber: phoneNumber),
               child: EmailVerificationScreen(phoneNumber: phoneNumber),
             );
           },
@@ -251,10 +278,33 @@ class AppRouter {
 
         // ✅ Registration Screen - FRIEND'S VERSION
         // Passes phoneNumber, email, and password
+        // ✅ Registration Screen - FRIEND'S VERSION
+        // Passes phoneNumber, email, and password
         GoRoute(
           path: registration,
           name: 'registration',
+          path: registration,
+          name: 'registration',
           pageBuilder: (context, state) {
+            final extra = state.extra as Map<String, dynamic>? ?? {};
+            final phoneNumber = extra['phoneNumber'] as String? ?? '';
+            final email = extra['email'] as String? ?? '';
+            final password = extra['password'] as String? ?? '';
+
+            // Redirect if missing required data
+            if (phoneNumber.isEmpty || email.isEmpty || password.isEmpty) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                context.go(AppRouter.phoneNumber);
+              });
+            }
+
+            return MaterialPage(
+              child: RegistrationScreen(
+                phoneNumber: phoneNumber,
+                email: email,
+                password: password,
+              ),
+            );
             final extra = state.extra as Map<String, dynamic>? ?? {};
             final phoneNumber = extra['phoneNumber'] as String? ?? '';
             final email = extra['email'] as String? ?? '';

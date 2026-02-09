@@ -305,6 +305,7 @@ class AuthApiService {
   // ============================================================================
 
   /// Login user with phone/email and password
+  /// ✅ FIXED: Removed biometric check that was crashing the login flow
   Future<AuthResponseModel> login({
     required String phoneNumber,
     required String password,
@@ -327,6 +328,8 @@ class AuthApiService {
         if (authResponse.token!.refreshToken != null) {
           await _storage.saveRefreshToken(authResponse.token!.refreshToken!);
         }
+        print('✅ Access token saved');
+        print('✅ Refresh token saved');
       }
 
       if (authResponse.user != null) {
@@ -338,6 +341,9 @@ class AuthApiService {
         );
       }
 
+      // ✅ FIXED: Don't check biometrics here - let it be done separately
+      print('✅ Normal login succeeded');
+      
       return authResponse;
     } catch (e) {
       print('❌ Error logging in: $e');

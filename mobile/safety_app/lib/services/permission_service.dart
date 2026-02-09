@@ -19,13 +19,13 @@ class PermissionService {
 
   /// Initialize service with current user
   Future<void> initialize() async {
-    _currentUser = await _authService.getCurrentUser();
+    _currentUser = await _authApiService.getCurrentUser();
     print('🔐 PermissionService initialized for user: ${_currentUser?.email}');
   }
 
   /// Refresh user data
   Future<void> refreshUser() async {
-    _currentUser = await _authService.getCurrentUser();
+    _currentUser = await _authApiService.getCurrentUser();
   }
 
   // ================================================

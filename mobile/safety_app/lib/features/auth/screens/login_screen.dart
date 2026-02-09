@@ -211,11 +211,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         // ✅ FIX: Wrap biometric check in try-catch with delay
         bool deviceSupports = false;
         bool biometricEnabled = false;
-
+        
         try {
           // Add small delay to ensure platform channels are ready
           await Future.delayed(const Duration(milliseconds: 300));
-
+          
           deviceSupports = await _biometricService.isBiometricAvailable();
           biometricEnabled = await _secureStorage.isBiometricEnabled();
 
@@ -265,9 +265,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       final email = await _authApiService.getEmailByPhone(phone);
 
       if (email == null || email.isEmpty) {
-        throw Exception(
-          'No email found for this phone number. Please contact support.',
-        );
+        throw Exception('No email found for this phone number. Please contact support.');
       }
 
       print('✅ Retrieved email: $email');
@@ -366,6 +364,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           ],
         ),
       );
+
     } catch (e) {
       print('❌ Password reset error: $e');
       if (!mounted) return;
@@ -412,9 +411,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       // Verify biometric capability
       final isAvailable = await _biometricService.isBiometricAvailable();
       if (!isAvailable) {
-        throw Exception(
-          "Biometric authentication not available on this device",
-        );
+        throw Exception("Biometric authentication not available on this device");
       }
 
       // Authenticate once to confirm
@@ -461,7 +458,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
       print('Step 3️⃣: Biometric login successful!');
       _showSuccess("Welcome back!");
-
+      
       if (response.user?.hasRole ?? false) {
         print('✅ User has role, navigating to /home');
         context.go('/home');
