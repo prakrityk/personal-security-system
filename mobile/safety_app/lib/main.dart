@@ -14,9 +14,6 @@ import 'package:safety_app/core/providers/theme_provider.dart';
 import 'package:safety_app/core/providers/auth_provider.dart';
 import 'package:safety_app/services/notification_service.dart';
 import 'package:safety_app/services/motion_detection_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart';
 
 // ✅ Global navigator key
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -25,7 +22,7 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 /// ⚠️ MUST be top-level
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // ❗ Web does NOT support background handlers
+  // ⚠ Web does NOT support background handlers
   if (kIsWeb) return;
 
   // Set system UI overlay style
@@ -54,6 +51,11 @@ Future<void> main() async {
       options: DefaultFirebaseOptions.currentPlatform,
     );
     debugPrint('✅ Firebase initialized');
+
+    // ✅ FIX: Ensure platform channels are fully ready before proceeding
+    // This prevents "MissingPluginException" for local_auth and other plugins
+    await Future.delayed(const Duration(milliseconds: 300));
+    debugPrint('✅ Platform channels ready');
 
     // 🔥 Register background handler (non-web only)
     if (!kIsWeb) {
