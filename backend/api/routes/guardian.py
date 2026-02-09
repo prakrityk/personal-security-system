@@ -56,7 +56,7 @@ from models.collaborator_invitation import CollaboratorInvitation
 from models.dependent_safety_settings import DependentSafetySettings
 
 # Dependencies
-from api.dependencies.auth import get_current_user
+from api.utils.auth_utils import get_current_user, get_current_user_with_roles
 from database.connection import get_db
 
 # ✅ CRITICAL: Import auto-contact hooks
@@ -71,9 +71,13 @@ router = APIRouter()
 # ================================================
 # HELPER FUNCTIONS
 # ================================================
-
 def verify_guardian_role(current_user: User, db: Session):
     """Verify that the current user has the guardian role"""
+    # ✅ FIRST: Check roles from token (fastest, no DB query)
+    if hasattr(current_user, 'token_roles') and "guardian" in current_user.token_roles:
+        return True
+    
+    # ✅ SECOND: Fall back to database check if token roles not available
     user_roles = db.query(Role).join(UserRole).filter(
         UserRole.user_id == current_user.id
     ).all()
@@ -87,7 +91,6 @@ def verify_guardian_role(current_user: User, db: Session):
         )
     
     return True
-
 
 def verify_primary_guardian(current_user: User, dependent_id: int, db: Session):
     """Verify that current user is primary guardian for dependent"""
@@ -130,7 +133,7 @@ def verify_any_guardian(current_user: User, dependent_id: int, db: Session):
 @router.post("/pending-dependents", response_model=PendingDependentResponse)
 async def create_pending_dependent(
     dependent_data: PendingDependentCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """Create a new pending dependent"""
@@ -169,7 +172,7 @@ async def create_pending_dependent(
 
 @router.get("/pending-dependents", response_model=List[PendingDependentWithQR])
 async def get_pending_dependents(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """
@@ -222,7 +225,7 @@ async def get_pending_dependents(
 @router.delete("/pending-dependents/{pending_dependent_id}")
 async def delete_pending_dependent(
     pending_dependent_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """
@@ -273,7 +276,7 @@ async def delete_pending_dependent(
 @router.post("/generate-qr", response_model=GenerateQRResponse)
 async def generate_qr_code(
     request: GenerateQRRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """
@@ -352,7 +355,7 @@ async def generate_qr_code(
 @router.get("/qr-invitation/{pending_dependent_id}")
 async def get_qr_invitation(
     pending_dependent_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """
@@ -411,7 +414,7 @@ async def get_qr_invitation(
 
 @router.get("/pending-qr-invitations", response_model=List[PendingQRInvitationResponse])
 async def get_pending_qr_invitations(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """
@@ -477,7 +480,7 @@ async def get_pending_qr_invitations(
 @router.post("/approve-qr", response_model=ApproveQRResponse)
 async def approve_qr_invitation(
     request: ApproveQRRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """
@@ -585,7 +588,7 @@ async def approve_qr_invitation(
 @router.post("/reject-qr")
 async def reject_qr_invitation(
     request: RejectQRRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """
@@ -637,7 +640,7 @@ async def reject_qr_invitation(
 
 @router.get("/my-dependents", response_model=List[DependentDetailResponse])
 async def get_my_dependents(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """
@@ -706,7 +709,7 @@ async def get_my_dependents(
 @router.get("/dependent/{dependent_id}/all-guardians", response_model=List[CollaboratorInfo])
 async def get_all_guardians(
     dependent_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """
@@ -770,7 +773,7 @@ async def get_all_guardians(
 @router.post("/invite-collaborator", response_model=CollaboratorInvitationResponse)
 async def create_collaborator_invitation(
     request: CreateCollaboratorInvitationRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """Primary guardian creates invitation for collaborator"""
@@ -812,7 +815,7 @@ async def create_collaborator_invitation(
 @router.post("/validate-invitation", response_model=ValidateInvitationResponse)
 async def validate_invitation(
     request: ValidateInvitationRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """Check if invitation code is valid and not expired"""
@@ -883,7 +886,7 @@ async def validate_invitation(
 @router.post("/accept-invitation", response_model=AcceptInvitationResponse)
 async def accept_invitation(
     request: AcceptInvitationRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """Collaborator accepts invitation and creates relationship"""
@@ -971,7 +974,7 @@ async def accept_invitation(
 @router.get("/dependent/{dependent_id}/collaborators", response_model=List[CollaboratorInfo])
 async def get_collaborators(
     dependent_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """Get all collaborator guardians for a dependent (Primary guardian only)"""
@@ -1002,7 +1005,7 @@ async def get_collaborators(
 @router.get("/dependent/{dependent_id}/pending-invitations", response_model=List[PendingInvitationInfo])
 async def get_pending_invitations(
     dependent_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """Get all pending collaborator invitations (Primary guardian only)"""
@@ -1043,7 +1046,7 @@ async def get_pending_invitations(
 @router.delete("/collaborator/{relationship_id}")
 async def revoke_collaborator(
     relationship_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """Primary guardian removes collaborator access"""
@@ -1126,7 +1129,7 @@ def _get_or_create_safety_settings(dependent_id: int, db: Session) -> DependentS
 )
 async def get_dependent_safety_settings(
     dependent_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db),
 ):
     """Any guardian (primary or collaborator) can view this dependent's safety settings."""
@@ -1150,7 +1153,7 @@ async def get_dependent_safety_settings(
 async def update_dependent_safety_settings(
     dependent_id: int,
     body: SafetySettingsUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db),
 ):
     """Only primary guardian can update this dependent's safety settings."""
@@ -1251,7 +1254,7 @@ async def upload_dependent_profile_picture(
     dependent_id: int,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user_with_roles)
 ):
     """
     Upload profile picture for a dependent
@@ -1355,7 +1358,7 @@ async def upload_dependent_profile_picture(
 async def delete_dependent_profile_picture(
     dependent_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user_with_roles)
 ):
     """
     Delete profile picture for a dependent

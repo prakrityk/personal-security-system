@@ -460,7 +460,7 @@ async def firebase_login(
     # ISSUE JWT TOKENS
     # ============================================================================
     access_token = create_access_token(data={"sub": str(user.id)})
-    refresh_token_str = create_refresh_token(data={"sub": str(user.id)})
+    refresh_token_str = create_refresh_token(data={"sub": str(user.id)}, db=db, user_id=user.id)
 
     refresh_token_record = RefreshToken(
         user_id=user.id,
@@ -630,7 +630,7 @@ def refresh_access_token(
             detail="Invalid or expired refresh token"
         )
     
-    access_token = create_access_token(data={"sub": str(user_id)})
+    access_token = create_access_token(data={"sub": str(user_id)}, db=db, user_id=user_id  )
     
     return TokenResponse(
         access_token=access_token,
@@ -813,7 +813,7 @@ def select_user_role(
     }
 
 
-@router.post("/enable-biometric", response_model=UserResponse)
+@router.post("/enable-biometric", response_model=UserWithTokens)
 def enable_biometric_authentication(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -823,6 +823,8 @@ def enable_biometric_authentication(
     
     For Guardian users: This also assigns the Guardian role if not already assigned.
     This ensures Guardian role is only granted AFTER biometric setup is complete.
+    
+    ✅ CRITICAL: Returns NEW tokens with updated role claims
     """
     logger.info("="*80)
     logger.info(f"🔐 BIOMETRIC ENABLE REQUEST")
@@ -831,30 +833,15 @@ def enable_biometric_authentication(
     logger.info(f"   Email: {current_user.email}")
     logger.info(f"   Current biometric status: {current_user.biometric_enabled}")
     
-    # Check if biometric is already enabled
-    if current_user.biometric_enabled:
-        logger.warning(f"⚠️ Biometric already enabled for user {current_user.id}")
-        # Don't raise error, just return success
-        user_roles = [
-            RoleInfo(
-                id=ur.role.id,
-                role_name=ur.role.role_name,
-                role_description=ur.role.role_description
-            )
-            for ur in current_user.user_roles
-        ]
-        
-        return UserResponse(
-            id=current_user.id,
-            email=current_user.email,
-            full_name=current_user.full_name,
-            phone_number=current_user.phone_number,
-            roles=user_roles
-        )
+    # Track if we need to generate new tokens (role changed)
+    role_changed = False
     
-    # Enable biometric
-    logger.info(f"✅ Enabling biometric for user {current_user.id}")
-    current_user.biometric_enabled = True
+    # Enable biometric (even if already enabled, we might be adding role)
+    if not current_user.biometric_enabled:
+        logger.info(f"✅ Enabling biometric for user {current_user.id}")
+        current_user.biometric_enabled = True
+    else:
+        logger.info(f"⚠️ Biometric already enabled for user {current_user.id}")
     
     # ============================================================================
     # ASSIGN GUARDIAN ROLE IF NOT ALREADY ASSIGNED
@@ -879,6 +866,7 @@ def enable_biometric_authentication(
                 role_id=guardian_role.id
             )
             db.add(user_role)
+            role_changed = True  # ✅ Flag that role was added
             logger.info(f"✅ Guardian role assigned to user {current_user.id}")
         else:
             logger.info(f"   User already has guardian role")
@@ -889,11 +877,36 @@ def enable_biometric_authentication(
     db.commit()
     db.refresh(current_user)
     
+    # ============================================================================
+    # ✅ GENERATE NEW TOKENS WITH UPDATED ROLE CLAIMS
+    # ============================================================================
+    logger.info("🔑 Generating new tokens with updated role claims...")
+    
+    # Create new access token with updated role
+    access_token = create_access_token(data={"sub": str(current_user.id)}, db=db, user_id=current_user.id)
+    
+    # Create new refresh token
+    refresh_token_str = create_refresh_token(data={"sub": str(current_user.id)})
+    
+    # Invalidate old refresh tokens and save new one
+    db.query(RefreshToken).filter(
+        RefreshToken.user_id == current_user.id
+    ).delete()
+    
+    new_refresh_token = RefreshToken(
+        user_id=current_user.id,
+        token=refresh_token_str,
+        expires_at=datetime.now(timezone.utc) + timedelta(days=30)
+    )
+    db.add(new_refresh_token)
+    db.commit()
+    
     logger.info("="*80)
     logger.info(f"✅ BIOMETRIC ENABLED SUCCESSFULLY")
+    logger.info(f"✅ NEW TOKENS GENERATED WITH ROLE: guardian")
     logger.info("="*80)
     
-    # Prepare response
+    # Prepare response with tokens
     user_roles = [
         RoleInfo(
             id=ur.role.id,
@@ -903,12 +916,22 @@ def enable_biometric_authentication(
         for ur in current_user.user_roles
     ]
     
-    return UserResponse(
-        id=current_user.id,
-        email=current_user.email,
-        full_name=current_user.full_name,
-        phone_number=current_user.phone_number,
-        roles=user_roles
+    return UserWithTokens(
+        user=UserResponse(
+            id=current_user.id,
+            email=current_user.email,
+            full_name=current_user.full_name,
+            phone_number=current_user.phone_number,
+            profile_picture=current_user.profile_picture,
+            roles=user_roles,
+            biometric_enabled=current_user.biometric_enabled
+        ),
+        tokens=TokenResponse(
+            access_token=access_token,
+            refresh_token=refresh_token_str,
+            token_type="bearer",
+            expires_in=1800  # 30 minutes
+        )
     )
 
 

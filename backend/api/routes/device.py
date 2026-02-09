@@ -7,7 +7,7 @@ Handles registration of FCM device tokens for push notifications.
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from api.dependencies.auth import get_current_user
+from api.utils.auth_utils import get_current_user_with_roles
 from api.schemas.device import DeviceRegisterRequest, DeviceRegisterResponse
 from database.connection import get_db
 from models.device import Device
@@ -20,7 +20,7 @@ router = APIRouter()
 @router.post("/devices/register", response_model=DeviceRegisterResponse)
 async def register_device(
     payload: DeviceRegisterRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db),
 ):
     """

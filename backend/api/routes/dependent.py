@@ -25,7 +25,7 @@ from models.role import Role
 from models.user_roles import UserRole
 
 # Dependencies
-from api.dependencies.auth import get_current_user
+from api.utils.auth_utils import get_current_user_with_roles
 from database.connection import get_db
 
 # ✅ CRITICAL: Import auto-contact hooks
@@ -89,7 +89,7 @@ def assign_role_to_user(user_id: int, role_name: str, db: Session):
 @router.post("/scan-qr", response_model=ScanQRResponse)
 async def scan_qr_code(
     request: ScanQRRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """
@@ -229,7 +229,7 @@ async def scan_qr_code(
 
 # @router.get("/my-guardians", response_model=List[GuardianDetailResponse])
 # async def get_my_guardians(
-#     current_user: User = Depends(get_current_user),
+#     current_user: User = Depends(get_current_user_with_roles),
 #     db: Session = Depends(get_db)
 # ):
 #     """Get all guardians linked to the current dependent"""
@@ -271,7 +271,7 @@ async def scan_qr_code(
 
 @router.get("/my-guardians", response_model=List[GuardianDetailResponse])
 async def get_my_guardians(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """Get all guardians linked to the current dependent"""
@@ -323,7 +323,7 @@ async def get_my_guardians(
 
 @router.get("/my-safety-settings")
 async def get_my_safety_settings(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db),
 ):
     """
@@ -357,7 +357,7 @@ async def get_my_safety_settings(
 @router.delete("/remove-guardian/{relationship_id}")
 async def remove_guardian(
     relationship_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """

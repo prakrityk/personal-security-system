@@ -3,7 +3,7 @@ Authentication Utilities
 Password hashing, JWT token creation/verification
 """
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, List
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
@@ -14,6 +14,8 @@ from dotenv import load_dotenv
 
 from database.connection import get_db
 from models.user import User
+from models.user_roles import UserRole
+from models.role import Role
 
 load_dotenv()
 
@@ -48,18 +50,47 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 # JWT TOKEN UTILITIES
 # =====================================================
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+def create_access_token(
+    data: dict, 
+    db: Optional[Session] = None,
+    user_id: Optional[int] = None,
+    expires_delta: Optional[timedelta] = None
+) -> str:
     """
-    Create JWT access token
+    Create JWT access token with optional role inclusion
     
     Args:
         data: Payload to encode (should include 'sub' with user ID)
+        db: Database session (required to fetch user roles)
+        user_id: User ID to fetch roles for (optional, can be extracted from data['sub'])
         expires_delta: Custom expiration time (default: 30 minutes)
     
     Returns:
         Encoded JWT token string
     """
     to_encode = data.copy()
+    
+    # ✅ CRITICAL: Add user roles to token if db session is provided
+    if db:
+        try:
+            # Get user ID from data if not explicitly provided
+            if user_id is None:
+                user_id = int(data.get("sub"))
+            
+            if user_id:
+                # Fetch user roles
+                user_roles = db.query(Role).join(UserRole).filter(
+                    UserRole.user_id == user_id
+                ).all()
+                
+                # Add roles to token payload
+                to_encode["roles"] = [role.role_name for role in user_roles]
+                to_encode["has_roles"] = bool(user_roles)
+        except Exception as e:
+            # Log error but don't fail token creation
+            print(f"Warning: Could not fetch roles for token: {e}")
+            to_encode["roles"] = []
+            to_encode["has_roles"] = False
     
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
@@ -72,19 +103,35 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return encoded_jwt
 
 
-def create_refresh_token(data: dict) -> str:
+def create_refresh_token(
+    data: dict,
+    db: Optional[Session] = None,
+    user_id: Optional[int] = None
+) -> str:
     """
-    Create JWT refresh token (longer expiration)
+    Create JWT refresh token (longer expiration) with optional role inclusion
     
     Args:
         data: Payload to encode (should include 'sub' with user ID)
+        db: Database session (optional, for role inclusion)
+        user_id: User ID (optional, for role inclusion)
     
     Returns:
         Encoded JWT refresh token string
     """
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
     
+    # ✅ Optionally add roles to refresh token as well
+    if db and user_id:
+        try:
+            user_roles = db.query(Role).join(UserRole).filter(
+                UserRole.user_id == user_id
+            ).all()
+            to_encode["roles"] = [role.role_name for role in user_roles]
+        except Exception:
+            pass  # Don't fail refresh token creation if roles can't be fetched
+    
+    expire = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
     to_encode.update({"exp": expire, "type": "refresh"})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     
@@ -165,7 +212,7 @@ def get_current_user(
     db: Session = Depends(get_db)
 ) -> User:
     """
-    Dependency to get current authenticated user
+    Dependency to get current authenticated user with token roles attached
     
     Usage in routes:
         @router.get("/protected")
@@ -177,7 +224,7 @@ def get_current_user(
         db: Database session
     
     Returns:
-        User object
+        User object with token_roles attribute
     
     Raises:
         HTTPException: If token is invalid or user not found
@@ -209,6 +256,35 @@ def get_current_user(
             detail="User account is deactivated"
         )
     
+    # ✅ CRITICAL: Attach roles from token to user object
+    user.token_roles = payload.get("roles", [])
+    user.has_roles = payload.get("has_roles", False)
+    
+    return user
+
+
+def get_current_user_with_roles(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+) -> User:
+    """
+    Enhanced version that also validates user has roles from database
+    
+    Use this for endpoints that require role verification
+    """
+    user = get_current_user(credentials, db)
+    
+    # Additional validation: ensure roles in token match database
+    if hasattr(user, 'token_roles'):
+        # Fetch fresh roles from database for verification
+        db_roles = db.query(Role).join(UserRole).filter(
+            UserRole.user_id == user.id
+        ).all()
+        db_role_names = [role.role_name for role in db_roles]
+        
+        # Log for debugging
+        print(f"Token roles: {user.token_roles}, DB roles: {db_role_names}")
+    
     return user
 
 
@@ -229,3 +305,44 @@ def get_optional_user(
         return get_current_user(credentials, db)
     except HTTPException:
         return None
+
+
+# =====================================================
+# ROLE VERIFICATION UTILITIES
+# =====================================================
+
+def has_role(user: User, role_name: str) -> bool:
+    """
+    Check if user has a specific role (using token roles)
+    
+    Args:
+        user: User object (from get_current_user)
+        role_name: Role name to check
+    
+    Returns:
+        True if user has the role, False otherwise
+    """
+    if not hasattr(user, 'token_roles'):
+        return False
+    return role_name in user.token_roles
+
+
+def require_role(role_name: str):
+    """
+    Dependency factory to require specific role
+    
+    Usage:
+        @router.get("/admin")
+        def admin_route(user: User = Depends(require_role("admin"))):
+            return {"message": "Admin access granted"}
+    """
+    def role_dependency(
+        user: User = Depends(get_current_user)
+    ) -> User:
+        if not has_role(user, role_name):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Required role '{role_name}' not found"
+            )
+        return user
+    return role_dependency

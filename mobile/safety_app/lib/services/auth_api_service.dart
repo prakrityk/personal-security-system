@@ -330,6 +330,9 @@ class AuthApiService {
         }
         print('✅ Access token saved');
         print('✅ Refresh token saved');
+
+        // 🔥 CRITICAL: Update DioClient headers with new token
+        _dioClient.updateAuthorizationHeader(authResponse.token!.accessToken);
       }
 
       if (authResponse.user != null) {
@@ -343,7 +346,7 @@ class AuthApiService {
 
       // ✅ FIXED: Don't check biometrics here - let it be done separately
       print('✅ Normal login succeeded');
-      
+
       return authResponse;
     } catch (e) {
       print('❌ Error logging in: $e');
@@ -445,6 +448,7 @@ class AuthApiService {
   // ============================================================================
 
   /// Refresh access token using refresh token
+  /// Refresh access token using refresh token
   Future<String> refreshAccessToken() async {
     try {
       final refreshToken = await _storage.getRefreshToken();
@@ -471,6 +475,9 @@ class AuthApiService {
         await _storage.saveRefreshToken(newRefreshToken);
       }
 
+      // 🔥 CRITICAL: Update DioClient headers with new token
+      _dioClient.updateAuthorizationHeader(newAccessToken);
+
       return newAccessToken;
     } catch (e) {
       print('❌ Error refreshing token: $e');
@@ -480,7 +487,6 @@ class AuthApiService {
       throw Exception('Session expired. Please login again.');
     }
   }
-
   // ============================================================================
   // USER SESSION MANAGEMENT
   // ============================================================================
@@ -642,6 +648,11 @@ class AuthApiService {
   /// Returns a map with:
   /// - 'biometric_required': true if Guardian role (biometric setup needed)
   /// - 'biometric_required': false if other roles (assigned immediately)
+  // In auth_api_service.dart - Update selectRole() method:
+
+  /// Select role for current user
+  /// Select role for current user
+  /// Select role for current user
   Future<Map<String, dynamic>> selectRole(int roleId) async {
     try {
       final response = await _dioClient.post(
@@ -651,18 +662,36 @@ class AuthApiService {
 
       print('✅ Role selection response: ${response.data}');
 
-      // Backend returns: { success, message, biometric_required, role_assigned }
       final data = response.data as Map<String, dynamic>;
 
-      // If biometric is NOT required, role was assigned immediately
-      // Update user data in storage
-      if (data['biometric_required'] == false ||
-          data['role_assigned'] == true) {
-        if (data['user'] != null) {
-          final updatedUser = UserModel.fromJson(data['user']);
-          await _storage.saveUserData(updatedUser.toJson());
-          print('✅ User data updated after role assignment');
+      // ⚠️ CRITICAL FIX: Check if new tokens are returned
+      if (data.containsKey('token')) {
+        final tokenData = data['token'] as Map<String, dynamic>;
+        final newAccessToken = tokenData['access_token'] as String;
+        final newRefreshToken = tokenData['refresh_token'] as String?;
+
+        print('🔄 New tokens received after role selection');
+        print('   Access token: ${newAccessToken.substring(0, 20)}...');
+
+        // Save new tokens immediately
+        await _storage.saveAccessToken(newAccessToken);
+        if (newRefreshToken != null) {
+          await _storage.saveRefreshToken(newRefreshToken);
         }
+        print('✅ New tokens saved after role selection');
+
+        // 🔥 CRITICAL: Update DioClient headers with new token
+        _dioClient.updateAuthorizationHeader(newAccessToken);
+
+        // Remove token from data to avoid duplicate parsing
+        data.remove('token');
+      }
+
+      // Update user data if returned
+      if (data['user'] != null) {
+        final updatedUser = UserModel.fromJson(data['user']);
+        await _storage.saveUserData(updatedUser.toJson());
+        print('✅ User data updated after role assignment');
       }
 
       return data;
@@ -671,25 +700,53 @@ class AuthApiService {
       rethrow;
     }
   }
-
   // ============================================================================
   // BIOMETRIC AUTHENTICATION
   // ============================================================================
 
   /// Enable biometric authentication for current user
   /// For Guardian users: This also assigns the Guardian role
+  /// Enable biometric authentication for current user
+  /// For Guardian users: This also assigns the Guardian role
   Future<UserModel> enableBiometric() async {
     try {
       print('🔐 Enabling biometric authentication...');
 
+      // Make the API call
       final response = await _dioClient.post(ApiEndpoints.enableBiometric);
       print('✅ Biometric enabled on backend');
-      print('📦 Response: ${response.data}');
 
-      // Backend returns updated UserResponse with roles assigned
-      final updatedUser = UserModel.fromJson(response.data);
+      final data = response.data as Map<String, dynamic>;
 
-      // Save updated user data to storage
+      // ✅ UPDATED: Handle UserWithTokens response format
+      // Backend now returns: { user: {...}, tokens: { access_token, refresh_token, ... } }
+      if (data.containsKey('tokens')) {
+        final tokenData = data['tokens'] as Map<String, dynamic>;
+        final newAccessToken = tokenData['access_token'] as String;
+        final newRefreshToken = tokenData['refresh_token'] as String?;
+
+        print('🔄 New tokens received after biometric enable');
+        print('   Access token: ${newAccessToken.substring(0, 20)}...');
+
+        // Save new tokens
+        await _storage.saveAccessToken(newAccessToken);
+        if (newRefreshToken != null) {
+          await _storage.saveRefreshToken(newRefreshToken);
+        }
+        print('✅ New tokens saved after biometric enable');
+
+        // 🔥 CRITICAL: Update DioClient headers with new token
+        _dioClient.updateAuthorizationHeader(newAccessToken);
+        print('✅ DioClient headers updated with new token');
+      } else {
+        print('⚠️ Warning: No tokens in biometric enable response');
+      }
+
+      // Parse user data from the 'user' field
+      final userData = data.containsKey('user') ? data['user'] : data;
+      final updatedUser = UserModel.fromJson(userData as Map<String, dynamic>);
+
+      // Save updated user data
       await _storage.saveUserData(updatedUser.toJson());
       print('✅ User data updated after biometric enable');
 
@@ -703,7 +760,6 @@ class AuthApiService {
       rethrow;
     }
   }
-
   // ============================================================================
   // PROFILE MANAGEMENT
   // ============================================================================
@@ -858,6 +914,82 @@ class AuthApiService {
     }
   }
 
+  // Add this method to AuthApiService:
+  Future<bool> validateCurrentToken() async {
+    try {
+      final token = await _storage.getAccessToken();
+      if (token == null || token.isEmpty) {
+        print('❌ No access token found');
+        return false;
+      }
+
+      // Simple test call to verify token works
+      await _dioClient.get(ApiEndpoints.me);
+      print('✅ Token is valid');
+      return true;
+    } catch (e) {
+      print('❌ Token validation failed: $e');
+      return false;
+    }
+  }
+
+  // Add to auth_api_service.dart:
+  /// Validate and ensure current token is fresh
+  Future<void> ensureValidToken() async {
+    try {
+      // First try to use current token
+      final token = await _storage.getAccessToken();
+      if (token == null || token.isEmpty) {
+        print('❌ No access token found - attempting refresh...');
+        await refreshAccessToken();
+        return;
+      }
+
+      // Quick test if token works by making a simple API call
+      try {
+        await _dioClient.get(ApiEndpoints.me);
+        print('✅ Current token is valid');
+      } catch (e) {
+        if (e is DioException && e.response?.statusCode == 401) {
+          print('⚠️ Token invalid - refreshing...');
+          await refreshAccessToken();
+        } else {
+          rethrow;
+        }
+      }
+    } catch (e) {
+      print('❌ Failed to ensure valid token: $e');
+      throw Exception('Session expired. Please login again.');
+    }
+  }
+
+  // Add to AuthApiService:
+  Future<void> recoverTokenSession() async {
+    print('🔄 Attempting token session recovery...');
+
+    try {
+      // 1. Try to get current user with existing token
+      await fetchCurrentUser();
+      print('✅ Current token is valid');
+      return;
+    } catch (e) {
+      print('⚠️ Current token invalid: $e');
+    }
+
+    try {
+      // 2. Try to refresh token
+      await refreshAccessToken();
+      print('✅ Token refreshed successfully');
+
+      // 3. Verify refreshed token works
+      await fetchCurrentUser();
+      print('✅ Token recovery complete');
+    } catch (refreshError) {
+      print('❌ Token recovery failed: $refreshError');
+      await _storage.clearAll();
+      throw Exception('Session expired. Please login again.');
+    }
+  }
   // ============================================================================
   // PERMISSION HELPERS
   // ============================================================================

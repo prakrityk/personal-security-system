@@ -10,10 +10,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   flutter_secure_storage_windows
   local_auth_windows
   permission_handler_windows
-<<<<<<< HEAD
   record_windows
-=======
->>>>>>> 5a5e2230534d389fcbdb2d3b3d58dc7e44978ee1
   share_plus
   url_launcher_windows
 )

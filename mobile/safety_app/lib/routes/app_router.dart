@@ -37,7 +37,6 @@ class AppRouter {
   static const String otpVerification = '/otp-verification';
   static const String registration = '/registration';
   static const String emailVerification = '/email-verification';
-  static const String emailVerification = '/email-verification';
   static const String roleIntent = '/role-intent';
   static const String home = '/home';
   static const String account = '/account';
@@ -171,7 +170,6 @@ class AppRouter {
           ),
         ),
 
-
         // ==================== AUTH FLOW ====================
 
         // Splash Screen
@@ -219,9 +217,6 @@ class AppRouter {
             final verificationId = extra['verificationId'] as String? ?? '';
 
             // Redirect if missing required data
-            final extra = state.extra as Map<String, dynamic>? ?? {};
-            final phoneNumber = extra['phoneNumber'] as String? ?? '';
-            final verificationId = extra['verificationId'] as String? ?? '';
 
             // Redirect if missing required data
             if (phoneNumber.isEmpty) {
@@ -230,12 +225,7 @@ class AppRouter {
               });
             }
 
-
             return MaterialPage(
-              child: OtpVerificationScreen(
-                phoneNumber: phoneNumber,
-                verificationId: verificationId,
-              ),
               child: OtpVerificationScreen(
                 phoneNumber: phoneNumber,
                 verificationId: verificationId,
@@ -249,8 +239,6 @@ class AppRouter {
         // ✅ Email Verification Screen - FRIEND'S VERSION
         // Passes phoneNumber (NOT email) parameter
         GoRoute(
-          path: emailVerification,
-          name: 'emailVerification',
           path: emailVerification,
           name: 'emailVerification',
           pageBuilder: (context, state) {
@@ -258,19 +246,13 @@ class AppRouter {
             final phoneNumber = extra['phoneNumber'] as String? ?? '';
 
             // Redirect if missing required data
-            final extra = state.extra as Map<String, dynamic>? ?? {};
-            final phoneNumber = extra['phoneNumber'] as String? ?? '';
-
-            // Redirect if missing required data
             if (phoneNumber.isEmpty) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 context.go(AppRouter.phoneNumber);
               });
             }
 
-
             return MaterialPage(
-              child: EmailVerificationScreen(phoneNumber: phoneNumber),
               child: EmailVerificationScreen(phoneNumber: phoneNumber),
             );
           },
@@ -281,8 +263,6 @@ class AppRouter {
         // ✅ Registration Screen - FRIEND'S VERSION
         // Passes phoneNumber, email, and password
         GoRoute(
-          path: registration,
-          name: 'registration',
           path: registration,
           name: 'registration',
           pageBuilder: (context, state) {
@@ -305,25 +285,7 @@ class AppRouter {
                 password: password,
               ),
             );
-            final extra = state.extra as Map<String, dynamic>? ?? {};
-            final phoneNumber = extra['phoneNumber'] as String? ?? '';
-            final email = extra['email'] as String? ?? '';
-            final password = extra['password'] as String? ?? '';
-
-            // Redirect if missing required data
-            if (phoneNumber.isEmpty || email.isEmpty || password.isEmpty) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                context.go(AppRouter.phoneNumber);
-              });
-            }
-
-            return MaterialPage(
-              child: RegistrationScreen(
-                phoneNumber: phoneNumber,
-                email: email,
-                password: password,
-              ),
-            );
+         
           },
         ),
 
