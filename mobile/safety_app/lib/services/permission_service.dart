@@ -7,7 +7,7 @@ import 'package:safety_app/services/family_service.dart';
 
 /// Permission Service - Handles role-based permissions and access control
 class PermissionService {
-  final AuthApiService _authService = AuthApiService();
+  final AuthApiService _authApiService = AuthApiService();
   final GuardianService _guardianService = GuardianService();
   final FamilyService _familyService = FamilyService();
 
