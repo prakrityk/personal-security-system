@@ -33,7 +33,7 @@ class ApiEndpoints {
 
   /// Enable biometric authentication for current user
   /// For Guardian users: This also assigns the Guardian role
-  static const String enableBiometric = '/auth/biometric/enable';
+  static const String enableBiometric = '/auth/enable-biometric';
 
   // ============================================================================
   // 📱 PHONE VERIFICATION ENDPOINTS

@@ -1,19 +1,18 @@
 import 'package:dio/dio.dart';
-import '../storage/secure_storage_service.dart';
-import 'api_endpoints.dart';
-
+import 'package:safety_app/core/network/api_endpoints.dart';
+import 'package:safety_app/core/storage/secure_storage_service.dart';
 class DioClient {
   late final Dio _dio;
   final SecureStorageService _storage = SecureStorageService();
+  bool _isRefreshing = false;
+  final List<({RequestOptions options, ErrorInterceptorHandler handler})> _requestQueue = [];
 
   DioClient() {
     _dio = Dio(
       BaseOptions(
         baseUrl: ApiEndpoints.baseUrl,
-        connectTimeout: const Duration(seconds: 90),
-        receiveTimeout: const Duration(seconds: 90),
-        sendTimeout: const Duration(seconds: 90),
-
+        connectTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(seconds: 30),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -29,21 +28,158 @@ class DioClient {
           final token = await _storage.getAccessToken();
           if (token != null) {
             options.headers['Authorization'] = 'Bearer $token';
+            print('🔐 Token attached to ${options.method} ${options.path}');
+          } else {
+            print('⚠️ No token found for ${options.method} ${options.path}');
           }
-          print('Request: ${options.method} ${options.path}');
+          print('📤 Request: ${options.method} ${options.path}');
           return handler.next(options);
         },
         onResponse: (response, handler) {
-          print('Response: ${response.statusCode} ${response.data}');
+          print('✅ Response: ${response.statusCode} ${response.requestOptions.path}');
           return handler.next(response);
         },
-        onError: (error, handler) {
-          print('Error: ${error.message}');
-          print('Response: ${error.response?.data}');
-          return handler.next(error);
+        onError: (error, handler) async {
+          print('❌ Error: ${error.message}');
+          print('📥 Response data: ${error.response?.data}');
+          print('📥 Response status: ${error.response?.statusCode}');
+          
+          // Handle 401 Unauthorized errors (token expired)
+          if (error.response?.statusCode == 401) {
+            print('🔐 Token expired or invalid. Attempting refresh...');
+            
+            // Check if we're already refreshing
+            if (_isRefreshing) {
+              // Queue this request to be retried after refresh
+              print('⏳ Already refreshing token, queuing request...');
+              _requestQueue.add((options: error.requestOptions, handler: handler));
+              return;
+            }
+            
+            _isRefreshing = true;
+            
+            try {
+              // Try to refresh the token
+              print('🔄 Refreshing access token...');
+              
+              final refreshToken = await _storage.getRefreshToken();
+              if (refreshToken == null || refreshToken.isEmpty) {
+                print('❌ No refresh token available');
+                await _storage.logout();
+                throw Exception('Session expired. Please login again.');
+              }
+              
+              print('🔑 Refresh token found, length: ${refreshToken.length}');
+              
+              // Make refresh request using a new Dio instance to avoid circular reference
+              final refreshDio = Dio(BaseOptions(
+                baseUrl: ApiEndpoints.baseUrl,
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Accept': 'application/json',
+                },
+              ));
+              
+              final refreshResponse = await refreshDio.post(
+                ApiEndpoints.refresh,
+                data: {'refresh_token': refreshToken},
+              );
+              
+              if (refreshResponse.statusCode == 200) {
+                final tokenData = refreshResponse.data;
+                final newAccessToken = tokenData['access_token'] as String;
+                final newRefreshToken = tokenData['refresh_token'] as String?;
+                
+                // Save new tokens
+                await _storage.saveAccessToken(newAccessToken);
+                if (newRefreshToken != null) {
+                  await _storage.saveRefreshToken(newRefreshToken);
+                }
+                
+                print('✅ Token refreshed successfully');
+                print('🔑 New access token length: ${newAccessToken.length}');
+                
+                // Update the original request with new token
+                error.requestOptions.headers['Authorization'] = 'Bearer $newAccessToken';
+                
+                // Retry the original request
+                print('🔄 Retrying original request: ${error.requestOptions.method} ${error.requestOptions.path}');
+                final response = await _dio.request(
+                  error.requestOptions.path,
+                  data: error.requestOptions.data,
+                  queryParameters: error.requestOptions.queryParameters,
+                  options: Options(
+                    method: error.requestOptions.method,
+                    headers: error.requestOptions.headers,
+                  ),
+                );
+                
+                // Complete the original handler with successful response
+                print('✅ Retry successful: ${response.statusCode}');
+                handler.resolve(response);
+                
+                // Process queued requests
+                _processQueuedRequests(newAccessToken);
+                
+              } else {
+                print('❌ Token refresh failed with status: ${refreshResponse.statusCode}');
+                await _storage.logout();
+                throw Exception('Session expired. Please login again.');
+              }
+            } catch (refreshError) {
+              print('❌ Error during token refresh: $refreshError');
+              await _storage.logout();
+              // Pass the original error through
+              handler.next(error);
+            } finally {
+              _isRefreshing = false;
+            }
+          } else {
+            // For other errors, just pass them through
+            handler.next(error);
+          }
         },
       ),
     );
+  }
+
+  /// Process queued requests after token refresh
+  void _processQueuedRequests(String newAccessToken) {
+    if (_requestQueue.isEmpty) return;
+    
+    print('🔄 Processing ${_requestQueue.length} queued requests...');
+    
+    final queueCopy = List.of(_requestQueue);
+    _requestQueue.clear();
+    
+    for (final item in queueCopy) {
+      try {
+        item.options.headers['Authorization'] = 'Bearer $newAccessToken';
+        print('🔄 Retrying queued request: ${item.options.method} ${item.options.path}');
+        
+        _dio.request(
+          item.options.path,
+          data: item.options.data,
+          queryParameters: item.options.queryParameters,
+          options: Options(
+            method: item.options.method,
+            headers: item.options.headers,
+          ),
+        ).then((response) {
+          print('✅ Queued request succeeded: ${response.statusCode}');
+          item.handler.resolve(response);
+        }).catchError((error) {
+          print('❌ Queued request failed: $error');
+          item.handler.reject(error as DioException);
+        });
+      } catch (e) {
+        print('❌ Error processing queued request: $e');
+        item.handler.next(DioException(
+          requestOptions: item.options,
+          error: e,
+        ));
+      }
+    }
   }
 
   // GET request
@@ -141,8 +277,11 @@ class DioClient {
       case DioExceptionType.cancel:
         return Exception('Request cancelled');
 
-      default:
+      case DioExceptionType.unknown:
         return Exception('Network error. Please check your connection.');
+
+      default:
+        return Exception('Something went wrong. Please try again.');
     }
   }
 
@@ -163,7 +302,8 @@ class DioClient {
       case 400:
         return Exception(errorMessage ?? 'Bad request');
       case 401:
-        return Exception(errorMessage ?? 'Unauthorized. Please login again.');
+        // This should be handled by the interceptor now
+        return Exception(errorMessage ?? 'Session expired. Please login again.');
       case 403:
         return Exception(errorMessage ?? 'Access forbidden');
       case 404:

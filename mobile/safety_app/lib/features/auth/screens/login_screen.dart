@@ -60,34 +60,33 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     print('\n╔═══════════════════════════════════════════════════╗');
     print('║     BIOMETRIC SETUP DIAGNOSTIC (Login Screen)     ║');
     print('╚═══════════════════════════════════════════════════╝\n');
-    
+
     try {
       final canCheck = await _biometricService.canCheckBiometrics();
       print('1️⃣  Can check biometrics: $canCheck');
-      
+
       final available = await _biometricService.getAvailableBiometrics();
       print('2️⃣  Available biometrics: $available');
-      
+
       final isAvailable = await _biometricService.isBiometricAvailable();
       print('3️⃣  Biometric is available: $isAvailable');
-      
+
       final refreshToken = await _secureStorage.getRefreshToken();
       print('4️⃣  Refresh token exists: ${refreshToken != null}');
       if (refreshToken != null && refreshToken.isNotEmpty) {
         print('    Token length: ${refreshToken.length}');
       }
-      
+
       final biometricEnabled = await _secureStorage.isBiometricEnabled();
       print('5️⃣  Biometric enabled flag: $biometricEnabled');
-      
+
       final lastPhone = await _secureStorage.getLastLoginPhone();
       print('6️⃣  Last login phone: $lastPhone');
-      
+
       final accessToken = await _secureStorage.getAccessToken();
       print('7️⃣  Access token exists: ${accessToken != null}');
-      
+
       print('\n✅ DIAGNOSIS COMPLETE\n');
-      
     } catch (e) {
       print('❌ Error during diagnostic: $e\n');
     }
@@ -97,14 +96,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Future<void> _checkBiometricAvailability() async {
     try {
       print('🔍 Checking biometric availability...');
-      
+
       final deviceSupports = await _biometricService.isBiometricAvailable();
       final refreshToken = await _secureStorage.getRefreshToken();
       final hasRefreshToken = refreshToken != null && refreshToken.isNotEmpty;
       final biometricEnabled = await _secureStorage.isBiometricEnabled();
-      
+
       final shouldShow = deviceSupports && hasRefreshToken && biometricEnabled;
-      
+
       if (mounted) {
         setState(() {
           _showBiometricOption = shouldShow;
@@ -174,7 +173,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           password: password,
         );
         print('✅ Normal login succeeded');
-
       } catch (e) {
         // ── Step 2: If 401, try Firebase fallback ─────────────────────
         final errorMsg = e.toString();
@@ -182,7 +180,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
         if (errorMsg.contains('Invalid phone number or password') ||
             errorMsg.contains('Invalid credentials')) {
-          print('🔥 Trying Firebase login fallback (password may have been reset)...');
+          print(
+            '🔥 Trying Firebase login fallback (password may have been reset)...',
+          );
           response = await _firebaseFallbackLogin(phone, password);
         } else {
           // Not a credentials error — rethrow as-is
@@ -289,7 +289,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
       print('✅ Backend verified token and synced password hash');
       return response;
-
     } catch (e) {
       print('❌ Firebase fallback login failed: $e');
       rethrow;
@@ -446,12 +445,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   /// This is called when user taps the biometric button
   Future<void> _handleBiometricLogin() async {
     print('\n🔐 STARTING BIOMETRIC LOGIN FLOW\n');
-    
+
     setState(() => _isLoading = true);
 
     try {
       print('Step 1️⃣: Authenticating with biometric...');
-      
+
       print('Step 2️⃣: Calling API biometricLogin()...');
       final response = await _authApiService.biometricLogin();
 
@@ -467,33 +466,33 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         print('⚠️ User has no role, navigating to /role-intent');
         context.go('/role-intent');
       }
-      
+
       print('✅ BIOMETRIC LOGIN COMPLETE\n');
     } catch (e) {
       if (!mounted) return;
-      
+
       print('❌ Biometric login failed: $e');
-      
-      if (e.toString().contains('Session expired') || 
+
+      if (e.toString().contains('Session expired') ||
           e.toString().contains('Invalid token') ||
           e.toString().contains('refresh')) {
         print('⚠️ Token expired, clearing biometric...');
-        
+
         await _secureStorage.delete('access_token');
         await _secureStorage.delete('refresh_token');
         await _secureStorage.setBiometricEnabled(false);
-        
+
         if (mounted) {
           setState(() {
             _showBiometricOption = false;
           });
         }
-        
+
         _showError('Session expired. Please login with your password.');
       } else {
         _showError('Biometric login failed: ${e.toString()}');
       }
-      
+
       print('❌ BIOMETRIC LOGIN FAILED\n');
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -560,13 +559,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       const SizedBox(height: 24),
                       Row(
                         children: [
-                          Expanded(
-                            child: Divider(color: Colors.grey.shade400),
-                          ),
+                          Expanded(child: Divider(color: Colors.grey.shade400)),
                           Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
                             child: Text(
                               "or",
                               style: AppTextStyles.bodySmall.copyWith(
@@ -574,9 +569,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               ),
                             ),
                           ),
-                          Expanded(
-                            child: Divider(color: Colors.grey.shade400),
-                          ),
+                          Expanded(child: Divider(color: Colors.grey.shade400)),
                         ],
                       ),
                       const SizedBox(height: 24),

@@ -21,7 +21,7 @@ from api.routes import evidence_routes
 
 
 # Import Firebase service
-from services.firebase_service import FirebaseService
+from services.firebase_service import get_firebase_service
 
 # Import routes (you'll add these)
 # from api.routes import auth, guardian, dependent
@@ -36,7 +36,7 @@ async def lifespan(app: FastAPI):
     print("🚀 Starting Personal Security System API...")
     
     # Initialize Firebase Admin SDK
-    FirebaseService.initialize()
+    get_firebase_service()
     
     print("✅ Application startup complete!")
     yield

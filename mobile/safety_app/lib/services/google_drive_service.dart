@@ -21,8 +21,7 @@ class GoogleDriveService {
       final jsonString = await rootBundle.loadString(credentialsPath);
 
       // Parse credentials
-      final accountCredentials =
-          ServiceAccountCredentials.fromJson(jsonString);
+      final accountCredentials = ServiceAccountCredentials.fromJson(jsonString);
 
       // Define required scopes
       final scopes = [drive.DriveApi.driveFileScope];
@@ -72,8 +71,8 @@ class GoogleDriveService {
         ..mimeType = mimeType;
 
       // Place file inside the configured folder
-     if (_folderId != null && _folderId!.isNotEmpty) {
-       driveFile.parents = [_folderId!];
+      if (_folderId != null && _folderId!.isNotEmpty) {
+        driveFile.parents = [_folderId!];
       }
 
       // Upload file

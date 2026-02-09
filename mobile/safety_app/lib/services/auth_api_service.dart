@@ -184,22 +184,31 @@ class AuthApiService {
 
       final authResponse = AuthResponseModel.fromJson(response.data);
 
-      // Save tokens to secure storage
-      if (authResponse.token != null) {
-        await _storage.saveAccessToken(authResponse.token!.accessToken);
-        if (authResponse.token!.refreshToken != null) {
-          await _storage.saveRefreshToken(authResponse.token!.refreshToken!);
-        }
+      print('📋 Registration Response:');
+      print('   Success: ${authResponse.success}');
+      print('   Message: ${authResponse.message}');
+      print('   User: ${authResponse.user?.fullName}');
+
+      // ✅ Validate response has required data
+      if (authResponse.user == null || authResponse.token == null) {
+        throw Exception('Registration failed: Missing user or token data');
       }
 
-      // Save user data to secure storage
-      if (authResponse.user != null) {
-        await _storage.saveUserData(authResponse.user!.toJson());
-        print('✅ User registered and tokens saved');
-        print('👤 User: ${authResponse.user!.fullName}');
-        print('📧 Email: ${authResponse.user!.email}');
-        print('📱 Phone: ${authResponse.user!.phoneNumber}');
+      // Save tokens to secure storage
+      await _storage.saveAccessToken(authResponse.token!.accessToken);
+      if (authResponse.token!.refreshToken != null) {
+        await _storage.saveRefreshToken(authResponse.token!.refreshToken!);
       }
+      print('✅ Access token saved');
+      print('✅ Refresh token saved');
+
+      // Save user data to secure storage
+      await _storage.saveUserData(authResponse.user!.toJson());
+      print('✅ User data saved');
+      print('✅ User registered and tokens saved');
+      print('👤 User: ${authResponse.user!.fullName}');
+      print('📧 Email: ${authResponse.user!.email}');
+      print('📱 Phone: ${authResponse.user!.phoneNumber}');
 
       return authResponse;
     } catch (e) {
@@ -221,7 +230,6 @@ class AuthApiService {
       rethrow;
     }
   }
-
   // ============================================================================
   // EMAIL VERIFICATION
   // ============================================================================

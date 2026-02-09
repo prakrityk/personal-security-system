@@ -1,246 +1,260 @@
 """
-Firebase Admin SDK Service
-Handles Firebase token verification and user management
+Firebase Admin SDK service
+
+Originally used only for token verification.
+Extended to also send FCM push notifications for SOS events.
 """
-import firebase_admin
-from firebase_admin import credentials, auth
-from fastapi import HTTPException, status
+print("🔥 LOADED firebase_services.py FROM:", __file__)
+
 import os
-import logging
 from dotenv import load_dotenv
+from typing import Iterable, Optional
+import firebase_admin
+from fastapi import HTTPException
+from firebase_admin import auth, credentials, messaging
 
 load_dotenv()
-logger = logging.getLogger(__name__)
-
 
 class FirebaseService:
+    """
+    Firebase service (singleton)
+    - Initializes Admin SDK once
+    - Verifies Firebase ID tokens
+    - Sends FCM notifications
+    - Cleans up expired tokens
+    """
+
+    _instance = None
     _initialized = False
-    _project_id = None
-    
-    @classmethod
-    def initialize(cls):
-        """Initialize Firebase Admin SDK (call once at startup)"""
-        if cls._initialized:
-            logger.info("✅ Firebase already initialized")
-            return
-        
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(FirebaseService, cls).__new__(cls)
+        return cls._instance
+
+    def __init__(self):
+        if not self._initialized:
+            self._initialize_firebase()
+            self.__class__._initialized = True
+
+    def _initialize_firebase(self):
+        """Initialize Firebase Admin SDK"""
         try:
-            # Get path to Firebase credentials
-            cred_path = os.getenv("FIREBASE_CREDENTIALS_PATH", "./firebase_credentials.json")
-            
-            logger.info(f"🔍 Looking for Firebase credentials at: {cred_path}")
-            
-            if not os.path.exists(cred_path):
-                error_msg = (
-                    f"Firebase credentials file not found at: {cred_path}\n"
-                    "Please download from Firebase Console > Project Settings > Service Accounts > "
-                    "Generate New Private Key"
+            # backend/ directory
+            BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+            creds_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
+
+            if not creds_path:
+                creds_path = os.path.join(BASE_DIR, "firebase-credentials.json")
+
+            if not os.path.isabs(creds_path):
+                creds_path = os.path.join(BASE_DIR, creds_path)
+
+            if not os.path.exists(creds_path):
+                raise FileNotFoundError(
+                    f"Firebase credentials file not found at: {creds_path}"
                 )
-                logger.error(f"❌ {error_msg}")
-                raise FileNotFoundError(error_msg)
-            
-            # Initialize Firebase Admin
-            cred = credentials.Certificate(cred_path)
-            
-            # Store project ID for verification
-            cls._project_id = cred.project_id
-            
-            # Check if already initialized (safety check)
+
+            cred = credentials.Certificate(creds_path)
+
             if not firebase_admin._apps:
                 firebase_admin.initialize_app(cred)
-                logger.info("✅ Firebase Admin SDK initialized successfully")
-            else:
-                logger.info("✅ Firebase Admin SDK already initialized")
-            
-            cls._initialized = True
-            logger.info(f"📋 Firebase Project ID: {cls._project_id}")
-            logger.info(f"📧 Service Account: {cred.service_account_email}")
-            
-        except FileNotFoundError as e:
-            logger.error(f"❌ Credentials file not found: {e}")
-            raise
+
+            print("✅ Firebase Admin SDK initialized successfully")
+
         except Exception as e:
-            logger.error(f"❌ Failed to initialize Firebase Admin SDK: {e}")
-            logger.error(f"   Error type: {type(e).__name__}")
+            print(f"❌ Firebase initialization failed: {e}")
             raise
-    
-    @classmethod
-    def ensure_initialized(cls):
-        """Ensure Firebase is initialized before use"""
-        if not cls._initialized:
-            logger.warning("⚠️ Firebase not initialized, initializing now...")
-            cls.initialize()
-    
-    @classmethod
-    def verify_firebase_token(cls, firebase_token: str) -> dict:
-        """
-        Verify Firebase ID token and extract user information
-        
-        Args:
-            firebase_token: Firebase ID token from Flutter client
-            
-        Returns:
-            dict with user info: {
-                'uid': str,
-                'email': str,
-                'email_verified': bool,
-                'phone_number': str,
-                'phone_verified': bool
-            }
-            
-        Raises:
-            HTTPException: If token is invalid or expired
-        """
-        # Ensure Firebase is initialized
-        cls.ensure_initialized()
-        
-        if not firebase_token:
-            logger.error("❌ Empty token received")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Firebase token is required"
-            )
-        
-        # Clean token (remove whitespace)
-        firebase_token = firebase_token.strip()
-        
+
+    # -----------------------------
+    # Token verification (existing)
+    # -----------------------------
+
+    def verify_firebase_token(self, id_token: str) -> dict:
+        """Verify Firebase ID token from Flutter app."""
         try:
-            logger.info("🔍 Verifying Firebase token...")
-            logger.info(f"   Token length: {len(firebase_token)}")
-            logger.info(f"   Token preview: {firebase_token[:50]}...")
-            logger.info(f"   Expected project: {cls._project_id}")
+            decoded_token = auth.verify_id_token(id_token)
+
+            uid = decoded_token.get("uid")
+            email = decoded_token.get("email")
+            phone_number = decoded_token.get("phone_number")
+            email_verified = decoded_token.get("email_verified", False)
             
-            # Verify the token with Firebase Admin SDK
-            decoded_token = auth.verify_id_token(firebase_token, check_revoked=True)
+            # Check if phone is verified by looking at provider data
+            phone_verified = False
+            provider_data = decoded_token.get("firebase", {}).get("sign_in_provider")
             
-            logger.info("✅ Token verified successfully")
-            
-            # Extract user information
-            uid = decoded_token.get('uid')
-            email = decoded_token.get('email')
-            email_verified = decoded_token.get('email_verified', False)
-            phone_number = decoded_token.get('phone_number')
-            
-            # Check if phone is verified (if phone auth was used, it's auto-verified)
-            phone_verified = bool(phone_number)
-            
-            # Log extracted info
-            logger.info(f"📋 User Info:")
-            logger.info(f"   UID: {uid}")
-            logger.info(f"   Email: {email}")
-            logger.info(f"   Phone: {phone_number}")
-            logger.info(f"   Email Verified: {email_verified}")
-            logger.info(f"   Phone Verified: {phone_verified}")
-            
+            # If user has phone number and signed in with phone, it's verified
+            if phone_number:
+                # Phone is verified if it's in the token (Firebase only adds verified phones)
+                phone_verified = True
+                
+            # Alternative: Check provider data
+            if not phone_verified and provider_data == "phone":
+                phone_verified = True
+
+            print(f"🔍 Token verification result:")
+            print(f"   UID: {uid}")
+            print(f"   Email: {email}")
+            print(f"   Phone: {phone_number}")
+            print(f"   Email Verified: {email_verified}")
+            print(f"   Phone Verified: {phone_verified}")
+
             return {
-                'uid': uid,
-                'email': email,
-                'email_verified': email_verified,
-                'phone_number': phone_number,
-                'phone_verified': phone_verified
+                "uid": uid,
+                "email": email,
+                "phone_number": phone_number,
+                "email_verified": email_verified,
+                "phone_verified": phone_verified,
+                "verified": True,  # Keep for backward compatibility
             }
-            
-        except auth.RevokedIdTokenError as e:
-            logger.error(f"❌ Token revoked: {str(e)}")
+
+        except auth.ExpiredIdTokenError:
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Firebase token has been revoked. Please login again."
+                status_code=401,
+                detail="Firebase token has expired",
             )
-            
-        except auth.ExpiredIdTokenError as e:
-            logger.error(f"❌ Token expired: {str(e)}")
+        except auth.RevokedIdTokenError:
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Firebase token has expired. Please refresh and try again."
+                status_code=401,
+                detail="Firebase token has been revoked",
             )
-            
-        except auth.InvalidIdTokenError as e:
-            logger.error(f"❌ Invalid token: {str(e)}")
-            logger.error(f"   Token length: {len(firebase_token)}")
-            logger.error(f"   Token starts: {firebase_token[:30]}")
-            logger.error(f"   Expected project: {cls._project_id}")
-            logger.error("\n🔍 Common causes:")
-            logger.error("   1. Token from different Firebase project")
-            logger.error("   2. Token corrupted during transmission")
-            logger.error("   3. Wrong service account credentials")
-            
+        except auth.InvalidIdTokenError:
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=(
-                    f"Invalid Firebase token. Common causes: "
-                    f"(1) Token from different Firebase project (expected: {cls._project_id}), "
-                    f"(2) Token expired or corrupted, "
-                    f"(3) Service account credentials mismatch"
-                )
+                status_code=401,
+                detail="Invalid Firebase token",
             )
-            
         except Exception as e:
-            logger.error(f"❌ Unexpected error: {str(e)}")
-            logger.error(f"   Error type: {type(e).__name__}")
+            print(f"❌ Token verification error: {e}")
+            import traceback
+            traceback.print_exc()
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=f"Token verification failed: {str(e)}"
+                status_code=401,
+                detail=f"Firebase token verification failed: {str(e)}",
             )
-    
-    @classmethod
-    def get_user_by_uid(cls, firebase_uid: str):
-        """
-        Get Firebase user by UID
-        
-        Args:
-            firebase_uid: Firebase user UID
-            
-        Returns:
-            UserRecord object from Firebase
-        """
-        cls.ensure_initialized()
-        
+
+    def get_user_by_phone(self, phone_number: str) -> Optional[dict]:
+        """Get Firebase user by phone number."""
         try:
-            user = auth.get_user(firebase_uid)
-            return user
+            user = auth.get_user_by_phone_number(phone_number)
+            return {
+                "uid": user.uid,
+                "phone_number": user.phone_number,
+                "created_at": user.user_metadata.creation_timestamp,
+            }
         except auth.UserNotFoundError:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Firebase user not found"
-            )
+            return None
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to fetch Firebase user: {str(e)}"
-            )
-    
-    @classmethod
-    def verify_email_and_phone(cls, firebase_uid: str) -> dict:
+            print(f"Error getting user by phone: {str(e)}")
+            return None
+
+    # -----------------------------
+    # FCM helpers with token cleanup
+    # -----------------------------
+    def send_sos_notification(
+        self,
+        tokens: Iterable[str],
+        title: str,
+        body: str,
+        data: Optional[dict] = None,
+    ) -> None:
         """
-        Check if user's email and phone are verified in Firebase
-        
-        Args:
-            firebase_uid: Firebase user UID
-            
-        Returns:
-            dict: {'email_verified': bool, 'phone_verified': bool}
+        Send FCM notifications to multiple device tokens and clean up expired tokens.
+
+        - tokens: list of FCM tokens
+        - title/body: notification content
+        - data: small key/value payload (e.g. {"event_id": "...", "type": "SOS_EVENT"})
         """
-        cls.ensure_initialized()
-        
+        token_list = [t for t in tokens if t]
+        if not token_list:
+            print("⚠️ No valid FCM tokens to send notification to")
+            return
+
+        # Convert data values to strings
+        str_data = {k: str(v) for k, v in (data or {}).items()}
+
+        success_count = 0
+        failure_count = 0
+        expired_tokens = []
+
+        # Send to each token individually
+        for idx, token in enumerate(token_list):
+            try:
+                message = messaging.Message(
+                    notification=messaging.Notification(title=title, body=body),
+                    data=str_data,
+                    token=token,
+                )
+                
+                response = messaging.send(message)
+                print(f"✅ FCM notification sent to token {idx}: {response}")
+                success_count += 1
+                
+            except messaging.UnregisteredError:
+                print(f"⚠️ Token expired: {token[:20]}...")
+                expired_tokens.append(token)
+                failure_count += 1
+            except messaging.InvalidArgumentError:
+                print(f"⚠️ Invalid token format: {token[:20]}...")
+                expired_tokens.append(token)
+                failure_count += 1
+            except Exception as e:
+                print(f"❌ Failed to send to token {idx}: {e}")
+                failure_count += 1
+
+        # 🔥 CLEAN UP EXPIRED TOKENS
+        if expired_tokens:
+            self._cleanup_expired_tokens(expired_tokens)
+
+        print(
+            f"📨 FCM batch: success={success_count}, failure={failure_count}, "
+            f"expired={len(expired_tokens)}"
+        )
+
+    def _cleanup_expired_tokens(self, expired_tokens: list[str]) -> None:
+        """Remove expired tokens from database"""
         try:
-            user = auth.get_user(firebase_uid)
+            # Import here to avoid circular imports
+            from database.connection import get_db
+            from sqlalchemy.orm import Session
             
-            return {
-                'email_verified': user.email_verified,
-                'phone_verified': bool(user.phone_number)  # If phone exists, it's verified
-            }
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to verify user: {str(e)}"
+            # Get a database session
+            db = next(get_db())
+            
+            # Import Device model
+            from models.device import Device
+            
+            # Mark tokens as inactive
+            result = db.query(Device).filter(
+                Device.fcm_token.in_(expired_tokens)
+            ).update(
+                {"is_active": False},
+                synchronize_session=False
             )
-    
-    @classmethod
-    def get_project_id(cls) -> str:
-        """Get the Firebase project ID"""
-        cls.ensure_initialized()
-        return cls._project_id
+            
+            db.commit()
+            print(f"✅ Marked {result} expired tokens as inactive")
+            
+            # Optional: Also delete completely if you prefer
+            # db.query(Device).filter(Device.fcm_token.in_(expired_tokens)).delete(synchronize_session=False)
+            # db.commit()
+            # print(f"✅ Deleted {result} expired tokens")
+            
+        except ImportError as e:
+            print(f"⚠️ Could not import database modules for token cleanup: {e}")
+            print("⚠️ Make sure database.connection and models.device are available")
+        except Exception as e:
+            print(f"❌ Failed to cleanup tokens: {e}")
+            import traceback
+            traceback.print_exc()
 
 
-# Create singleton instance
+# At the end of firebase_service.py, replace lines 228-233 with:
+
+# ✅ Create singleton instance at module load
 firebase_service = FirebaseService()
+
+def get_firebase_service() -> FirebaseService:
+    """Get the singleton FirebaseService instance"""
+    return firebase_service
