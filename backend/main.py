@@ -5,7 +5,7 @@ Personal Security System Backend
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from api.routes import auth, pending_dependent
+from api.routes import auth, pending_dependent, voice
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi import Depends
 
@@ -52,6 +52,7 @@ def health_check():
 # Include routers
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(pending_dependent.router, prefix="/api/pending-dependent", tags=["Pending Dependent"])
+app.include_router(voice.router, prefix="/api/voice", tags=["Voice Activation"])
 
 
 if __name__ == "__main__":

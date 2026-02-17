@@ -36,6 +36,8 @@ try:
     from models.refresh_token import RefreshToken
     from models.qr_invitation import QRInvitation  # Depends on pending_dependent
     from models.guardian_dependent import GuardianDependent  # Depends on pending_dependent
+    from models.user_voices import UserVoice
+
 
     print("\n✅ Successfully imported all models!")
 except ImportError as e:
@@ -166,11 +168,12 @@ def verify_tables():
             'users',
             'roles',
             'user_roles',
-            'otp',
-            'pending_dependents',
+            'otps',
+            'pending_dependent',
             'refresh_tokens',
             'qr_invitations',
-            'guardian_dependents'
+            'guardian_dependents',
+            'user_voices'
         ]
         
         existing_tables = inspector.get_table_names()
