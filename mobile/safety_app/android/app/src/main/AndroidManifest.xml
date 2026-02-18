@@ -28,7 +28,7 @@
     <uses-permission android:name="android.permission.READ_CONTACTS"/> 
 
     <application
-        android:label="safety_app"
+        android:label="Alibi"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
