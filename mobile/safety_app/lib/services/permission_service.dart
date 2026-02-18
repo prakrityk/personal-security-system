@@ -3,13 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:safety_app/models/user_model.dart';
 import 'package:safety_app/services/auth_api_service.dart';
 import 'package:safety_app/services/guardian_service.dart';
-import 'package:safety_app/services/family_service.dart';
+//import 'package:safety_app/services/family_service.dart';
 
 /// Permission Service - Handles role-based permissions and access control
 class PermissionService {
   final AuthApiService _authApiService = AuthApiService();
   final GuardianService _guardianService = GuardianService();
-  final FamilyService _familyService = FamilyService();
+  // final FamilyService _familyService = FamilyService();
 
   UserModel? _currentUser;
 
@@ -200,7 +200,6 @@ class PermissionService {
       isPrimaryGuardianForThatDependent: isPrimary,
     );
   }
-  
 
   /// Check if user can edit safety features for a dependent
   Future<bool> canEditDependentSafetyFeatures(int dependentId) async {

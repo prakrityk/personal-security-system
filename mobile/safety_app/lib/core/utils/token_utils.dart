@@ -28,7 +28,7 @@ class TokenUtils {
           print('⚠️ TokenUtils: Token expired, attempting refresh...');
           return await refreshToken();
         }
-        throw e;
+        rethrow;
       }
     } catch (e) {
       print('❌ TokenUtils: Error validating token: $e');

@@ -14,11 +14,11 @@ class BiometricLoginButton extends StatefulWidget {
   final bool isLoading;
 
   const BiometricLoginButton({
-    Key? key,
+    super.key,
     required this.onSuccess,
     this.onError,
     this.isLoading = false,
-  }) : super(key: key);
+  });
 
   @override
   State<BiometricLoginButton> createState() => _BiometricLoginButtonState();
@@ -64,7 +64,7 @@ class _BiometricLoginButtonState extends State<BiometricLoginButton>
 
     try {
       print('Step 1️⃣: Requesting biometric authentication...');
-      
+
       final isAuthenticated = await _biometricService.authenticate(
         reason: 'Authenticate to log in to your account',
       );
@@ -77,27 +77,28 @@ class _BiometricLoginButtonState extends State<BiometricLoginButton>
       if (isAuthenticated) {
         print('Step 2️⃣: Authentication successful! ✅');
         print('Step 3️⃣: Calling parent onSuccess() callback...\n');
-        
+
         // Stop animation before callback
         _animationController.stop();
         setState(() => _isAuthenticating = false);
-        
+
         // Call parent callback to trigger API login
         widget.onSuccess();
-        
+
         print('✅ BiometricLoginButton completed successfully\n');
       } else {
         print('Step 2️⃣: Authentication cancelled by user ❌\n');
-        
+
         if (!mounted) return;
 
         // Stop animation
         _animationController.stop();
         setState(() => _isAuthenticating = false);
 
-        const errorMsg = 'Biometric authentication cancelled. Please try again.';
+        const errorMsg =
+            'Biometric authentication cancelled. Please try again.';
         print('   Error: $errorMsg');
-        
+
         if (widget.onError != null) {
           widget.onError!(errorMsg);
         } else {
@@ -130,7 +131,7 @@ class _BiometricLoginButtonState extends State<BiometricLoginButton>
 
   /// Parse error and return user-friendly message
   String _parseErrorMessage(String error) {
-    print('🔍 Parsing error: $error');
+     print('🔍 Parsing error: $error');
 
     if (error.contains('NotAvailable')) {
       return 'Biometric is not available on this device';
@@ -142,7 +143,8 @@ class _BiometricLoginButtonState extends State<BiometricLoginButton>
       return 'Too many failed attempts. Try again in a few moments.';
     } else if (error.contains('PermanentlyLockedOut')) {
       return 'Biometric is disabled. Please use your password.';
-    } else if (error.contains('UserCanceled') || error.contains('goBackError')) {
+    } else if (error.contains('UserCanceled') ||
+        error.contains('goBackError')) {
       return 'Authentication cancelled. Please try again.';
     } else if (error.contains('PasscodeNotSet')) {
       return 'Device passcode not set. Please set it in device settings.';
@@ -172,7 +174,7 @@ class _BiometricLoginButtonState extends State<BiometricLoginButton>
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    //final isDark = Theme.of(context).brightness == Brightness.dark;
     final isLoading = _isAuthenticating || widget.isLoading;
 
     return Column(
@@ -181,7 +183,10 @@ class _BiometricLoginButtonState extends State<BiometricLoginButton>
         if (isLoading)
           ScaleTransition(
             scale: Tween<double>(begin: 0.8, end: 1.2).animate(
-              CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+              CurvedAnimation(
+                parent: _animationController,
+                curve: Curves.easeInOut,
+              ),
             ),
             child: Container(
               height: 56,
@@ -189,10 +194,7 @@ class _BiometricLoginButtonState extends State<BiometricLoginButton>
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: AppColors.primaryGreen.withOpacity(0.2),
-                border: Border.all(
-                  color: AppColors.primaryGreen,
-                  width: 2,
-                ),
+                border: Border.all(color: AppColors.primaryGreen, width: 2),
               ),
               child: const Icon(
                 Icons.fingerprint,
@@ -210,10 +212,7 @@ class _BiometricLoginButtonState extends State<BiometricLoginButton>
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: AppColors.primaryGreen.withOpacity(0.1),
-                border: Border.all(
-                  color: AppColors.primaryGreen,
-                  width: 2,
-                ),
+                border: Border.all(color: AppColors.primaryGreen, width: 2),
               ),
               child: const Icon(
                 Icons.fingerprint,
@@ -243,11 +242,11 @@ class BiometricLoginButtonFull extends StatefulWidget {
   final bool isLoading;
 
   const BiometricLoginButtonFull({
-    Key? key,
+    super.key,
     required this.onSuccess,
     this.onError,
     this.isLoading = false,
-  }) : super(key: key);
+  });
 
   @override
   State<BiometricLoginButtonFull> createState() =>
@@ -300,7 +299,8 @@ class _BiometricLoginButtonFullState extends State<BiometricLoginButtonFull> {
 
         setState(() => _isAuthenticating = false);
 
-        const errorMsg = 'Biometric authentication cancelled. Please try again.';
+        const errorMsg =
+            'Biometric authentication cancelled. Please try again.';
         print('   Error: $errorMsg');
 
         if (widget.onError != null) {
@@ -345,7 +345,8 @@ class _BiometricLoginButtonFullState extends State<BiometricLoginButtonFull> {
       return 'Too many failed attempts. Try again in a few moments.';
     } else if (error.contains('PermanentlyLockedOut')) {
       return 'Biometric is disabled. Please use your password.';
-    } else if (error.contains('UserCanceled') || error.contains('goBackError')) {
+    } else if (error.contains('UserCanceled') ||
+        error.contains('goBackError')) {
       return 'Authentication cancelled. Please try again.';
     } else if (error.contains('PasscodeNotSet')) {
       return 'Device passcode not set. Please set it in device settings.';
@@ -402,9 +403,7 @@ class _BiometricLoginButtonFullState extends State<BiometricLoginButtonFull> {
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primaryGreen,
           padding: const EdgeInsets.symmetric(vertical: 12),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
       ),
     );
@@ -420,12 +419,12 @@ class BiometricLoginButtonSimple extends StatefulWidget {
   final String buttonText;
 
   const BiometricLoginButtonSimple({
-    Key? key,
+    super.key,
     required this.onSuccess,
     this.onError,
     this.isLoading = false,
     this.buttonText = 'Fingerprint Login',
-  }) : super(key: key);
+  });
 
   @override
   State<BiometricLoginButtonSimple> createState() =>
@@ -458,7 +457,7 @@ class _BiometricLoginButtonSimpleState
       } else {
         print('❌ Biometric authentication cancelled');
         setState(() => _isAuthenticating = false);
-        
+
         const errorMsg = 'Authentication cancelled';
         if (widget.onError != null) {
           widget.onError!(errorMsg);

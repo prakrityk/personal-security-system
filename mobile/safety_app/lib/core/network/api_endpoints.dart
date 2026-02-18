@@ -11,8 +11,8 @@ class ApiEndpoints {
   // static const String baseUrl = 'http://localhost:8000/api';
   //'http://192.168.21.102:8000/api';
 
- //static const String baseUrl = "http://10.0.2.2:8000/api";
-//  // For localhost web testing, use: 'http://localhost:8000/api'
+  //static const String baseUrl = "http://10.0.2.2:8000/api";
+  //  // For localhost web testing, use: 'http://localhost:8000/api'
   static const String baseUrl =
       'https://yevette-oxycephalic-lanell.ngrok-free.dev/api';
   // For emulator testing, use: 'http://10.0.2.2:8000/api'

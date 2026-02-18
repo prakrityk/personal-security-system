@@ -272,7 +272,7 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<UserModel?>> {
       // Reset state to null (no user)
       state = const AsyncValue.data(null);
       print('✅ AuthStateNotifier: Logout successful - User state cleared');
-    } catch (e, stack) {
+    } catch (e) {
       // Log error but ALWAYS reset state
       print('⚠️ AuthStateNotifier: Logout error: $e');
       // CRITICAL: Reset state to null even on error

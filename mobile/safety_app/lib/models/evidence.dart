@@ -1,6 +1,7 @@
 /// Evidence Model
 /// Represents an evidence record in the app
 /// Location: lib/models/evidence.dart
+library;
 
 class Evidence {
   final int? id;            // local SQLite PK

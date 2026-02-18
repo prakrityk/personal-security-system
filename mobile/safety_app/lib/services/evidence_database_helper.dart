@@ -1,10 +1,11 @@
 /// Local Database Helper for Evidence
 /// Manages local SQLite storage for offline evidence tracking
 /// Location: lib/services/evidence_database_helper.dart
+library;
 
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
-import '../models/evidence.dart';
+//import '../models/evidence.dart';
 
 class EvidenceDatabaseHelper {
   static final EvidenceDatabaseHelper instance = EvidenceDatabaseHelper._init();

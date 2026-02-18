@@ -19,6 +19,7 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
   final FirebaseAuthService _firebaseAuthService = FirebaseAuthService();
 
   bool _isLoading = false;
+  // ignore: unused_field
   String? _verificationId; // Store this for OTP screen
 
   @override
@@ -54,38 +55,36 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
       // 🔥 Send OTP via Firebase
       await _firebaseAuthService.sendPhoneOTP(
         phoneNumber: phone,
-        
+
         // ✅ OTP sent successfully
         onCodeSent: (String verificationId, int? resendToken) {
           _verificationId = verificationId;
-          
+
           if (!mounted) return;
-          
+
           _showSuccess("OTP sent to $phone");
-          
+
           // Navigate to OTP verification screen
-          context.push('/otp-verification', extra: {
-            'phoneNumber': phone,
-            'verificationId': verificationId,
-          });
+          context.push(
+            '/otp-verification',
+            extra: {'phoneNumber': phone, 'verificationId': verificationId},
+          );
         },
-        
+
         // ❌ Verification failed
         onVerificationFailed: (String error) {
           if (!mounted) return;
           _showError(error);
           setState(() => _isLoading = false);
         },
-        
+
         // 🤖 Auto-verification completed (Android only)
         onVerificationCompleted: (credential) {
           if (!mounted) return;
           _showSuccess("Phone verified automatically!");
-          
+
           // Navigate directly to email screen
-          context.push('/email-verification', extra: {
-            'phoneNumber': phone,
-          });
+          context.push('/email-verification', extra: {'phoneNumber': phone});
         },
       );
     } catch (e) {

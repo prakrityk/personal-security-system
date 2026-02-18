@@ -9,7 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lottie/lottie.dart';
 import 'package:safety_app/core/theme/app_colors.dart';
 import 'package:safety_app/core/theme/app_text_styles.dart';
-import 'package:safety_app/core/providers/auth_provider.dart';
+//import 'package:safety_app/core/providers/auth_provider.dart';
 import 'package:safety_app/core/providers/personal_emergency_contact_provider.dart';
 import 'package:safety_app/core/providers/permission_provider.dart';
 import 'package:safety_app/features/home/sos/widgets/personal_emergency_contacts_widget.dart';
@@ -40,8 +40,8 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final userState = ref.watch(authStateProvider);
-    final user = userState.value;
+    // final userState = ref.watch(authStateProvider);
+    //final user = userState.value;
 
     // Get permission summary to determine capabilities
     final permissionAsync = ref.watch(permissionSummaryProvider);

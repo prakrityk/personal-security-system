@@ -327,7 +327,7 @@ class EmergencyContactsListWidget extends ConsumerWidget {
   ) {
     final isGuardianContact = contact.source == 'auto_guardian';
     final isPhoneImport = contact.source == 'phone_contacts';
-    final isManual = contact.source == 'manual';
+    //final isManual = contact.source == 'manual';
 
     return Container(
       decoration: BoxDecoration(
@@ -775,6 +775,7 @@ class EmergencyContactsListWidget extends ConsumerWidget {
     );
 
     if (confirmed == true) {
+      // ignore: unused_local_variable
       final success = dependentId != null
           ? await ref
                 .read(emergencyContactNotifierProvider.notifier)

@@ -1,6 +1,5 @@
 // lib/services/collaborator_service.dart
 
-import 'package:dio/dio.dart';
 import '../core/network/dio_client.dart';
 import '../core/network/api_endpoints.dart';
 

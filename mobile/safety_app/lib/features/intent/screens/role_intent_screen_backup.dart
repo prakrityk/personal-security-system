@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:safety_app/core/widgets/animated_bottom_button.dart';
-import 'package:safety_app/features/dependent/screens/dependent_type_selection_screen.dart';
-import 'package:safety_app/features/guardian/screens/guardian_setup_choice_screen.dart';
 import 'package:safety_app/models/role_info.dart';
 import 'package:safety_app/models/user_model.dart';
 import 'package:safety_app/services/auth_api_service.dart';

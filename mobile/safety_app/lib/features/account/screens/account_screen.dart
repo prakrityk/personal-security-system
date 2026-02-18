@@ -5,13 +5,11 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:safety_app/features/account/widgets/theme_selector.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/providers/auth_provider.dart';
-import '../../../routes/app_router.dart';
 import '../widgets/account_header.dart';
 import '../widgets/account_action_tile.dart';
 import '../widgets/logout_button.dart';

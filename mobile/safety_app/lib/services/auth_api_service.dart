@@ -424,6 +424,7 @@ class AuthApiService {
       print('🔐 Logging in via biometric...');
 
       // Refresh the access token using existing refresh token
+      // ignore: unused_local_variable
       final newAccessToken = await refreshAccessToken();
       print('✅ Biometric login successful - token refreshed');
 
