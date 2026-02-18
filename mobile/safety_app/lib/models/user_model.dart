@@ -9,6 +9,7 @@ class UserModel {
   final String phoneNumber;
   final List<RoleInfo> roles;
   final String? profilePicture;
+  final bool biometricEnabled;  // 🔐 ADDED: Biometric authentication status
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -19,6 +20,7 @@ class UserModel {
     required this.phoneNumber,
     this.roles = const [],
     this.profilePicture,
+    this.biometricEnabled = false,  // 🔐 ADDED: Default to false
     required this.createdAt,
     required this.updatedAt,
   });
@@ -33,6 +35,7 @@ class UserModel {
           .map((e) => RoleInfo.fromJson(e))
           .toList(),
       profilePicture: json['profile_picture'] ?? json['profilePicture'],
+      biometricEnabled: json['biometric_enabled'] ?? false,  // 🔐 ADDED: Parse from JSON
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'])
           : DateTime.now(),
@@ -50,6 +53,7 @@ class UserModel {
       'phone_number': phoneNumber,
       'roles': roles.map((r) => r.toJson()).toList(),
       'profile_picture': profilePicture,
+      'biometric_enabled': biometricEnabled,  // 🔐 ADDED: Include in JSON
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
     };
@@ -57,6 +61,10 @@ class UserModel {
 
   /// Check if user has any role assigned
   bool get hasRole => roles.isNotEmpty;
+
+  /// Get the current/primary role (first in list)
+  /// This is the main getter used for role-based navigation
+  RoleInfo? get currentRole => roles.isNotEmpty ? roles.first : null;
 
   /// Check if user is a guardian
   bool get isGuardian =>
@@ -66,7 +74,7 @@ class UserModel {
   bool get isDependent =>
       roles.any((r) => r.roleName.toLowerCase() == 'dependent');
 
-  /// Get primary role name
+  /// Get primary role name (kept for backward compatibility)
   String? get primaryRole => roles.isNotEmpty ? roles.first.roleName : null;
 
   /// Get display-friendly role name for UI
@@ -112,6 +120,7 @@ class UserModel {
     String? phoneNumber,
     List<RoleInfo>? roles,
     String? profilePicture,
+    bool? biometricEnabled,  // 🔐 ADDED: Include in copyWith
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -122,6 +131,7 @@ class UserModel {
       phoneNumber: phoneNumber ?? this.phoneNumber,
       roles: roles ?? this.roles,
       profilePicture: profilePicture ?? this.profilePicture,
+      biometricEnabled: biometricEnabled ?? this.biometricEnabled,  // 🔐 ADDED
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -130,4 +140,38 @@ class UserModel {
   @override
   String toString() =>
       'UserModel(id: $id, email: $email, fullName: $fullName, roles: $roles)';
+
+  /// Check if user is a personal user (global_user role)
+  bool get isGlobalUser =>
+      roles.any((r) => r.roleName.toLowerCase() == 'global_user');
+
+  /// Check if user is a child
+  bool get isChild => roles.any((r) => r.roleName.toLowerCase() == 'child');
+
+  /// Check if user is elderly
+  bool get isElderly => roles.any((r) => r.roleName.toLowerCase() == 'elderly');
+
+  /// Get all role names as list
+  List<String> get roleNames => roles.map((r) => r.roleName).toList();
+
+  /// Get comma-separated role names
+  String get rolesDisplay =>
+      roles.map((r) => _getRoleDisplayName(r.roleName)).join(', ');
+
+  String _getRoleDisplayName(String roleName) {
+    switch (roleName.toLowerCase()) {
+      case 'global_user':
+        return 'Personal User';
+      case 'guardian':
+        return 'Guardian';
+      case 'dependent':
+        return 'Dependent';
+      case 'child':
+        return 'Child';
+      case 'elderly':
+        return 'Elderly';
+      default:
+        return roleName;
+    }
+  }
 }

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:safety_app/core/theme/app_colors.dart';
-import 'package:safety_app/core/theme/app_text_styles.dart';
 import 'package:safety_app/features/home/widgets/home_section_header.dart';
 import '../widgets/safety_toggle_tile.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:safety_app/services/motion_detection_service.dart';
 
 class SafetySettingsScreen extends StatefulWidget {
   const SafetySettingsScreen({super.key});
@@ -16,6 +17,26 @@ class _SafetySettingsScreenState extends State<SafetySettingsScreen> {
   bool _voiceActivation = false;
   bool _motionDetection = false;
   bool _recordEvidence = false;
+
+  static const _motionPrefKey = 'motion_detection_enabled';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMotionSetting();
+  }
+
+  Future<void> _loadMotionSetting() async {
+    final prefs = await SharedPreferences.getInstance();
+    final enabled = prefs.getBool(_motionPrefKey) ?? false;
+    setState(() => _motionDetection = enabled);
+
+    if (enabled) {
+      MotionDetectionService.instance.start();
+    } else {
+      MotionDetectionService.instance.stop();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +61,7 @@ class _SafetySettingsScreenState extends State<SafetySettingsScreen> {
               // Safety Toggles
               SafetyToggleTile(
                 icon: Icons.location_on_outlined,
-                title: 'Live Location',
+                title: 'Set Safety Zone',
                 subtitle: 'Share your real-time location with guardians',
                 isEnabled: _liveLocation,
                 onToggle: (value) => setState(() => _liveLocation = value),
@@ -59,7 +80,16 @@ class _SafetySettingsScreenState extends State<SafetySettingsScreen> {
                 title: 'Motion Detection',
                 subtitle: 'Alert on unusual movement patterns',
                 isEnabled: _motionDetection,
-                onToggle: (value) => setState(() => _motionDetection = value),
+                onToggle: (value) async {
+                  setState(() => _motionDetection = value);
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.setBool(_motionPrefKey, value);
+                  if (value) {
+                    MotionDetectionService.instance.start();
+                  } else {
+                    MotionDetectionService.instance.stop();
+                  }
+                },
               ),
 
               SafetyToggleTile(

@@ -3,7 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:safety_app/core/widgets/animated_bottom_button.dart';
 import 'package:safety_app/core/widgets/app_text_field.dart';
 import 'package:safety_app/core/widgets/onboarding_progress_indicator.dart';
-import 'package:safety_app/services/auth_service.dart';
+import 'package:safety_app/services/firebase/firebase_auth_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 
@@ -16,9 +16,11 @@ class PhoneNumberScreen extends StatefulWidget {
 
 class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
   final _phoneController = TextEditingController();
-  final AuthService _authService = AuthService();
+  final FirebaseAuthService _firebaseAuthService = FirebaseAuthService();
 
   bool _isLoading = false;
+  // ignore: unused_field
+  String? _verificationId; // Store this for OTP screen
 
   @override
   void dispose() {
@@ -50,22 +52,45 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // Send OTP via API
-      final response = await _authService.sendVerificationCode(phone);
+      // 🔥 Send OTP via Firebase
+      await _firebaseAuthService.sendPhoneOTP(
+        phoneNumber: phone,
 
-      if (!mounted) return;
+        // ✅ OTP sent successfully
+        onCodeSent: (String verificationId, int? resendToken) {
+          _verificationId = verificationId;
 
-      _showSuccess(response.message);
+          if (!mounted) return;
 
-      // Navigate to OTP screen with phone number
-      context.push('/otp-verification', extra: phone);
+          _showSuccess("OTP sent to $phone");
+
+          // Navigate to OTP verification screen
+          context.push(
+            '/otp-verification',
+            extra: {'phoneNumber': phone, 'verificationId': verificationId},
+          );
+        },
+
+        // ❌ Verification failed
+        onVerificationFailed: (String error) {
+          if (!mounted) return;
+          _showError(error);
+          setState(() => _isLoading = false);
+        },
+
+        // 🤖 Auto-verification completed (Android only)
+        onVerificationCompleted: (credential) {
+          if (!mounted) return;
+          _showSuccess("Phone verified automatically!");
+
+          // Navigate directly to email screen
+          context.push('/email-verification', extra: {'phoneNumber': phone});
+        },
+      );
     } catch (e) {
       if (!mounted) return;
       _showError(e.toString().replaceAll('Exception: ', ''));
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      setState(() => _isLoading = false);
     }
   }
 
@@ -135,6 +160,37 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
                               : AppColors.lightHint,
                         ),
                       ),
+
+                      const SizedBox(height: 24),
+
+                      // Info box
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryGreen.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.info_outline,
+                              color: AppColors.primaryGreen,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                "You'll receive a verification code via SMS",
+                                style: AppTextStyles.caption.copyWith(
+                                  color: isDark
+                                      ? AppColors.darkHint
+                                      : AppColors.lightHint,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -143,7 +199,7 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
 
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: OnboardingProgressIndicator(currentStep: 0, totalSteps: 3),
+              child: OnboardingProgressIndicator(currentStep: 0, totalSteps: 4),
             ),
 
             const SizedBox(height: 16),
