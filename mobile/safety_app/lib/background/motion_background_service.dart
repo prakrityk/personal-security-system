@@ -7,14 +7,8 @@ import 'package:sensors_plus/sensors_plus.dart';
 
 import '../services/sos_event_service.dart';
 
-/// Background entrypoint for motion detection.
-///
-/// This runs in a separate Dart isolate managed by flutter_background_service.
-/// It keeps listening to accelerometer events even if the main Flutter UI
-/// is closed, as long as the foreground service is running.
 @pragma('vm:entry-point')
 Future<void> motionServiceOnStart(ServiceInstance service) async {
-  // Configure Android-specific foreground notification
   if (service is AndroidServiceInstance) {
     service.setAsForegroundService();
     service.setForegroundNotificationInfo(
@@ -23,28 +17,42 @@ Future<void> motionServiceOnStart(ServiceInstance service) async {
     );
   }
 
-  final sosService = SosEventService();
+ // final sosService = SosEventService();
 
   DateTime? lastTriggerAt;
-  const double thresholdG = 2.8;
-  const int windowMs = 500;
-  const int cooldownMs = 60 * 1000;
+
+  // --- TUNABLE CONSTANTS ---
+  const double gravity = 9.8; // Earth's gravity in m/s²
+  const double threshold = 18.0; // ~1.8g sudden impact
+  const int windowMs = 400; // detection window
+  const int cooldownMs = 60 * 1000; // 1 minute cooldown
+  const int minSpikeCount = 2; // require consecutive spikes
 
   final List<_BackgroundSample> buffer = [];
+  int spikeCount = 0;
 
   debugPrint('🎯 Motion background service started');
 
   final sub = accelerometerEvents.listen(
     (event) async {
       final now = DateTime.now();
-      final magnitude =
-          sqrt(event.x * event.x + event.y * event.y + event.z * event.z);
 
-      buffer.add(_BackgroundSample(time: now, magnitude: magnitude));
+      // 1️⃣ Compute total acceleration magnitude
+      final total = sqrt(
+        event.x * event.x + event.y * event.y + event.z * event.z,
+      );
+
+      // 2️⃣ Remove gravity to get linear acceleration
+      final linearAcceleration = (total - gravity).abs();
+
+      // 3️⃣ Add to rolling buffer
+      buffer.add(_BackgroundSample(time: now, magnitude: linearAcceleration));
+
       buffer.removeWhere(
         (s) => now.difference(s.time).inMilliseconds > windowMs,
       );
 
+      // 4️⃣ Cooldown protection
       if (lastTriggerAt != null) {
         final diff = now.difference(lastTriggerAt!).inMilliseconds;
         if (diff < cooldownMs) {
@@ -52,26 +60,41 @@ Future<void> motionServiceOnStart(ServiceInstance service) async {
         }
       }
 
-      final peak =
-          buffer.fold<double>(0, (prev, s) => max(prev, s.magnitude));
+      // 5️⃣ Find peak in window
+      final peak = buffer.fold<double>(0, (prev, s) => max(prev, s.magnitude));
 
-      if (peak >= thresholdG) {
+      // 6️⃣ Require consecutive spikes (reduces noise triggers)
+      if (peak >= threshold) {
+        spikeCount++;
+      } else {
+        spikeCount = 0;
+      }
+
+      if (spikeCount >= minSpikeCount) {
         lastTriggerAt = now;
-        debugPrint(
-          '🚨 [BG] Dangerous motion detected (peak=${peak.toStringAsFixed(2)}g)',
-        );
+        spikeCount = 0;
 
-        try {
-          await sosService.createSosEvent(
-            triggerType: 'motion',
-            eventType: 'possible_fall',
-            appState: 'background',
-          );
-          debugPrint('✅ [BG] Motion SOS event created');
-        } catch (e, st) {
-          debugPrint('❌ [BG] Failed to create motion SOS event: $e');
-          debugPrint(st.toString());
-        }
+        debugPrint(
+          '🚨 [BG] Dangerous motion detected '
+          '(peak=${peak.toStringAsFixed(2)} m/s²)',
+        );
+        service.invoke('motion_detected', {
+          'trigger_type': 'motion',
+          'event_type': 'possible_fall',
+          'peak': peak,
+        });
+
+        // try {
+        //   await sosService.createSosEvent(
+        //     triggerType: 'motion',
+        //     eventType: 'possible_fall',
+        //     appState: 'background',
+        //   );
+        //   debugPrint('✅ [BG] Motion SOS event created');
+        // } catch (e, st) {
+        //   debugPrint('❌ [BG] Failed to create motion SOS event: $e');
+        //   debugPrint(st.toString());
+        // }
       }
     },
     onError: (e, st) {
@@ -81,7 +104,6 @@ Future<void> motionServiceOnStart(ServiceInstance service) async {
     cancelOnError: false,
   );
 
-  // Handle stop command from main isolate
   service.on('stop').listen((event) async {
     debugPrint('🛑 Motion background service stopping...');
     await sub.cancel();
@@ -89,7 +111,7 @@ Future<void> motionServiceOnStart(ServiceInstance service) async {
   });
 }
 
-/// Configure the background service. Call once at app startup.
+/// Configure the background service (call once in main()).
 Future<void> initMotionBackgroundService() async {
   final service = FlutterBackgroundService();
 
@@ -103,13 +125,13 @@ Future<void> initMotionBackgroundService() async {
   );
 }
 
-/// Start the background motion service (Android).
+/// Start background motion detection.
 Future<void> startMotionBackgroundService() async {
   final service = FlutterBackgroundService();
   await service.startService();
 }
 
-/// Stop the background motion service (Android).
+/// Stop background motion detection.
 Future<void> stopMotionBackgroundService() async {
   final service = FlutterBackgroundService();
   service.invoke('stop');
@@ -121,4 +143,3 @@ class _BackgroundSample {
   final DateTime time;
   final double magnitude;
 }
-
