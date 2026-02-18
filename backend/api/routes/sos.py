@@ -11,7 +11,7 @@ The backend receives an EVENT and handles server-side work (notify/store/etc).
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from api.dependencies.auth import get_current_user
+from api.utils.auth_utils import get_current_user_with_roles
 from api.schemas.sos import SOSEventCreate, SOSEventCreateResponse
 from database.connection import get_db
 from models.device import Device
@@ -34,7 +34,7 @@ def _has_any_role(user: User, allowed: set[str]) -> bool:
 @router.post("/sos/events", response_model=SOSEventCreateResponse)
 async def create_sos_event(
     payload: SOSEventCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db),
 ):
     """

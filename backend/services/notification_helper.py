@@ -4,7 +4,7 @@ Place this in: backend/services/notification_helper.py
 """
 
 from typing import List, Optional, Dict, Any
-from services.firebase_services import get_firebase_service
+from services.firebase_service import get_firebase_service
 
 
 class NotificationChannelType:

@@ -64,6 +64,7 @@ class PendingDependentResponse(BaseModel):
     class Config:
         populate_by_name = True
         from_attributes = True
+        populate_by_name = True
 
 
 class PendingDependentWithQR(BaseModel):
@@ -73,6 +74,7 @@ class PendingDependentWithQR(BaseModel):
     dependent_name: str
     relation: str
     age: int = Field(..., alias="Age")
+    age: int = Field(..., alias="Age")
     created_at: datetime
     has_qr: bool = False
     qr_status: Optional[str] = None
@@ -81,6 +83,7 @@ class PendingDependentWithQR(BaseModel):
     class Config:
         populate_by_name = True
         from_attributes = True
+        populate_by_name = True
 
 
 # ================================================
@@ -125,7 +128,8 @@ class ScanQRResponse(BaseModel):
     relation: str
     age: int
     qr_invitation_id: int
-
+    class Config:
+        populate_by_name = True  # ✅ Added
 
 class ApproveQRRequest(BaseModel):
     """Schema for approving QR invitation"""
@@ -160,6 +164,7 @@ class DependentDetailResponse(BaseModel):
     profile_picture: Optional[str] = None
     relation: str
     age: Optional[int] = Field(None, alias="Age")
+    age: Optional[int] = Field(None, alias="Age")
     is_primary: bool
     guardian_type: Optional[str] = None  # "primary" or "collaborator"
     linked_at: datetime
@@ -167,6 +172,7 @@ class DependentDetailResponse(BaseModel):
     class Config:
         populate_by_name = True
         from_attributes = True
+        populate_by_name = True
 
 
 class GuardianDetailResponse(BaseModel):

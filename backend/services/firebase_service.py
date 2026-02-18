@@ -70,24 +70,44 @@ class FirebaseService:
     # -----------------------------
     # Token verification (existing)
     # -----------------------------
+
     def verify_firebase_token(self, id_token: str) -> dict:
         """Verify Firebase ID token from Flutter app."""
         try:
             decoded_token = auth.verify_id_token(id_token)
 
-            phone_number = decoded_token.get("phone_number")
             uid = decoded_token.get("uid")
+            email = decoded_token.get("email")
+            phone_number = decoded_token.get("phone_number")
+            email_verified = decoded_token.get("email_verified", False)
+            
+            # Check if phone is verified by looking at provider data
+            phone_verified = False
+            provider_data = decoded_token.get("firebase", {}).get("sign_in_provider")
+            
+            # If user has phone number and signed in with phone, it's verified
+            if phone_number:
+                # Phone is verified if it's in the token (Firebase only adds verified phones)
+                phone_verified = True
+                
+            # Alternative: Check provider data
+            if not phone_verified and provider_data == "phone":
+                phone_verified = True
 
-            if not phone_number:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Phone number not found in Firebase token",
-                )
+            print(f"🔍 Token verification result:")
+            print(f"   UID: {uid}")
+            print(f"   Email: {email}")
+            print(f"   Phone: {phone_number}")
+            print(f"   Email Verified: {email_verified}")
+            print(f"   Phone Verified: {phone_verified}")
 
             return {
                 "uid": uid,
+                "email": email,
                 "phone_number": phone_number,
-                "verified": True,
+                "email_verified": email_verified,
+                "phone_verified": phone_verified,
+                "verified": True,  # Keep for backward compatibility
             }
 
         except auth.ExpiredIdTokenError:
@@ -106,6 +126,9 @@ class FirebaseService:
                 detail="Invalid Firebase token",
             )
         except Exception as e:
+            print(f"❌ Token verification error: {e}")
+            import traceback
+            traceback.print_exc()
             raise HTTPException(
                 status_code=401,
                 detail=f"Firebase token verification failed: {str(e)}",
@@ -227,12 +250,11 @@ class FirebaseService:
             traceback.print_exc()
 
 
-# Singleton instance
-firebase_service = None
+# At the end of firebase_service.py, replace lines 228-233 with:
+
+# ✅ Create singleton instance at module load
+firebase_service = FirebaseService()
 
 def get_firebase_service() -> FirebaseService:
-    """Get or create the singleton FirebaseService instance"""
-    global firebase_service
-    if firebase_service is None:
-        firebase_service = FirebaseService()
+    """Get the singleton FirebaseService instance"""
     return firebase_service

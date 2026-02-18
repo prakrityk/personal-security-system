@@ -28,7 +28,7 @@ from models.role import Role
 from models.user_roles import UserRole
 
 # Dependencies
-from api.dependencies.auth import get_current_user
+from api.utils.auth_utils import get_current_user_with_roles
 from database.connection import get_db
 
 router = APIRouter()
@@ -82,7 +82,7 @@ def verify_any_guardian(current_user: User, dependent_id: int, db: Session):
 @router.post("/my-emergency-contacts", response_model=EmergencyContactResponse)
 async def create_my_emergency_contact(
     contact_data: EmergencyContactCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """Create an emergency contact for current user"""
@@ -132,7 +132,7 @@ async def create_my_emergency_contact(
 
 @router.get("/my-emergency-contacts", response_model=List[EmergencyContactResponse])
 async def get_my_emergency_contacts(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """Get all emergency contacts for current user"""
@@ -176,7 +176,7 @@ async def get_my_emergency_contacts(
 async def update_my_emergency_contact(
     contact_id: int,
     contact_data: EmergencyContactUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """Update an emergency contact - PROTECTED from auto_guardian modification"""
@@ -251,7 +251,7 @@ async def update_my_emergency_contact(
 @router.delete("/my-emergency-contacts/{contact_id}")
 async def delete_my_emergency_contact(
     contact_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """Delete an emergency contact - PROTECTED from auto_guardian deletion"""
@@ -300,7 +300,7 @@ async def delete_my_emergency_contact(
 @router.post("/my-emergency-contacts/bulk", response_model=EmergencyContactBulkResponse)
 async def bulk_import_emergency_contacts(
     bulk_data: EmergencyContactBulkCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """Bulk import emergency contacts from phone"""
@@ -372,7 +372,7 @@ async def bulk_import_emergency_contacts(
             response_model=List[EmergencyContactResponse])
 async def get_dependent_emergency_contacts_for_viewing(
     dependent_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """
@@ -434,7 +434,7 @@ async def get_dependent_emergency_contacts_for_viewing(
 @router.post("/dependent/emergency-contacts", response_model=EmergencyContactResponse)
 async def create_dependent_emergency_contact(
     contact_data: DependentEmergencyContactCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """Add an emergency contact for a dependent (Primary guardian only)"""
@@ -492,7 +492,7 @@ async def create_dependent_emergency_contact(
 async def update_dependent_emergency_contact(
     contact_id: int,
     contact_data: DependentEmergencyContactUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """Update a dependent's emergency contact (Primary guardian only)"""
@@ -562,7 +562,7 @@ async def update_dependent_emergency_contact(
 @router.delete("/dependent/emergency-contacts/{contact_id}")
 async def delete_dependent_emergency_contact(
     contact_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """Delete a dependent's emergency contact (Primary guardian only) - PROTECTED"""

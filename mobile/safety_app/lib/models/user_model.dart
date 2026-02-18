@@ -9,6 +9,7 @@ class UserModel {
   final String phoneNumber;
   final List<RoleInfo> roles;
   final String? profilePicture;
+  final bool biometricEnabled;  // 🔐 ADDED: Biometric authentication status
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -19,6 +20,7 @@ class UserModel {
     required this.phoneNumber,
     this.roles = const [],
     this.profilePicture,
+    this.biometricEnabled = false,  // 🔐 ADDED: Default to false
     required this.createdAt,
     required this.updatedAt,
   });
@@ -33,6 +35,7 @@ class UserModel {
           .map((e) => RoleInfo.fromJson(e))
           .toList(),
       profilePicture: json['profile_picture'] ?? json['profilePicture'],
+      biometricEnabled: json['biometric_enabled'] ?? false,  // 🔐 ADDED: Parse from JSON
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'])
           : DateTime.now(),
@@ -50,6 +53,7 @@ class UserModel {
       'phone_number': phoneNumber,
       'roles': roles.map((r) => r.toJson()).toList(),
       'profile_picture': profilePicture,
+      'biometric_enabled': biometricEnabled,  // 🔐 ADDED: Include in JSON
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
     };
@@ -116,6 +120,7 @@ class UserModel {
     String? phoneNumber,
     List<RoleInfo>? roles,
     String? profilePicture,
+    bool? biometricEnabled,  // 🔐 ADDED: Include in copyWith
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -126,6 +131,7 @@ class UserModel {
       phoneNumber: phoneNumber ?? this.phoneNumber,
       roles: roles ?? this.roles,
       profilePicture: profilePicture ?? this.profilePicture,
+      biometricEnabled: biometricEnabled ?? this.biometricEnabled,  // 🔐 ADDED
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

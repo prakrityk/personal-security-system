@@ -13,7 +13,7 @@ from database.connection import get_db
 from models.user import User
 from models.emergency_contact import EmergencyContact
 from models.guardian_dependent import GuardianDependent
-from api.dependencies.auth import get_current_user
+from api.utils.auth_utils import get_current_user_with_roles
 
 
 router = APIRouter(prefix="", tags=["Emergency Contacts - Auto Guardian"])
@@ -172,7 +172,7 @@ def sync_all_guardian_contacts_for_dependent(
 def sync_guardian_contacts_endpoint(
     dependent_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user_with_roles)
 ):
     """
     Manually trigger sync of all guardian contacts for a dependent

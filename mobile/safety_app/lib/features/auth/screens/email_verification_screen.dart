@@ -3,15 +3,15 @@ import 'package:go_router/go_router.dart';
 import 'package:safety_app/core/widgets/animated_bottom_button.dart';
 import 'package:safety_app/core/widgets/app_text_field.dart';
 import 'package:safety_app/core/widgets/onboarding_progress_indicator.dart';
-import 'package:safety_app/services/auth_service.dart';
+import 'package:safety_app/services/firebase/firebase_auth_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import 'dart:async';
 
 class EmailVerificationScreen extends StatefulWidget {
-  final String email;
+  final String phoneNumber;
 
-  const EmailVerificationScreen({super.key, required this.email});
+  const EmailVerificationScreen({super.key, required this.phoneNumber});
 
   @override
   State<EmailVerificationScreen> createState() =>
@@ -19,67 +19,238 @@ class EmailVerificationScreen extends StatefulWidget {
 }
 
 class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
-  final _otpController = TextEditingController();
-  final AuthService _authService = AuthService();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final FirebaseAuthService _firebaseAuthService = FirebaseAuthService();
 
   bool _isLoading = false;
-  bool _canResend = false;
-  int _resendCountdown = 60;
-  Timer? _resendTimer;
+  bool _emailSent = false;
+  bool _isPolling = false;
+  Timer? _pollingTimer;
+  int _pollingSeconds = 0;
 
   @override
   void initState() {
     super.initState();
-    _startResendTimer();
+    _checkCurrentUserState();
   }
 
   @override
   void dispose() {
-    _otpController.dispose();
-    _resendTimer?.cancel();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _pollingTimer?.cancel();
     super.dispose();
   }
 
-  void _startResendTimer() {
-    setState(() {
-      _canResend = false;
-      _resendCountdown = 60;
-    });
-
-    _resendTimer?.cancel();
-    _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_resendCountdown > 0) {
-        setState(() => _resendCountdown--);
-      } else {
-        setState(() => _canResend = true);
-        timer.cancel();
+  /// 🔍 DIAGNOSTIC: Check current Firebase user state
+  Future<void> _checkCurrentUserState() async {
+    print('\n🔍 ========== EMAIL VERIFICATION SCREEN LOADED ==========');
+    print('📱 Phone Number from previous screen: ${widget.phoneNumber}');
+    
+    final currentUser = _firebaseAuthService.currentUser;
+    if (currentUser != null) {
+      print('✅ Firebase user is signed in:');
+      print('   UID: ${currentUser.uid}');
+      print('   Phone: ${currentUser.phoneNumber}');
+      print('   Email: ${currentUser.email ?? "NOT SET"}');
+      print('   Email Verified: ${currentUser.emailVerified}');
+      print('   Phone Verified: ${currentUser.phoneNumber != null}');
+      
+      // Test token generation immediately
+      print('\n🧪 Testing token generation...');
+      try {
+        final token = await _firebaseAuthService.getFirebaseIdToken(forceRefresh: true);
+        if (token != null) {
+          print('✅ Token generation SUCCESSFUL');
+          print('   Token length: ${token.length}');
+        } else {
+          print('❌ Token generation returned NULL');
+        }
+      } catch (e) {
+        print('❌ Token generation FAILED: $e');
       }
-    });
+    } else {
+      print('❌ NO Firebase user signed in!');
+      print('⚠️  This is a problem - user should be signed in after phone verification');
+    }
+    print('========================================================\n');
   }
 
-  Future<void> _handleVerifyEmail() async {
-    final otp = _otpController.text.trim();
+  Future<void> _handleSendVerification() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
 
-    if (otp.isEmpty || otp.length != 6) {
-      _showError("Please enter a valid 6-digit OTP");
+    // Validation
+    if (email.isEmpty || !email.contains('@')) {
+      _showError("Please enter a valid email address");
+      return;
+    }
+
+    if (password.isEmpty || password.length < 8) {
+      _showError("Password must be at least 8 characters");
       return;
     }
 
     setState(() => _isLoading = true);
 
     try {
-      await _authService.verifyEmail(email: widget.email, otp: otp);
+      print('\n📧 ========== STARTING EMAIL LINKING ==========');
+      print('Email: $email');
+      print('Password: [HIDDEN]');
+      
+      // Check user before linking
+      final userBefore = _firebaseAuthService.currentUser;
+      print('\n👤 User state BEFORE linking:');
+      print('   UID: ${userBefore?.uid}');
+      print('   Phone: ${userBefore?.phoneNumber}');
+      print('   Email: ${userBefore?.email ?? "NOT SET"}');
+      
+      // 1️⃣ Link email to Firebase account (phone already verified)
+      print('\n🔗 Calling linkEmailToAccount...');
+      await _firebaseAuthService.linkEmailToAccount(
+        email: email,
+        password: password,
+      );
+      print('✅ linkEmailToAccount completed');
 
       if (!mounted) return;
 
-      _showSuccess("Email verified successfully!");
+      // Check user after linking
+      final userAfter = _firebaseAuthService.currentUser;
+      print('\n👤 User state AFTER linking:');
+      print('   UID: ${userAfter?.uid}');
+      print('   Phone: ${userAfter?.phoneNumber}');
+      print('   Email: ${userAfter?.email ?? "STILL NOT SET - ERROR!"}');
+      print('   Email Verified: ${userAfter?.emailVerified}');
 
-      // Navigate to login screen
-      await Future.delayed(const Duration(seconds: 1));
+      // 2️⃣ Send verification email
+      print('\n📨 Sending verification email...');
+      await _firebaseAuthService.sendEmailVerification();
+      print('✅ Verification email sent');
+
       if (!mounted) return;
 
-      context.go('/login');
+      _showSuccess("Verification email sent to $email");
+
+      setState(() {
+        _emailSent = true;
+        _isLoading = false;
+      });
+
+      print('========================================================\n');
+
+      // 3️⃣ Start polling for email verification
+      _startPollingEmailVerification();
     } catch (e) {
+      print('\n❌ EMAIL LINKING FAILED: $e');
+      print('Error type: ${e.runtimeType}');
+      if (!mounted) return;
+      _showError(e.toString().replaceAll('Exception: ', ''));
+      setState(() => _isLoading = false);
+    }
+  }
+
+  void _startPollingEmailVerification() {
+    setState(() {
+      _isPolling = true;
+      _pollingSeconds = 0;
+    });
+
+    print('\n🔄 Starting email verification polling...');
+
+    _pollingTimer?.cancel();
+    _pollingTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+
+      _pollingSeconds += 3;
+
+      // Stop polling after 5 minutes
+      if (_pollingSeconds > 300) {
+        timer.cancel();
+        setState(() => _isPolling = false);
+        _showError("Verification timeout. Please click 'Check Status' manually.");
+        return;
+      }
+
+      // Check if email is verified
+      print('🔍 Checking email verification status (${_pollingSeconds}s elapsed)...');
+      final isVerified = await _firebaseAuthService.checkEmailVerified();
+      print('   Result: ${isVerified ? "✅ VERIFIED" : "⏳ Not verified yet"}');
+
+      if (isVerified) {
+        timer.cancel();
+        if (!mounted) return;
+
+        _showSuccess("Email verified successfully!");
+        setState(() => _isPolling = false);
+
+        print('\n✅ EMAIL VERIFIED - Preparing to navigate...');
+        
+        // Test token generation before navigation
+        print('🧪 Testing final token generation...');
+        try {
+          final token = await _firebaseAuthService.getFirebaseIdToken(forceRefresh: true);
+          if (token != null) {
+            print('✅ Final token generated successfully (length: ${token.length})');
+          } else {
+            print('❌ Final token is NULL - this will cause registration to fail!');
+          }
+        } catch (e) {
+          print('❌ Final token generation failed: $e');
+        }
+
+        // Navigate to registration screen
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (!mounted) return;
+
+        print('🚀 Navigating to registration screen...\n');
+        context.pushReplacement('/registration', extra: {
+          'phoneNumber': widget.phoneNumber,
+          'email': _emailController.text.trim(),
+          'password': _passwordController.text.trim(),
+        });
+      }
+    });
+  }
+
+  Future<void> _handleCheckStatus() async {
+    setState(() => _isLoading = true);
+
+    print('\n🔍 ========== MANUAL EMAIL CHECK ==========');
+
+    try {
+      final isVerified = await _firebaseAuthService.checkEmailVerified();
+      print('Email verified: $isVerified');
+
+      if (!mounted) return;
+
+      if (isVerified) {
+        _showSuccess("Email verified successfully!");
+
+        // Test token before navigation
+        print('🧪 Testing token generation...');
+        final token = await _firebaseAuthService.getFirebaseIdToken(forceRefresh: true);
+        print('Token: ${token != null ? "✅ Generated (${token.length})" : "❌ NULL"}');
+
+        // Navigate to registration screen
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (!mounted) return;
+
+        print('🚀 Navigating to registration...\n');
+        context.pushReplacement('/registration', extra: {
+          'phoneNumber': widget.phoneNumber,
+          'email': _emailController.text.trim(),
+          'password': _passwordController.text.trim(),
+        });
+      } else {
+        _showError("Email not verified yet. Please check your inbox.");
+      }
+    } catch (e) {
+      print('❌ Error: $e');
       if (!mounted) return;
       _showError(e.toString().replaceAll('Exception: ', ''));
     } finally {
@@ -87,19 +258,22 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     }
   }
 
-  Future<void> _handleResendOTP() async {
-    if (!_canResend) return;
-
+  Future<void> _handleResendEmail() async {
     setState(() => _isLoading = true);
 
     try {
-      await _authService.resendEmailOTP(email: widget.email);
+      print('\n📨 Resending verification email...');
+      await _firebaseAuthService.sendEmailVerification();
+      print('✅ Email resent');
 
       if (!mounted) return;
 
-      _showSuccess("OTP resent to ${widget.email}");
-      _startResendTimer();
+      _showSuccess("Verification email resent");
+
+      // Restart polling
+      _startPollingEmailVerification();
     } catch (e) {
+      print('❌ Resend failed: $e');
       if (!mounted) return;
       _showError(e.toString().replaceAll('Exception: ', ''));
     } finally {
@@ -163,8 +337,8 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                         color: AppColors.primaryGreen.withOpacity(0.1),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(
-                        Icons.email_outlined,
+                      child: Icon(
+                        _emailSent ? Icons.mark_email_read : Icons.email_outlined,
                         size: 50,
                         color: AppColors.primaryGreen,
                       ),
@@ -173,82 +347,113 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                     const SizedBox(height: 24),
 
                     Text(
-                      "Verify your email",
+                      _emailSent ? "Check your email" : "Verify your email",
                       style: AppTextStyles.h3,
                       textAlign: TextAlign.center,
                     ),
 
                     const SizedBox(height: 12),
 
-                    Text(
-                      "We've sent a 6-digit verification code to",
-                      style: AppTextStyles.body.copyWith(
-                        color: isDark
-                            ? AppColors.darkHint
-                            : AppColors.lightHint,
+                    if (!_emailSent) ...[
+                      Text(
+                        "Enter your email address and create a password",
+                        style: AppTextStyles.body.copyWith(
+                          color: isDark
+                              ? AppColors.darkHint
+                              : AppColors.lightHint,
+                        ),
+                        textAlign: TextAlign.center,
                       ),
-                      textAlign: TextAlign.center,
-                    ),
 
-                    const SizedBox(height: 4),
+                      const SizedBox(height: 32),
 
-                    Text(
-                      widget.email,
-                      style: AppTextStyles.body.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.primaryGreen,
+                      AppTextField(
+                        label: "Email Address",
+                        hint: "your.email@example.com",
+                        controller: _emailController,
+                        enabled: !_isLoading,
+                        keyboardType: TextInputType.emailAddress,
                       ),
-                      textAlign: TextAlign.center,
-                    ),
 
-                    const SizedBox(height: 32),
+                      const SizedBox(height: 16),
 
-                    AppTextField(
-                      label: "Verification Code",
-                      hint: "Enter 6-digit code",
-                      controller: _otpController,
-                      enabled: !_isLoading,
-                      keyboardType: TextInputType.number,
-                      // maxLines: 6,
-                    ),
+                      AppTextField(
+                        label: "Password",
+                        hint: "Create a secure password",
+                        controller: _passwordController,
+                        enabled: !_isLoading,
+                        obscureText: true,
+                      ),
 
-                    const SizedBox(height: 24),
+                      const SizedBox(height: 8),
 
-                    // Resend OTP
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          "Didn't receive the code?",
-                          style: AppTextStyles.bodySmall.copyWith(
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          "Min 8 characters (this will be used for daily login)",
+                          style: AppTextStyles.caption.copyWith(
                             color: isDark
                                 ? AppColors.darkHint
                                 : AppColors.lightHint,
                           ),
                         ),
-                        const SizedBox(width: 4),
-                        GestureDetector(
-                          onTap: _canResend && !_isLoading
-                              ? _handleResendOTP
-                              : null,
-                          child: Text(
-                            _canResend
-                                ? "Resend"
-                                : "Resend in ${_resendCountdown}s",
-                            style: AppTextStyles.bodySmall.copyWith(
-                              color: _canResend && !_isLoading
-                                  ? AppColors.primaryGreen
-                                  : Colors.grey,
-                              fontWeight: FontWeight.w600,
-                            ),
+                      ),
+                    ] else ...[
+                      Text(
+                        "We've sent a verification link to",
+                        style: AppTextStyles.body.copyWith(
+                          color: isDark
+                              ? AppColors.darkHint
+                              : AppColors.lightHint,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+
+                      const SizedBox(height: 4),
+
+                      Text(
+                        _emailController.text,
+                        style: AppTextStyles.body.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primaryGreen,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      if (_isPolling) ...[
+                        const CircularProgressIndicator(
+                          color: AppColors.primaryGreen,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          "Waiting for verification...",
+                          style: AppTextStyles.body.copyWith(
+                            color: isDark
+                                ? AppColors.darkHint
+                                : AppColors.lightHint,
                           ),
                         ),
+                        const SizedBox(height: 24),
                       ],
-                    ),
+
+                      // Resend button
+                      TextButton(
+                        onPressed: _isLoading ? null : _handleResendEmail,
+                        child: Text(
+                          "Resend verification email",
+                          style: AppTextStyles.bodySmall.copyWith(
+                            color: AppColors.primaryGreen,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
 
                     const SizedBox(height: 16),
 
-                    // Info text
+                    // Info box
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -265,7 +470,9 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
-                              "Check your spam folder if you don't see the email",
+                              _emailSent
+                                  ? "Click the link in your email to verify. Check spam folder if needed."
+                                  : "You'll need this email and password for daily login",
                               style: AppTextStyles.caption.copyWith(
                                 color: isDark
                                     ? AppColors.darkHint
@@ -283,7 +490,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
 
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: OnboardingProgressIndicator(currentStep: 3, totalSteps: 3),
+              child: OnboardingProgressIndicator(currentStep: 2, totalSteps: 4),
             ),
 
             const SizedBox(height: 16),
@@ -291,9 +498,17 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
               child: AnimatedBottomButton(
-                label: _isLoading ? "Verifying..." : "Verify Email",
+                label: _isLoading
+                    ? "Processing..."
+                    : _emailSent
+                        ? "Check Verification Status"
+                        : "Send Verification Email",
                 usePositioned: false,
-                onPressed: _isLoading ? () {} : _handleVerifyEmail,
+                onPressed: _isLoading
+                    ? () {}
+                    : _emailSent
+                        ? _handleCheckStatus
+                        : _handleSendVerification,
               ),
             ),
           ],

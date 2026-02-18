@@ -1,4 +1,7 @@
-// lib/routes/app_router.dart (FIXED - Logout redirect issue resolved)
+// lib/routes/app_router.dart
+// ✅ MERGED: Combines Firebase auth flow with role-based navigation
+// lib/routes/app_router.dart
+// ✅ MERGED: Combines Firebase auth flow with role-based navigation
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -156,6 +159,8 @@ class AppRouter {
       },
 
       routes: [
+        // ==================== NOTIFICATIONS ====================
+        // ==================== NOTIFICATIONS ====================
         GoRoute(
           path: '/notifications',
           name: 'notifications',
@@ -164,6 +169,7 @@ class AppRouter {
             child: const NotificationListScreen(),
           ),
         ),
+
         // ==================== AUTH FLOW ====================
 
         // Splash Screen
@@ -198,48 +204,88 @@ class AppRouter {
               const MaterialPage(child: PhoneNumberScreen()),
         ),
 
-        // OTP Verification Screen (Phone)
+        // ✅ OTP Verification Screen (Phone) - FRIEND'S VERSION
+        // Passes verificationId from Firebase
+        // ✅ OTP Verification Screen (Phone) - FRIEND'S VERSION
+        // Passes verificationId from Firebase
         GoRoute(
           path: otpVerification,
           name: 'otpVerification',
           pageBuilder: (context, state) {
-            final phoneNumber = state.extra as String? ?? '';
+            final extra = state.extra as Map<String, dynamic>? ?? {};
+            final phoneNumber = extra['phoneNumber'] as String? ?? '';
+            final verificationId = extra['verificationId'] as String? ?? '';
+
+            // Redirect if missing required data
+
+            // Redirect if missing required data
             if (phoneNumber.isEmpty) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 context.go(AppRouter.phoneNumber);
               });
             }
+
             return MaterialPage(
-              child: OtpVerificationScreen(phoneNumber: phoneNumber),
+              child: OtpVerificationScreen(
+                phoneNumber: phoneNumber,
+                verificationId: verificationId,
+              ),
             );
           },
         ),
 
-        // Registration Screen
-        GoRoute(
-          path: registration,
-          name: 'registration',
-          pageBuilder: (context, state) {
-            final phoneNumber = state.extra as String? ?? '';
-            if (phoneNumber.isEmpty) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                context.go(AppRouter.phoneNumber);
-              });
-            }
-            return MaterialPage(
-              child: RegistrationScreen(phoneNumber: phoneNumber),
-            );
-          },
-        ),
-
-        // Email Verification Screen
+        // ✅ Email Verification Screen - FRIEND'S VERSION
+        // Passes phoneNumber (NOT email) parameter
+        // ✅ Email Verification Screen - FRIEND'S VERSION
+        // Passes phoneNumber (NOT email) parameter
         GoRoute(
           path: emailVerification,
           name: 'emailVerification',
           pageBuilder: (context, state) {
-            final extra = state.extra as Map<String, dynamic>?;
-            final email = extra?['email'] as String? ?? '';
-            return MaterialPage(child: EmailVerificationScreen(email: email));
+            final extra = state.extra as Map<String, dynamic>? ?? {};
+            final phoneNumber = extra['phoneNumber'] as String? ?? '';
+
+            // Redirect if missing required data
+            if (phoneNumber.isEmpty) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                context.go(AppRouter.phoneNumber);
+              });
+            }
+
+            return MaterialPage(
+              child: EmailVerificationScreen(phoneNumber: phoneNumber),
+            );
+          },
+        ),
+
+        // ✅ Registration Screen - FRIEND'S VERSION
+        // Passes phoneNumber, email, and password
+        // ✅ Registration Screen - FRIEND'S VERSION
+        // Passes phoneNumber, email, and password
+        GoRoute(
+          path: registration,
+          name: 'registration',
+          pageBuilder: (context, state) {
+            final extra = state.extra as Map<String, dynamic>? ?? {};
+            final phoneNumber = extra['phoneNumber'] as String? ?? '';
+            final email = extra['email'] as String? ?? '';
+            final password = extra['password'] as String? ?? '';
+
+            // Redirect if missing required data
+            if (phoneNumber.isEmpty || email.isEmpty || password.isEmpty) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                context.go(AppRouter.phoneNumber);
+              });
+            }
+
+            return MaterialPage(
+              child: RegistrationScreen(
+                phoneNumber: phoneNumber,
+                email: email,
+                password: password,
+              ),
+            );
+         
           },
         ),
 

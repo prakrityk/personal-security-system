@@ -34,7 +34,7 @@ from models.user_roles import UserRole
 from models.role import Role
 
 # Dependencies
-from api.dependencies.auth import get_current_user
+from api.utils.auth_utils import get_current_user_with_roles
 from database.connection import get_db
 
 # Router
@@ -86,7 +86,7 @@ def verify_dependent_role(user: User, db: Session):
 @router.post("/create", response_model=PendingDependentResponse, status_code=status.HTTP_201_CREATED)
 async def create_pending_dependent(
     data: PendingDependentCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """
@@ -117,7 +117,7 @@ async def create_pending_dependent(
 @router.post("/generate-qr", response_model=GenerateQRResponse)
 async def generate_qr_code(
     data: GenerateQRRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """
@@ -179,7 +179,7 @@ async def generate_qr_code(
 @router.post("/scan-qr", response_model=ScanQRResponse)
 async def scan_qr_code(
     data: ScanQRRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """
@@ -247,7 +247,7 @@ async def scan_qr_code(
 @router.post("/approve", response_model=ApproveQRResponse)
 async def approve_qr_scan(
     data: ApproveQRRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """
@@ -331,7 +331,7 @@ async def approve_qr_scan(
 @router.post("/reject")
 async def reject_qr_scan(
     data: RejectQRRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """
@@ -371,7 +371,7 @@ async def reject_qr_scan(
 # ----------------------
 @router.get("/my-pending", response_model=List[PendingDependentWithQR])
 async def get_my_pending_dependents(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """
@@ -414,7 +414,7 @@ async def get_my_pending_dependents(
 # ----------------------
 @router.get("/pending-approvals", response_model=List[PendingQRInvitationResponse])
 async def get_pending_approvals(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """
@@ -462,7 +462,7 @@ async def get_pending_approvals(
 # ----------------------
 @router.get("/my-dependents", response_model=List[DependentDetailResponse])
 async def get_my_dependents(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """
@@ -509,7 +509,7 @@ async def get_my_dependents(
 # ----------------------
 @router.get("/my-guardians", response_model=List[GuardianDetailResponse])
 async def get_my_guardians(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """
@@ -547,7 +547,7 @@ async def get_my_guardians(
 @router.delete("/{pending_dependent_id}")
 async def delete_pending_dependent(
     pending_dependent_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_with_roles),
     db: Session = Depends(get_db)
 ):
     """
