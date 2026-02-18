@@ -3,11 +3,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:safety_app/core/theme/app_colors.dart';
-import 'package:safety_app/core/theme/app_text_styles.dart';
-import 'package:safety_app/features/home/widgets/home_section_header.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class LiveLocationScreen extends StatefulWidget {
   const LiveLocationScreen({super.key});
@@ -17,10 +14,9 @@ class LiveLocationScreen extends StatefulWidget {
 }
 
 class _LiveLocationScreenState extends State<LiveLocationScreen> {
-  GoogleMapController? _mapController;
   Position? _currentPosition;
   StreamSubscription<Position>? _positionStream;
-
+  final Completer<GoogleMapController> _mapController = Completer();
   final Set<Marker> _markers = {};
 
   @override
@@ -32,12 +28,11 @@ class _LiveLocationScreenState extends State<LiveLocationScreen> {
   @override
   void dispose() {
     _positionStream?.cancel();
-    _mapController?.dispose();
     super.dispose();
   }
 
   Future<void> _initLocation() async {
-    // 1️⃣ Request location permission
+    // Request location permission
     var status = await Permission.location.request();
     if (!status.isGranted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -46,99 +41,70 @@ class _LiveLocationScreenState extends State<LiveLocationScreen> {
       return;
     }
 
-    // 2️⃣ Get current position
+    // Get current position
     _currentPosition = await Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.bestForNavigation,
+      desiredAccuracy: LocationAccuracy.high,
     );
 
-    // Add initial marker
     _updateMarker(_currentPosition!);
 
-    // Move camera to current location
-    _mapController?.animateCamera(
-      CameraUpdate.newLatLng(
-        LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
-      ),
-    );
-
-    setState(() {});
-
-    // 3️⃣ Listen to location changes
+    // Listen to position changes
     _positionStream = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.bestForNavigation,
-        distanceFilter: 5, // update every 5 meters
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 5,
       ),
     ).listen((Position position) {
-      _currentPosition = position;
+      setState(() {
+        _currentPosition = position;
+      });
       _updateMarker(position);
-
-      // Move camera to follow user
-      _mapController?.animateCamera(
-        CameraUpdate.newLatLng(
-          LatLng(position.latitude, position.longitude),
-        ),
-      );
-
-      setState(() {});
+      _moveCamera(position);
     });
   }
 
   void _updateMarker(Position position) {
-    _markers.clear();
-    _markers.add(
-      Marker(
-        markerId: const MarkerId('currentLocation'),
-        position: LatLng(position.latitude, position.longitude),
-        infoWindow: const InfoWindow(title: 'You are here'),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+    setState(() {
+      _markers.clear();
+      _markers.add(
+        Marker(
+          markerId: const MarkerId("current_location"),
+          position: LatLng(position.latitude, position.longitude),
+          infoWindow: const InfoWindow(title: "You"),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        ),
+      );
+    });
+  }
+
+  Future<void> _moveCamera(Position position) async {
+    final controller = await _mapController.future;
+    controller.animateCamera(
+      CameraUpdate.newLatLng(
+        LatLng(position.latitude, position.longitude),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    if (_currentPosition == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
 
     return Scaffold(
-      body: Stack(
-        children: [
-          _currentPosition == null
-              ? Center(
-                  child: CircularProgressIndicator(color: AppColors.primaryGreen),
-                )
-              : GoogleMap(
-                  initialCameraPosition: CameraPosition(
-                    target: LatLng(
-                        _currentPosition!.latitude, _currentPosition!.longitude),
-                    zoom: 16,
-                  ),
-                  markers: _markers,
-                  myLocationEnabled: true,
-                  myLocationButtonEnabled: true,
-                  zoomControlsEnabled: false,
-                  onMapCreated: (GoogleMapController controller) {
-                    _mapController = controller;
-                  },
-                ),
-
-          // Map header
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: SafeArea(
-              bottom: false,
-              child: HomeSectionHeader(
-                icon: Icons.map,
-                title: 'Live Location',
-                subtitle: 'Your real-time location',
-                transparent: true,
-                iconColor: AppColors.primaryGreen,
-              ),
-            ),
-          ),
-        ],
+      body: GoogleMap(
+        initialCameraPosition: CameraPosition(
+          target: LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
+          zoom: 17,
+        ),
+        markers: _markers,
+        myLocationEnabled: true,
+        myLocationButtonEnabled: true,
+        zoomControlsEnabled: false,
+        onMapCreated: (controller) => _mapController.complete(controller),
       ),
     );
   }
