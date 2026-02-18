@@ -28,5 +28,5 @@ class ApiEndpoints {
 
   // for voice registration
   static const String voiceRegister ='/voice/voice/register';
-  static const String voiceverify = '/voice/verify-sos';
+  static const String voiceverify = '/voice/voice/verify-sos';
 }

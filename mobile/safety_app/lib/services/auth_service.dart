@@ -367,10 +367,10 @@ class AuthService {
           .map((json) => RoleInfo.fromJson(json))
           .toList();
 
-      print('✅ Fetched ${roles.length} roles');
+      print('Fetched ${roles.length} roles');
       return roles;
     } catch (e) {
-      print('❌ Error fetching roles: $e');
+      print(' Error fetching roles: $e');
       rethrow;
     }
   }
@@ -417,14 +417,14 @@ Future<bool> uploadVoice({
     );
 
     if (response.statusCode == 200 || response.statusCode == 201) {
-      print('✅ Voice sample uploaded successfully');
+      print(' Voice sample uploaded successfully');
       return true;
     } else {
-      print('❌ Failed to upload voice sample: ${response.data}');
+      print(' Failed to upload voice sample: ${response.data}');
       return false;
     }
   } catch (e) {
-    print('❌ Error uploading voice sample: $e');
+    print(' Error uploading voice sample: $e');
     return false;
   }
 }

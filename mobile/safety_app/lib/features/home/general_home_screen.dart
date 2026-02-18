@@ -84,12 +84,12 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text("🚨 SOS ACTIVATED!"),
+            content: Text(" SOS ACTIVATED!"),
             backgroundColor: Colors.red,
           ),
         );
       },
-      onStatusChange: (status) => print("🎤 SOS Status: $status"),
+      onStatusChange: (status) => print(" SOS Status: $status"),
     );
   }
 

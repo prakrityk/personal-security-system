@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:safety_app/core/network/dio_client.dart';
 import 'package:safety_app/core/network/api_endpoints.dart'; 
+
 class VoiceService {
   final DioClient _dioClient = DioClient();
 
@@ -14,26 +15,26 @@ class VoiceService {
     try {
       print('📤 Uploading voice for verification (User: $userId)...');
       
+      // ✅ Move user_id inside FormData
       final formData = FormData.fromMap({
         'file': await MultipartFile.fromFile(
           filePath,
           filename: 'sos_verify.wav',
         ),
+        'user_id': userId, // <--- moved here
       });
 
       final response = await _dioClient.postFormData(
         endpoint, 
         data: formData,
-        queryParameters: {
-          'user_id': userId,
-        },
+        // queryParameters removed
       );
 
       if (response.statusCode == 200) {
         print('Voice Verified Successfully');
         return true;
       } else {
-        print(' Voice Mismatch: ${response.data}');
+        print('Voice Mismatch: ${response.data}');
         return false;
       }
     } catch (e) {

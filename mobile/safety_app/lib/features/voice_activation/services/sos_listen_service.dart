@@ -100,7 +100,7 @@ class SOSListenService {
   final now = DateTime.now();
 
  
-  print("🎧 HELP score: $helpScore, Confidence: ${(helpScore * 100).toStringAsFixed(2)}%");
+  print(" HELP score: $helpScore, Confidence: ${(helpScore * 100).toStringAsFixed(2)}%");
 
  
   if (helpScore > 0.8) {
@@ -116,11 +116,11 @@ class SOSListenService {
 
       // Print which help frame detected
       if (_positiveFrames == 1) {
-        print("🚨 First HELP detected!");
+        print(" First HELP detected!");
       } else if (_positiveFrames == 2) {
-        print("🚨 Second HELP detected!");
+        print(" Second HELP detected!");
       } else {
-        print("🚨 HELP detected - Frame #$_positiveFrames");
+        print(" HELP detected - Frame #$_positiveFrames");
       }
     }
   } else {
@@ -131,7 +131,7 @@ class SOSListenService {
   if (helpScore > 0.8 && _positiveFrames >= requiredFrames) {
     if (_lastTrigger == null || now.difference(_lastTrigger!).inSeconds > cooldownSeconds) {
       _lastTrigger = now;
-      print("🚨 SOS TRIGGERED!");
+      print(" SOS TRIGGERED!");
       _verifyVoiceInternal(samples, userId, onSOSConfirmed, onStatusChange);
     }
     _positiveFrames = 0;
@@ -170,6 +170,6 @@ class SOSListenService {
     if (!_isListening) return;
     _isListening = false;
     await _recorder.stop();
-    print("🔴 SOS Listener deactivated and Mic released.");
+    print(" SOS Listener deactivated and Mic released.");
   }
 }
