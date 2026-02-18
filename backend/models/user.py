@@ -25,6 +25,8 @@ class User(Base):
     email_verified = Column(Boolean, default=False, nullable=False)
     phone_verified = Column(Boolean, default=False, nullable=False)
     is_active = Column(Boolean, default=False, nullable=False)
+    is_voice_registered = Column(Boolean, default=False, nullable=False)
+
     
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

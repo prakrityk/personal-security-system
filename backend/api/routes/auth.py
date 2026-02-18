@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_,desc
 from typing import List
 import random
+from models.user_voices import UserVoice
 
 # Schemas
 from api.schemas.auth import (
@@ -307,6 +308,9 @@ async def login(login_data: UserLogin, db: Session = Depends(get_db)):
         email=user.email,
         full_name=user.full_name,
         phone_number=user.phone_number,
+        is_voice_registered=bool(
+         db.query(UserVoice).filter(UserVoice.user_id == user.id).count() >= 3
+        ),
         roles=[
             RoleInfo(
                 id=role.id,

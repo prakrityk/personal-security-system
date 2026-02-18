@@ -101,6 +101,7 @@ class UserResponse(BaseModel):
     email: str
     full_name: str
     phone_number: str
+    is_voice_registered: bool  
     roles: List[RoleInfo] = []
     
     class Config:
@@ -111,6 +112,7 @@ class UserResponse(BaseModel):
                 "email": "john.doe@example.com",
                 "full_name": "John Doe",
                 "phone_number": "+9779812345678",
+                "is_voice_registered": True,
                 "roles": []  # Empty until user selects path after login
             }
         }
