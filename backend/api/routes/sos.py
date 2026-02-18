@@ -101,8 +101,7 @@ async def create_sos_event(
     else:
         contact_user_ids = set()
 
-    recipient_user_ids = guardian_user_ids | contact_user_ids
-
+    recipient_user_ids = (guardian_user_ids | contact_user_ids) - {current_user.id}
     if recipient_user_ids:
         devices = (
             db.query(Device)

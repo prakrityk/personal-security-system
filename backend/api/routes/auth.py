@@ -337,9 +337,10 @@ async def complete_firebase_registration(
         
         # Create JWT tokens
         logger.info("🔑 Generating JWT tokens...")
-        access_token = create_access_token(data={"sub": str(new_user.id)})
-        refresh_token_str = create_refresh_token(data={"sub": str(new_user.id)})
-        
+        # access_token = create_access_token(data={"sub": str(new_user.id)})
+        # refresh_token_str = create_refresh_token(data={"sub": str(new_user.id)})
+        access_token = create_access_token(data={"sub": str(new_user.id)}, db=db, user_id=new_user.id)
+        refresh_token_str = create_refresh_token(data={"sub": str(new_user.id)}, db=db, user_id=new_user.id)
         # Store refresh token in database
         logger.info("💾 Storing refresh token...")
         refresh_token_record = RefreshToken(
