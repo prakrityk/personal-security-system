@@ -20,6 +20,10 @@
     <!-- Camera feature (optional - app works without camera) -->
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false"/>
+   <!-- Location permissions for SOS feature -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+
     <!-- Add contacts permission --> 
     <uses-permission android:name="android.permission.READ_CONTACTS"/> 
 
@@ -47,6 +51,11 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+<!-- 🔑 Google Maps API Key -->
+    <meta-data
+        android:name="com.google.android.geo.API_KEY"
+        android:value="AIzaSyASWW9Lw3Zb--EQqPFXF6lzubtzhCHKz2E"/>
+
 <!-- 🚨 FCM DEFAULT CHANNEL: Use SOS Alerts as default for critical notifications -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"

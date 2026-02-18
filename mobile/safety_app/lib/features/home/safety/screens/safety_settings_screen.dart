@@ -61,7 +61,7 @@ class _SafetySettingsScreenState extends State<SafetySettingsScreen> {
               // Safety Toggles
               SafetyToggleTile(
                 icon: Icons.location_on_outlined,
-                title: 'Live Location',
+                title: 'Set Safety Zone',
                 subtitle: 'Share your real-time location with guardians',
                 isEnabled: _liveLocation,
                 onToggle: (value) => setState(() => _liveLocation = value),
