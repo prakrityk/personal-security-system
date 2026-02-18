@@ -284,7 +284,8 @@ def get_current_user_with_roles(
         
         # Log for debugging
         print(f"Token roles: {user.token_roles}, DB roles: {db_role_names}")
-    
+        user.role_names = db_role_names
+        
     return user
 
 
