@@ -1,35 +1,44 @@
+import 'dart:io';
 import 'dart:typed_data';
+import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
+import 'package:safety_app/services/voice_service.dart';
+import 'package:safety_app/core/utils/wav_header.dart';
 
-typedef SOSCallback = void Function(double confidence);
+typedef SOSCallback = void Function();
 typedef StatusCallback = void Function(String status);
 
 class SOSListenService {
   final AudioRecorder _recorder = AudioRecorder();
+  final VoiceService _voiceService = VoiceService();
   Interpreter? _interpreter;
   bool _isListening = false;
+  bool _isVerifying = false;
+
+  // Tracks current state to prevent duplicate starts
+  bool get isCurrentlyListening => _isListening;
 
   static const int sampleRate = 16000;
+  static const int requiredFrames = 2;
+  static const int cooldownSeconds = 10;
+  static const int detectionWindowSeconds = 5;
 
-  // =========================
-  // LOAD MODEL
-  // =========================
+  int _positiveFrames = 0;
+  DateTime? _lastTrigger;
+  DateTime? _firstDetectionTime;
+  bool _lastFrameWasPositive = false;
+
   Future<void> loadModel(String assetPath) async {
     _interpreter ??= await Interpreter.fromAsset(assetPath);
     print("✅ RAW SOS TFLite model loaded");
   }
 
-  // =========================
-  // MIC PERMISSION
-  // =========================
   Future<bool> hasPermission() async => await _recorder.hasPermission();
 
-  // =========================
-  // START LISTENING
-  // =========================
   Future<void> startListening({
-    required SOSCallback onSOSDetected,
+    required int userId,
+    required SOSCallback onSOSConfirmed,
     StatusCallback? onStatusChange,
   }) async {
     if (_isListening) return;
@@ -37,6 +46,7 @@ class SOSListenService {
 
     if (!await hasPermission()) {
       onStatusChange?.call("Microphone permission required");
+      _isListening = false;
       return;
     }
 
@@ -66,40 +76,100 @@ class SOSListenService {
         buffer.add(sample / 32768.0);
       }
 
-      // Process every 1 second with overlap
+      // Process every 1 second with 50% overlap
       while (buffer.length >= sampleRate) {
         final segment = buffer.sublist(0, sampleRate);
-        _runModel(segment, onSOSDetected);
+        _runModel(segment, userId, onSOSConfirmed, onStatusChange);
 
-        // 50% overlap for better detection
         buffer.removeRange(0, sampleRate ~/ 2);
       }
     });
   }
 
   
-  // =========================
-  // RUN MODEL (RAW AUDIO)
-  // =========================
-  void _runModel(List<double> samples, SOSCallback onSOSDetected) {
-    if (_interpreter == null) return;
 
-    // Model expects: [1, 16000]
-    var input = [samples];
-    var output = List.generate(1, (_) => List.filled(2, 0.0));
+  void _runModel(List<double> samples, int userId, SOSCallback onSOSConfirmed, StatusCallback? onStatusChange) async {
+  if (_interpreter == null || _isVerifying) return;
 
-    _interpreter!.run(input, output);
+  var input = [Float32List.fromList(samples)];
+  var output = List.generate(1, (_) => List.filled(2, 0.0));
 
-    double helpScore = output[0][1];
+  _interpreter!.run(input, output);
 
-    if (helpScore > 0.8) {
-      print("🚨 HELP detected! Confidence: $helpScore");
-      onSOSDetected(helpScore);
-    } else if (helpScore > 0.5) {
-      print("⚠️ Possible HELP detected. Confidence: $helpScore");
+  double helpScore = output[0][1];
+  final now = DateTime.now();
+
+ 
+  print("🎧 HELP score: $helpScore, Confidence: ${(helpScore * 100).toStringAsFixed(2)}%");
+
+ 
+  if (helpScore > 0.8) {
+    if (!_lastFrameWasPositive) {
+      // reset if outside detection window
+      if (_firstDetectionTime == null || now.difference(_firstDetectionTime!).inSeconds > detectionWindowSeconds) {
+        _positiveFrames = 1;
+        _firstDetectionTime = now;
+      } else {
+        _positiveFrames++;
+      }
+      _lastFrameWasPositive = true;
+
+      // Print which help frame detected
+      if (_positiveFrames == 1) {
+        print("🚨 First HELP detected!");
+      } else if (_positiveFrames == 2) {
+        print("🚨 Second HELP detected!");
+      } else {
+        print("🚨 HELP detected - Frame #$_positiveFrames");
+      }
     }
-    else {
-      print("Audio processed. HELP score: $helpScore");
+  } else {
+    _lastFrameWasPositive = false;
+  }
+
+ 
+  if (helpScore > 0.8 && _positiveFrames >= requiredFrames) {
+    if (_lastTrigger == null || now.difference(_lastTrigger!).inSeconds > cooldownSeconds) {
+      _lastTrigger = now;
+      print("🚨 SOS TRIGGERED!");
+      _verifyVoiceInternal(samples, userId, onSOSConfirmed, onStatusChange);
     }
+    _positiveFrames = 0;
+    _firstDetectionTime = null;
+    _lastFrameWasPositive = false;
+  }
+}
+
+
+  Future<void> _verifyVoiceInternal(List<double> audioSamples, int userId, SOSCallback onConfirmed, StatusCallback? onStatusChange) async {
+    _isVerifying = true;
+    onStatusChange?.call("Verifying Voice...");
+
+    try {
+      final wavBytes = WavHeader.addHeader(audioSamples);
+      final tempDir = await getTemporaryDirectory();
+      final file = File('${tempDir.path}/sos_verify.wav');
+      await file.writeAsBytes(wavBytes);
+
+      bool isVerified = await _voiceService.verifyVoiceSos(userId: userId, filePath: file.path);
+
+      if (isVerified) {
+        onStatusChange?.call("SOS Activated!");
+        onConfirmed();
+      } else {
+        onStatusChange?.call("Voice Mismatch - Ignored");
+      }
+    } catch (e) {
+      print("Verification Error: $e");
+    } finally {
+      _isVerifying = false;
+    }
+  }
+
+  Future<void> stopListening() async {
+    if (!_isListening) return;
+    _isListening = false;
+    await _recorder.stop();
+    print("🔴 SOS Listener deactivated and Mic released.");
   }
 }

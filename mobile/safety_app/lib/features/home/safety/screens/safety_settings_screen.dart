@@ -1,25 +1,40 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:safety_app/core/theme/app_colors.dart';
 import 'package:safety_app/core/theme/app_text_styles.dart';
 import '../widgets/safety_toggle_tile.dart';
+import 'package:safety_app/core/providers/auth_provider.dart';
 import 'package:safety_app/features/voice_activation/screens/voice_registration_screen.dart';
 
-class SafetySettingsScreen extends StatefulWidget {
+class SafetySettingsScreen extends ConsumerStatefulWidget {
   const SafetySettingsScreen({super.key});
 
   @override
-  State<SafetySettingsScreen> createState() => _SafetySettingsScreenState();
+  ConsumerState<SafetySettingsScreen> createState() =>
+      _SafetySettingsScreenState();
 }
 
-class _SafetySettingsScreenState extends State<SafetySettingsScreen> {
+class _SafetySettingsScreenState extends ConsumerState<SafetySettingsScreen> {
   bool _liveLocation = false;
-  bool _voiceActivation = false;
   bool _motionDetection = false;
   bool _recordEvidence = false;
 
   @override
+  void initState() {
+    super.initState();
+
+    // 🔹 Refresh user state on screen load to get the latest isVoiceRegistered
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(authStateProvider.notifier).refreshUser();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // Watch user async state
+    final userAsync = ref.watch(authStateProvider);
 
     return Container(
       color: isDark ? AppColors.darkBackground : AppColors.lightBackground,
@@ -71,8 +86,8 @@ class _SafetySettingsScreenState extends State<SafetySettingsScreen> {
                 ],
               ),
               const SizedBox(height: 24),
-              
-              // Safety Toggles
+
+              // 1. Live Location Toggle
               SafetyToggleTile(
                 icon: Icons.location_on_outlined,
                 title: 'Live Location',
@@ -80,33 +95,65 @@ class _SafetySettingsScreenState extends State<SafetySettingsScreen> {
                 isEnabled: _liveLocation,
                 onToggle: (value) => setState(() => _liveLocation = value),
               ),
-                
-              SafetyToggleTile(
-                icon: Icons.mic_outlined,
-                title: 'Voice activation',
-                subtitle: 'Activate SOS with voice command',
-                isEnabled: _voiceActivation,
-                // onToggle: (value) => setState(() => _voiceActivation = value),
-                 onToggle: (value) async {
-                    if (value == true) {
-                      // 👉 First go to voice registration
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const VoiceRegistrationScreen(),
-                        ),
-                      );
 
-                      // After returning, enable toggle
-                      setState(() => _voiceActivation = true);
-                    } else {
-                      setState(() => _voiceActivation = false);
-                    }
-                  },
-                
-                ),
-              
-              
+              const SizedBox(height: 16),
+
+              // 2. Voice Registration Toggle
+              // 2. Voice Registration Toggle
+userAsync.when(
+  data: (user) {
+    if (user == null) return const SizedBox();
+
+    // 🔹 Debug: print user's voice registration status
+    print("📢 DEBUG: User's isVoiceRegistered = ${user.isVoiceRegistered}");
+
+    final isAlreadyRegistered = user.isVoiceRegistered;
+
+    return SafetyToggleTile(
+      icon: isAlreadyRegistered
+          ? Icons.check_circle
+          : Icons.mic_outlined,
+      title: 'Voice Registration',
+      subtitle: isAlreadyRegistered
+          ? 'Voice is successfully registered'
+          : 'Register your voice to activate SOS hands-free',
+      isEnabled: isAlreadyRegistered,
+      onToggle: (value) async {
+        if (isAlreadyRegistered) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Voice registration is already active."),
+              backgroundColor: Colors.blueGrey,
+            ),
+          );
+          return;
+        }
+
+        if (value == true) {
+          final registered = await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const VoiceRegistrationScreen(),
+            ),
+          );
+
+          if (registered == true) {
+            await ref
+                .read(authStateProvider.notifier)
+                .updateVoiceRegistrationStatus(true);
+          }
+        }
+      },
+    );
+  },
+  loading: () => const Center(child: CircularProgressIndicator()),
+  error: (err, _) => Text('Error loading user: $err'),
+),
+
+
+              const SizedBox(height: 16),
+
+              // 3. Motion Detection Toggle
               SafetyToggleTile(
                 icon: Icons.sensors_outlined,
                 title: 'Motion Detection',
@@ -114,7 +161,10 @@ class _SafetySettingsScreenState extends State<SafetySettingsScreen> {
                 isEnabled: _motionDetection,
                 onToggle: (value) => setState(() => _motionDetection = value),
               ),
-              
+
+              const SizedBox(height: 16),
+
+              // 4. Record Evidence Toggle
               SafetyToggleTile(
                 icon: Icons.videocam_outlined,
                 title: 'Record Evidence',

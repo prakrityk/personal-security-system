@@ -10,19 +10,7 @@ final authServiceProvider = Provider<AuthService>((ref) {
   return AuthService();
 });
 
-/// Provider for current user
-final currentUserProvider = FutureProvider<UserModel?>((ref) async {
-  final authService = ref.watch(authServiceProvider);
-  return await authService.getCurrentUser();
-});
-
-/// Provider to check if user is logged in
-final isLoggedInProvider = FutureProvider<bool>((ref) async {
-  final authService = ref.watch(authServiceProvider);
-  return await authService.isLoggedIn();
-});
-
-/// State notifier for user authentication state
+/// StateNotifier for user authentication state
 class AuthStateNotifier extends StateNotifier<AsyncValue<UserModel?>> {
   final AuthService _authService;
 
@@ -30,7 +18,7 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<UserModel?>> {
     _loadUser();
   }
 
-  /// Load current user
+  /// Load current user from local storage
   Future<void> _loadUser() async {
     state = const AsyncValue.loading();
     try {
@@ -41,57 +29,80 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<UserModel?>> {
     }
   }
 
-  /// Refresh user data from API
+  /// Login user and refresh state from backend
+  Future<void> login(String email, String password) async {
+    try {
+      // Step 1: Login via service
+      final authResponse = await _authService.login(email: email, password: password);
+
+      // Step 2: Update state immediately
+      state = AsyncValue.data(authResponse.user);
+
+      // Step 3: Refresh user from backend to get latest fields
+      await refreshUser();
+
+      print('✅ Login complete. isVoiceRegistered: ${state.value?.isVoiceRegistered}');
+    } catch (e, stack) {
+      state = AsyncValue.error(e, stack);
+      rethrow;
+    }
+  }
+
+  /// Refresh user data from backend
   Future<void> refreshUser() async {
     try {
       final user = await _authService.fetchCurrentUser();
       state = AsyncValue.data(user);
+      print('✅ User refreshed. isVoiceRegistered: ${user.isVoiceRegistered}');
     } catch (e, stack) {
       state = AsyncValue.error(e, stack);
     }
   }
 
-  /// Logout user - clears all data and resets state
+  /// Update local state for voice registration
+  Future<void> updateVoiceRegistrationStatus(bool status) async {
+    final currentUser = state.value;
+    if (currentUser != null) {
+      // Update user object
+      final updatedUser = currentUser.copyWith(isVoiceRegistered: status);
+
+      // Replace state to trigger UI rebuild
+      state = AsyncValue.data(updatedUser);
+      print("✅ Local State Updated: isVoiceRegistered = $status");
+
+      // Optional: sync with backend
+      try {
+        await _authService.fetchCurrentUser();
+      } catch (e) {
+        print("⚠️ Background sync failed, but local UI is updated.");
+      }
+    }
+  }
+
+  /// Logout user - clears storage and state
   Future<void> logout() async {
     print('🔄 AuthStateNotifier: Starting logout...');
-
     try {
-      // Call service logout (handles backend + storage)
       await _authService.logout();
-
-      // Reset state to null (no user)
       state = const AsyncValue.data(null);
-
       print('✅ AuthStateNotifier: Logout successful - User state cleared');
     } catch (e, stack) {
-      // Log error but ALWAYS reset state
       print('⚠️ AuthStateNotifier: Logout error: $e');
-
-      // CRITICAL: Reset state to null even on error
-      // This ensures user is logged out in UI even if something failed
       state = const AsyncValue.data(null);
-
       print('✅ AuthStateNotifier: State reset despite error');
-
-      // Don't rethrow - we want logout to always succeed in the UI
-      // The service already handled the actual logout
     }
   }
 
   /// Get current user synchronously
-  UserModel? get currentUser {
-    return state.value;
-  }
+  UserModel? get currentUser => state.value;
 
   /// Check if user is logged in
-  bool get isLoggedIn {
-    return state.value != null;
-  }
+  bool get isLoggedIn => state.value != null;
 }
 
-/// Provider for auth state
+/// Provider for AuthStateNotifier
 final authStateProvider =
     StateNotifierProvider<AuthStateNotifier, AsyncValue<UserModel?>>((ref) {
-      final authService = ref.watch(authServiceProvider);
-      return AuthStateNotifier(authService);
-    });
+  final authService = ref.watch(authServiceProvider);
+  return AuthStateNotifier(authService);
+});

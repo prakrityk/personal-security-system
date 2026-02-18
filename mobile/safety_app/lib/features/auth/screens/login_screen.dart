@@ -1,19 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart'; // ✅ Added Riverpod
 import 'package:safety_app/core/widgets/animated_bottom_button.dart';
 import 'package:safety_app/core/widgets/app_text_field.dart';
 import 'package:safety_app/services/auth_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import 'package:safety_app/core/providers/auth_provider.dart';
 
-class LoginScreen extends StatefulWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _emailOrPhoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final AuthService _authService = AuthService();
@@ -41,19 +43,26 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       // Call API
-      final response = await _authService.login(
-        email: emailOrPhone,
-        password: password,
-      );
+       await ref.read(authStateProvider.notifier).login(emailOrPhone, password);
 
+    // 🔹 Get the current user from notifier
+    final user = ref.read(authStateProvider).value;
+
+    if (user == null) {
+      _showError("Login failed, user data not available");
+      return;
+    }
+// After: final response = await _authService.login(...)
+print('✅ Logged in! User ID: ${user.id}');
+print('👤 Full Name: ${user.fullName}');
       if (!mounted) return;
 
       // Success message with user name
-      _showSuccess("Welcome back, ${response.user.fullName}!");
+      _showSuccess("Welcome back, ${user.fullName}!");
 
       // Check if user has roles assigned
       // Navigate based on role status
-      if (response.user.hasRole) {
+      if (user.hasRole) {
         context.go('/home');
       } else {
         context.go('/role-intent');

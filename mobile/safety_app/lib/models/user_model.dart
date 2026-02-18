@@ -11,6 +11,7 @@ class UserModel {
   final String? profilePicture;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final bool isVoiceRegistered;
 
   const UserModel({
     required this.id,
@@ -21,6 +22,7 @@ class UserModel {
     this.profilePicture,
     required this.createdAt,
     required this.updatedAt,
+    required this.isVoiceRegistered, 
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -33,6 +35,7 @@ class UserModel {
           .map((e) => RoleInfo.fromJson(e))
           .toList(),
       profilePicture: json['profile_picture'] ?? json['profilePicture'],
+      isVoiceRegistered: json['is_voice_registered'] ?? false, // ✅ Parsed from JSON
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'])
           : DateTime.now(),
@@ -50,6 +53,7 @@ class UserModel {
       'phone_number': phoneNumber,
       'roles': roles.map((r) => r.toJson()).toList(),
       'profile_picture': profilePicture,
+      'is_voice_registered': isVoiceRegistered, // ✅ Added to serialization
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
     };
@@ -75,7 +79,6 @@ class UserModel {
 
     final role = roles.first.roleName.toLowerCase();
 
-    // Convert role names to display format
     switch (role) {
       case 'global_user':
         return 'Personal User';
@@ -88,7 +91,6 @@ class UserModel {
       case 'elderly':
         return 'Elderly';
       default:
-        // Capitalize first letter of each word
         return role
             .split('_')
             .map(
@@ -114,6 +116,7 @@ class UserModel {
     String? profilePicture,
     DateTime? createdAt,
     DateTime? updatedAt,
+    bool? isVoiceRegistered, // ✅ Added to copyWith
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -122,6 +125,7 @@ class UserModel {
       phoneNumber: phoneNumber ?? this.phoneNumber,
       roles: roles ?? this.roles,
       profilePicture: profilePicture ?? this.profilePicture,
+      isVoiceRegistered: isVoiceRegistered ?? this.isVoiceRegistered, // ✅ Logic updated
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -129,5 +133,5 @@ class UserModel {
 
   @override
   String toString() =>
-      'UserModel(id: $id, email: $email, fullName: $fullName, roles: $roles)';
+      'UserModel(id: $id, email: $email, fullName: $fullName, roles: $roles, isVoiceRegistered: $isVoiceRegistered)';
 }

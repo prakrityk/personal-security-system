@@ -3,17 +3,17 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:safety_app/services/auth_service.dart';
 import '../services/voice_record_service.dart';
 import 'package:audioplayers/audioplayers.dart';
-
-class VoiceRegistrationScreen extends StatefulWidget {
-  const VoiceRegistrationScreen({super.key});
+import 'package:path_provider/path_provider.dart';
+import 'package:safety_app/core/providers/auth_provider.dart'; // ✅ Required for authStateProvider
+import 'package:flutter_riverpod/flutter_riverpod.dart'; // ✅ Required for ConsumerState
+class VoiceRegistrationScreen extends ConsumerStatefulWidget {  const VoiceRegistrationScreen({super.key});
 
   @override
-  State<VoiceRegistrationScreen> createState() =>
-      _VoiceRegistrationScreenState();
-}
+ ConsumerState<VoiceRegistrationScreen> createState() => 
+ _VoiceRegistrationScreenState();}
 
-class _VoiceRegistrationScreenState extends State<VoiceRegistrationScreen> {
-  final VoiceRecordService _recordService = VoiceRecordService();
+class _VoiceRegistrationScreenState extends ConsumerState<VoiceRegistrationScreen> {
+    final VoiceRecordService _recordService = VoiceRecordService();
   final AudioPlayer _audioPlayer = AudioPlayer();
 
   bool isRecording = false;
@@ -36,8 +36,8 @@ class _VoiceRegistrationScreenState extends State<VoiceRegistrationScreen> {
   void startRecording() async {
     if (sampleCount >= 3) return;
 
-    bool allowed = await _recordService.hasPermission();
-    if (!allowed) {
+     final permissionStatus = await Permission.microphone.request();
+    if (!permissionStatus.isGranted) {
       setState(() {
         statusText = "Microphone permission denied";
       });
@@ -57,55 +57,42 @@ class _VoiceRegistrationScreenState extends State<VoiceRegistrationScreen> {
 
   //STOP RECORDING 
   void stopRecording() async {
-    await _recordService.stopRecording();
+  await _recordService.stopRecording();
+  if (!mounted) return; // ✅ Initial safety check
 
-    setState(() {
-      isRecording = false;
+  setState(() {
+    isRecording = false;
+    if (!isRetaking) sampleCount++;
+  });
 
-      //  Increase count ONLY if not retaking
-      if (!isRetaking) {
-        sampleCount++;
-      }
+  if (latestSamplePath != null) {
+    final user = ref.read(authStateProvider).value;
+    if (user != null) {
+      final response = await AuthService().uploadVoice(
+        userId: int.parse(user.id),
+        sampleNumber: sampleCount,
+        filePath: latestSamplePath!,
+      );
 
-      if (sampleCount == 3) {
-        registrationCompleted = true;
-        statusText = "Voice registration completed!";
-      } else {
-        statusText =
-            "Sample $sampleCount saved. You may play or retake the latest sample.";
-      }
+      if (!mounted) return; // ✅ Check again after network call
 
-      isRetaking = false; // reset
+      if (sampleCount == 3 && response) {
+      // ✅ Pass 'true' to indicate registration is successful
+      await ref.read(authStateProvider.notifier).updateVoiceRegistrationStatus(true);
       
-    });
-    if (latestSamplePath != null) {
-      final user = await AuthService().getCurrentUser();
-      if (user != null) {
-        final userId = int.tryParse(user.id) ?? 0; // fix user.id red line safely
-
-        try{
-          final response = await AuthService().uploadVoice(
-            userId: userId,
-            sampleNumber: sampleCount,
-            filePath: latestSamplePath!,
-         );
+      if (mounted) {
         setState(() {
-          statusText = response
-              ? "Sample $sampleCount uploaded successfully"
-              : "Upload failed for sample $sampleCount";
-        });
-        }catch(e){
-           setState(() {
-            statusText = "Upload failed for sample $sampleCount: $e";
-          });
-        }
-      } else {
-        setState(() {
-          statusText = "Error: User not found for upload";
+          registrationCompleted = true;
+          statusText = "🎉 Registration Successful!";
         });
       }
+        Navigator.pop(context, true);
+
+    }
+      
     }
   }
+}
 
   // PLAY LATEST SAMPLE 
   void playLatestSample() async {

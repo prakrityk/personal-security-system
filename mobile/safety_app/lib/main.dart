@@ -7,7 +7,6 @@ import 'package:safety_app/core/theme/app_theme.dart';
 import 'package:safety_app/routes/app_router.dart';
 import 'package:safety_app/core/providers/theme_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:safety_app/features/voice_activation/services/sos_listen_service.dart';
 
 
 void main() async {
@@ -35,39 +34,12 @@ void main() async {
   );
 }
 
-class SOSApp extends ConsumerStatefulWidget {
+class SOSApp extends ConsumerWidget {
   const SOSApp({super.key});
 
 
   @override
-  ConsumerState<SOSApp> createState() => _SOSAppState();
-}
-
-class _SOSAppState extends ConsumerState<SOSApp> {
-  final SOSListenService _sosService = SOSListenService();
-
-  @override
-  void initState() {
-    super.initState();
-    //start sos listener 
-    _startSOSListening();
-  }
-
-  void _startSOSListening() async {
-    await _sosService.startListening(
-      onSOSDetected: (confidence) {
-        // Called when "HELP" is detected
-        print("🚨 SOS DETECTED with confidence $confidence");
-        // TODO: Trigger your SOS functionality here
-      },
-      onStatusChange: (status){
-        print(" STATUS: $status");
-      },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     // Watch the theme mode from provider
     final themeMode = ref.watch(themeModeProvider);
 
@@ -84,3 +56,4 @@ class _SOSAppState extends ConsumerState<SOSApp> {
     );
   }
 }
+
