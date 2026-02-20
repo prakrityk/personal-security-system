@@ -8,7 +8,9 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:safety_app/models/emergency_contact.dart';
 import 'package:safety_app/services/emergency_contact_service.dart';
 
-final emergencyContactServiceProvider = Provider<EmergencyContactService>((ref) {
+final emergencyContactServiceProvider = Provider<EmergencyContactService>((
+  ref,
+) {
   return EmergencyContactService();
 });
 
@@ -17,10 +19,11 @@ final emergencyContactServiceProvider = Provider<EmergencyContactService>((ref) 
 // ====================
 
 /// Provider for fetching current user's emergency contacts
-final personalEmergencyContactsProvider = FutureProvider<List<EmergencyContact>>((ref) async {
-  final service = ref.watch(emergencyContactServiceProvider);
-  return await service.getMyEmergencyContacts();
-});
+final personalEmergencyContactsProvider =
+    FutureProvider<List<EmergencyContact>>((ref) async {
+      final service = ref.watch(emergencyContactServiceProvider);
+      return await service.getMyEmergencyContacts();
+    });
 
 // ====================
 // DEPENDENT EMERGENCY CONTACTS (Read-only providers)
@@ -29,10 +32,13 @@ final personalEmergencyContactsProvider = FutureProvider<List<EmergencyContact>>
 /// Provider for fetching a specific dependent's emergency contacts
 /// Used by guardians in Family Detail Screen
 final dependentEmergencyContactsProvider =
-    FutureProvider.family<List<EmergencyContact>, int>((ref, dependentId) async {
-  final service = ref.watch(emergencyContactServiceProvider);
-  return await service.getDependentEmergencyContacts(dependentId);
-});
+    FutureProvider.family<List<EmergencyContact>, int>((
+      ref,
+      dependentId,
+    ) async {
+      final service = ref.watch(emergencyContactServiceProvider);
+      return await service.getDependentEmergencyContacts(dependentId);
+    });
 
 // ====================
 // STATE NOTIFIER FOR CRUD OPERATIONS
@@ -88,7 +94,8 @@ class EmergencyContactsState {
 class EmergencyContactNotifier extends StateNotifier<EmergencyContactsState> {
   final EmergencyContactService _service;
 
-  EmergencyContactNotifier(this._service) : super(EmergencyContactsState.initial());
+  EmergencyContactNotifier(this._service)
+    : super(EmergencyContactsState.initial());
 
   // ====================
   // LOAD OPERATIONS
@@ -97,7 +104,7 @@ class EmergencyContactNotifier extends StateNotifier<EmergencyContactsState> {
   /// Load personal emergency contacts
   Future<void> loadMyContacts() async {
     state = EmergencyContactsState.loading();
-    
+
     try {
       final contacts = await _service.getMyEmergencyContacts();
       state = EmergencyContactsState(
@@ -109,19 +116,18 @@ class EmergencyContactNotifier extends StateNotifier<EmergencyContactsState> {
       print('✅ Loaded ${contacts.length} personal emergency contacts');
     } catch (e) {
       print('❌ Error loading personal contacts: $e');
-      state = state.copyWith(
-        isLoading: false,
-        error: e.toString(),
-      );
+      state = state.copyWith(isLoading: false, error: e.toString());
     }
   }
 
   /// Load emergency contacts for a specific dependent
   Future<void> loadDependentContacts(int dependentId) async {
     state = EmergencyContactsState.loading();
-    
+
     try {
-      final contacts = await _service.getDependentEmergencyContacts(dependentId);
+      final contacts = await _service.getDependentEmergencyContacts(
+        dependentId,
+      );
       state = EmergencyContactsState(
         contacts: contacts,
         isLoading: false,
@@ -131,10 +137,7 @@ class EmergencyContactNotifier extends StateNotifier<EmergencyContactsState> {
       print('✅ Loaded ${contacts.length} contacts for dependent $dependentId');
     } catch (e) {
       print('❌ Error loading dependent contacts: $e');
-      state = state.copyWith(
-        isLoading: false,
-        error: e.toString(),
-      );
+      state = state.copyWith(isLoading: false, error: e.toString());
     }
   }
 
@@ -146,14 +149,16 @@ class EmergencyContactNotifier extends StateNotifier<EmergencyContactsState> {
   Future<bool> addMyContact(CreateEmergencyContact contactData) async {
     try {
       print('➕ Adding personal contact: ${contactData.name}');
-      final newContact = await _service.createMyEmergencyContact(contactData.toJson());
-      
+      final newContact = await _service.createMyEmergencyContact(
+        contactData.toJson(),
+      );
+
       // Add to current list
       state = state.copyWith(
         contacts: [...state.contacts, newContact],
         error: null,
       );
-      
+
       print('✅ Personal contact added successfully');
       return true;
     } catch (e) {
@@ -170,11 +175,14 @@ class EmergencyContactNotifier extends StateNotifier<EmergencyContactsState> {
   ) async {
     try {
       print('➕ Adding contact for dependent $dependentId: ${contactData.name}');
-      
+
       // Create contact data with dependent ID
-      final dataWithDependent = contactData.toJson()..['dependent_id'] = dependentId;
-      final newContact = await _service.createDependentEmergencyContact(dataWithDependent);
-      
+      final dataWithDependent = contactData.toJson()
+        ..['dependent_id'] = dependentId;
+      final newContact = await _service.createDependentEmergencyContact(
+        dataWithDependent,
+      );
+
       // Add to current list only if we're viewing this dependent's contacts
       if (state.currentDependentId == dependentId) {
         state = state.copyWith(
@@ -182,7 +190,7 @@ class EmergencyContactNotifier extends StateNotifier<EmergencyContactsState> {
           error: null,
         );
       }
-      
+
       print('✅ Dependent contact added successfully');
       return true;
     } catch (e) {
@@ -200,22 +208,19 @@ class EmergencyContactNotifier extends StateNotifier<EmergencyContactsState> {
   Future<bool> updateContact(UpdateEmergencyContact contactData) async {
     try {
       print('✏️ Updating contact ${contactData.id}');
-      
+
       final updatedContact = await _service.updateMyEmergencyContact(
         contactData.id,
         contactData.toJson(),
       );
-      
+
       // Update in current list
       final updatedList = state.contacts.map((contact) {
         return contact.id == contactData.id ? updatedContact : contact;
       }).toList();
-      
-      state = state.copyWith(
-        contacts: updatedList,
-        error: null,
-      );
-      
+
+      state = state.copyWith(contacts: updatedList, error: null);
+
       print('✅ Contact updated successfully');
       return true;
     } catch (e) {
@@ -226,25 +231,24 @@ class EmergencyContactNotifier extends StateNotifier<EmergencyContactsState> {
   }
 
   /// Update a dependent's emergency contact
-  Future<bool> updateDependentContact(UpdateEmergencyContact contactData) async {
+  Future<bool> updateDependentContact(
+    UpdateEmergencyContact contactData,
+  ) async {
     try {
       print('✏️ Updating dependent contact ${contactData.id}');
-      
+
       final updatedContact = await _service.updateDependentEmergencyContact(
         contactData.id,
         contactData.toJson(),
       );
-      
+
       // Update in current list
       final updatedList = state.contacts.map((contact) {
         return contact.id == contactData.id ? updatedContact : contact;
       }).toList();
-      
-      state = state.copyWith(
-        contacts: updatedList,
-        error: null,
-      );
-      
+
+      state = state.copyWith(contacts: updatedList, error: null);
+
       print('✅ Dependent contact updated successfully');
       return true;
     } catch (e) {
@@ -262,17 +266,16 @@ class EmergencyContactNotifier extends StateNotifier<EmergencyContactsState> {
   Future<bool> deleteContact(int contactId) async {
     try {
       print('🗑️ Deleting contact $contactId');
-      
+
       await _service.deleteMyEmergencyContact(contactId);
-      
+
       // Remove from current list
-      final updatedList = state.contacts.where((c) => c.id != contactId).toList();
-      
-      state = state.copyWith(
-        contacts: updatedList,
-        error: null,
-      );
-      
+      final updatedList = state.contacts
+          .where((c) => c.id != contactId)
+          .toList();
+
+      state = state.copyWith(contacts: updatedList, error: null);
+
       print('✅ Contact deleted successfully');
       return true;
     } catch (e) {
@@ -286,17 +289,16 @@ class EmergencyContactNotifier extends StateNotifier<EmergencyContactsState> {
   Future<bool> deleteDependentContact(int contactId) async {
     try {
       print('🗑️ Deleting dependent contact $contactId');
-      
+
       await _service.deleteDependentEmergencyContact(contactId);
-      
+
       // Remove from current list
-      final updatedList = state.contacts.where((c) => c.id != contactId).toList();
-      
-      state = state.copyWith(
-        contacts: updatedList,
-        error: null,
-      );
-      
+      final updatedList = state.contacts
+          .where((c) => c.id != contactId)
+          .toList();
+
+      state = state.copyWith(contacts: updatedList, error: null);
+
       print('✅ Dependent contact deleted successfully');
       return true;
     } catch (e) {
@@ -314,21 +316,21 @@ class EmergencyContactNotifier extends StateNotifier<EmergencyContactsState> {
   Future<bool> bulkImportContacts(List<Map<String, dynamic>> contacts) async {
     try {
       print('📥 Importing ${contacts.length} contacts');
-      
-      final result = await _service.bulkImportContacts(contacts);
-      
-      // Reload contacts after bulk import
+
+      await _service.bulkImportContacts(contacts);
       await loadMyContacts();
-      
-      print('✅ Bulk import successful: ${result['imported']} contacts imported');
+
+      // ✅ Don't access result fields you're not sure about
+      print('✅ Bulk import successful');
       return true;
     } catch (e) {
-      print('❌ Error importing contacts: $e');
+      print(
+        '❌ Error importing contacts: $e',
+      ); // ← this will now tell you exactly what failed
       state = state.copyWith(error: e.toString());
       return false;
     }
   }
-
   // ====================
   // UTILITY METHODS
   // ====================
@@ -384,10 +386,12 @@ class EmergencyContactNotifier extends StateNotifier<EmergencyContactsState> {
 // ====================
 
 final emergencyContactNotifierProvider =
-    StateNotifierProvider<EmergencyContactNotifier, EmergencyContactsState>((ref) {
-  final service = ref.watch(emergencyContactServiceProvider);
-  return EmergencyContactNotifier(service);
-});
+    StateNotifierProvider<EmergencyContactNotifier, EmergencyContactsState>((
+      ref,
+    ) {
+      final service = ref.watch(emergencyContactServiceProvider);
+      return EmergencyContactNotifier(service);
+    });
 
 // ====================
 // CONVENIENCE PROVIDERS

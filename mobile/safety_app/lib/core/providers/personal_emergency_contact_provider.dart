@@ -148,13 +148,18 @@ class PersonalContactsNotifier extends StateNotifier<PersonalContactsState> {
   /// Bulk import
   Future<bool> bulkImportContacts(List<Map<String, dynamic>> contacts) async {
     try {
-      print('📥 [PersonalContacts] Importing ${contacts.length} contacts');
+      print('📥 Importing ${contacts.length} contacts');
+
       await _service.bulkImportContacts(contacts);
       await loadMyContacts();
-      print('✅ [PersonalContacts] Import successful');
+
+      // ✅ Don't access result fields you're not sure about
+      print('✅ Bulk import successful');
       return true;
     } catch (e) {
-      print('❌ [PersonalContacts] Import failed: $e');
+      print(
+        '❌ Error importing contacts: $e',
+      ); // ← this will now tell you exactly what failed
       state = state.copyWith(error: e.toString());
       return false;
     }

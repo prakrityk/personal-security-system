@@ -141,17 +141,14 @@ class EmergencyContactBulkCreate(BaseModel):
             }
         }
 
-
 class EmergencyContactBulkResponse(BaseModel):
     """Response after bulk create"""
     success: bool
     message: str
-    created_count: int
-    failed_count: int
-    contacts: List[EmergencyContactResponse]
+    imported: int
+    skipped: int
     errors: Optional[List[str]] = None
-
-
+    
 class DependentEmergencyContactCreate(BaseModel):
     """Schema for primary guardian to add emergency contact for dependent"""
     dependent_id: int = Field(..., description="ID of the dependent")
