@@ -139,9 +139,7 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
 
     return Scaffold(
       // Only show app bar for Home tab (index 0)
-      appBar: _currentIndex == 0
-          ? const HomeAppBar()
-          : null,
+      appBar: _currentIndex == 0 ? const HomeAppBar() : null,
       body: Stack(
         children: [
           // Main Content
@@ -154,13 +152,16 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
           Positioned(
             left: 0,
             right: 0,
-            bottom: 0,
-            child: RoleBasedBottomNavBar(
-              currentIndex: _currentIndex,
-              navigationItems: navItems,
-              onTap: (index) {
-                setState(() => _currentIndex = index);
-              },
+            bottom: MediaQuery.of(context).padding.bottom,
+            child: SafeArea(
+              top: false,
+              child: RoleBasedBottomNavBar(
+                currentIndex: _currentIndex,
+                navigationItems: navItems,
+                onTap: (index) {
+                  setState(() => _currentIndex = index);
+                },
+              ),
             ),
           ),
         ],

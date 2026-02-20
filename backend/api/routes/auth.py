@@ -3,6 +3,7 @@ Authentication routes
 Handles user registration, login, phone verification, and token management
 """
 from datetime import timedelta
+import random
 from sqlalchemy.sql import func
 from datetime import datetime, timezone
 
@@ -34,6 +35,7 @@ from database.connection import get_db
 from models.user import User
 from models.role import Role
 from models.user_roles import UserRole
+from models.pending_user import PendingUser
 from api.schemas.auth import (
     FirebaseTokenVerification,
     FirebaseRegistrationComplete,
@@ -685,29 +687,42 @@ def check_phone_availability(
     )
 
 
+# ===================================================================
+# MERGED /me endpoint for auth.py
+# ===================================================================
+# INSTRUCTIONS:
+#   1. REPLACE lines 690–710 (the first @router.get("/me")) with this.
+#   2. DELETE lines 1046–1051 (the second @router.get("/me")) entirely.
+# ===================================================================
+
 @router.get("/me", response_model=UserResponse)
 def get_current_user_info(
     current_user: User = Depends(get_current_user)
 ):
-    """Get current user information"""
+    """Get current authenticated user's profile"""
+
+    # Explicitly build roles (from first /me — needed because the
+    # user_roles relationship may not always be eagerly loaded).
     user_roles = [
         RoleInfo(
             id=ur.role.id,
             role_name=ur.role.role_name,
-            role_description=ur.role.role_description
+            role_description=ur.role.role_description,
         )
         for ur in current_user.user_roles
     ]
-    
+
+    # Build the full response including ALL fields (fixes profile_picture: null
+    # bug — the old first /me forgot to include profile_picture and biometric_enabled).
     return UserResponse(
         id=current_user.id,
         email=current_user.email,
         full_name=current_user.full_name,
         phone_number=current_user.phone_number,
-        roles=user_roles
+        profile_picture=current_user.profile_picture,       # ✅ was missing
+        biometric_enabled=current_user.biometric_enabled,   # ✅ was missing
+        roles=user_roles,
     )
-
-
 # =====================================================
 # 🔐 BIOMETRIC & ROLE ASSIGNMENT (MODIFIED)
 # =====================================================
@@ -969,85 +984,77 @@ def get_available_roles(db: Session = Depends(get_db)):
         for role in roles
     ]
 
-@router.post("/test/register-without-firebase", response_model=UserWithTokens, status_code=status.HTTP_201_CREATED)
-def test_register_without_firebase(
-    email: str,
-    phone_number: str,
-    full_name: str,
-    password: str,
-    db: Session = Depends(get_db)
-):
-    """
-    TEMPORARY TEST ENDPOINT - Remove in production!
-    Register user without Firebase verification (for testing backend only)
-    """
-    # Check if user exists
-    existing_email = db.query(User).filter(User.email == email).first()
-    if existing_email:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
-        )
-    """
-    Assign a role to the current user
-    Users can have multiple roles (e.g., global_user + guardian)
-    """
-    user_id = current_user.id
+# @router.post("/test/register-without-firebase", response_model=UserWithTokens, status_code=status.HTTP_201_CREATED)
+# def test_register_without_firebase(
+#     email: str,
+#     phone_number: str,
+#     full_name: str,
+#     password: str,
+#     db: Session = Depends(get_db)
+# ):
+#     """
+#     TEMPORARY TEST ENDPOINT - Remove in production!
+#     Register user without Firebase verification (for testing backend only)
+#     """
+#     # Check if user exists
+#     existing_email = db.query(User).filter(User.email == email).first()
+#     if existing_email:
+#         raise HTTPException(
+#             status_code=status.HTTP_400_BAD_REQUEST,
+#             detail="Email already registered"
+#         )
+#     """
+#     Assign a role to the current user
+#     Users can have multiple roles (e.g., global_user + guardian)
+#     """
+#     user_id = current_user.id
 
-    role = db.query(Role).filter(Role.id == request.role_id).first()
-    if not role:
-        raise HTTPException(status_code=404, detail="Role not found")
+#     role = db.query(Role).filter(Role.id == request.role_id).first()
+#     if not role:
+#         raise HTTPException(status_code=404, detail="Role not found")
     
-    existing_phone = db.query(User).filter(User.phone_number == phone_number).first()
-    if existing_phone:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Phone number already registered"
-        )
+#     existing_phone = db.query(User).filter(User.phone_number == phone_number).first()
+#     if existing_phone:
+#         raise HTTPException(
+#             status_code=status.HTTP_400_BAD_REQUEST,
+#             detail="Phone number already registered"
+#         )
     
-    # Hash password
-    hashed_pw = hash_password(password)
+#     # Hash password
+#     hashed_pw = hash_password(password)
     
-    # Create test firebase_uid
-    import uuid
-    test_firebase_uid = f"test_{uuid.uuid4().hex[:20]}"
+#     # Create test firebase_uid
+#     import uuid
+#     test_firebase_uid = f"test_{uuid.uuid4().hex[:20]}"
     
-    # Create new user
-    new_user = User(
-        firebase_uid=test_firebase_uid,
-        email=email,
-        phone_number=phone_number,
-        full_name=full_name,
-        hashed_password=hashed_pw,
-        email_verified=True,
-        phone_verified=True,
-        is_active=True
-    )
+#     # Create new user
+#     new_user = User(
+#         firebase_uid=test_firebase_uid,
+#         email=email,
+#         phone_number=phone_number,
+#         full_name=full_name,
+#         hashed_password=hashed_pw,
+#         email_verified=True,
+#         phone_verified=True,
+#         is_active=True
+#     )
     
-    db.add(new_user)
-    db.commit()
-    db.refresh(user_role)
+#     db.add(new_user)
+#     db.commit()
+#     db.refresh(user_role)
 
-    return {
-        "message": f"User '{current_user.full_name}' selected role '{role.role_name}'.",
-        "selected_role": {
-            "role_id": role.id,
-            "role_name": role.role_name
-        }
-    }
-
+#     return {
+#         "message": f"User '{current_user.full_name}' selected role '{role.role_name}'.",
+#         "selected_role": {
+#             "role_id": role.id,
+#             "role_name": role.role_name
+#         }
+#     }
 
 # ================================================
 # SECTION 7: USER PROFILE
 # ================================================
-
-@router.get("/me", response_model=UserResponse)
-async def get_current_user_info(current_user: User = Depends(get_current_user)):
-    """
-    Get current authenticated user's profile
-    """
-    return current_user
-
+#                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  
 # FIXED: Update the /profile endpoint in auth.py
 @router.put("/profile", response_model=UserResponse)
 async def update_profile(
@@ -1102,6 +1109,23 @@ async def update_profile(
             detail=f"Failed to update profile: {str(e)}"
         )
 
+# ===================================================================
+# FIX for auth.py — upload_profile_picture endpoint
+# Replace the existing endpoint (lines ~1107-1149) with this
+# ===================================================================
+#
+# THE BUG:
+#   upload_profile_picture never sets updated_at on the user record.
+#   UserResponse doesn't include updated_at, so Flutter has no
+#   timestamp to detect "something changed" for cache-busting.
+#
+# THE FIX:
+#   1. Set current_user.updated_at = datetime.now(timezone.utc) after saving file.
+#   2. (See auth_schemas.py fix) — UserResponse now returns updated_at.
+#   Flutter then uses updated_at as part of the cacheKey and will always
+#   get a new, unique key on every upload.
+# ===================================================================
+
 @router.post("/profile/picture", response_model=UserResponse)
 async def upload_profile_picture(
     file: UploadFile = File(...),
@@ -1110,42 +1134,43 @@ async def upload_profile_picture(
 ):
     """
     Upload or update user's profile picture
-    
+
     - **file**: Image file (JPG, PNG, GIF, WEBP)
     - **max_size**: 5MB
-    
-    Returns updated user with new profile_picture path
+
+    Returns updated user with new profile_picture path and updated_at timestamp.
     """
     # Validate file
     validate_image_file(file)
-    
+
     # Check file size
-    file.file.seek(0, 2)  # Seek to end
+    file.file.seek(0, 2)
     file_size = file.file.tell()
-    file.file.seek(0)  # Reset to beginning
-    
+    file.file.seek(0)
+
     if file_size > MAX_FILE_SIZE:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail=f"File too large. Maximum size is {MAX_FILE_SIZE / (1024*1024):.0f}MB"
         )
-    
+
     # Delete old profile picture if exists
     if current_user.profile_picture:
         delete_profile_picture_file(current_user.profile_picture)
-    
+
     # Save new file
     file_path = save_upload_file(file, current_user.id)
-    
-    # Update user record
+
+    # ✅ FIX: Update both profile_picture AND updated_at so Flutter has a
+    # reliable, always-changing timestamp to use as a cache-bust key.
     current_user.profile_picture = file_path
+    current_user.updated_at = datetime.now(timezone.utc)  # ← THIS LINE ADDED
     db.commit()
     db.refresh(current_user)
-    
-    print(f"✅ Profile picture uploaded for user {current_user.id}: {file_path}")
-    
-    return current_user
 
+    print(f"✅ Profile picture uploaded for user {current_user.id}: {file_path}")
+
+    return current_user
 
 @router.delete("/profile/picture", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_profile_picture(
@@ -1338,3 +1363,33 @@ async def resend_email_otp(
 #    - Add proper email templates
 #
 # ===================================================================
+@router.post("/logout")
+def logout(
+    request: RefreshTokenRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Logout current device by revoking its refresh token.
+    Does NOT affect other devices.
+    """
+
+    token = db.query(RefreshToken).filter(
+        RefreshToken.token == request.refresh_token,
+        RefreshToken.user_id == current_user.id,
+        RefreshToken.is_revoked == False
+    ).first()
+
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid refresh token"
+        )
+
+    token.is_revoked = True
+    db.commit()
+
+    return {
+        "success": True,
+        "message": "Logged out successfully"
+    }

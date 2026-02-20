@@ -1,4 +1,7 @@
-// lib/routes/splash_screen.dart (FIXED)
+// lib/routes/splash_screen.dart
+// ✅ FIXED: Waits for auth loading to complete before navigating.
+// Previously it would timeout to /login after 500ms even if tokens were
+// being restored from secure storage — causing the persistent login to fail.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,67 +19,72 @@ class SplashScreen extends ConsumerStatefulWidget {
 }
 
 class _SplashScreenState extends ConsumerState<SplashScreen> {
-  bool _isNavigating = false; // Track if navigation is in progress
+  bool _hasNavigated = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkAuthAndNavigate();
+      _waitForAuthAndNavigate();
     });
   }
 
-  Future<void> _checkAuthAndNavigate() async {
-    if (_isNavigating) return; // Prevent multiple navigations
-    _isNavigating = true;
+  Future<void> _waitForAuthAndNavigate() async {
+    // Minimum splash display time for branding purposes
+    await Future.delayed(const Duration(milliseconds: 1500));
+    if (!mounted || _hasNavigated) return;
 
-    try {
-      // Get authentication state
-      final authState = ref.read(authStateProvider);
+    // ✅ KEY CHANGE: Instead of reading state once and timing out,
+    // we LISTEN to the auth state and only navigate once loading is done.
+    // This guarantees we never redirect to login while _loadUser() is still
+    // reading tokens from secure storage.
+    final authState = ref.read(authStateProvider);
 
-      // Wait for initial animation
-      await Future.delayed(const Duration(milliseconds: 1500));
+    if (authState.isLoading) {
+      // Auth is still restoring session — wait for it to finish.
+      // We set a generous max timeout (5s) as a safety net only.
+      // In practice _loadUser() finishes in < 500ms on any real device.
+      debugPrint('⏳ Splash: Auth still loading, waiting...');
 
-      if (!mounted) return;
+      // Poll until resolved or timeout
+      const maxWait = Duration(seconds: 5);
+      const pollInterval = Duration(milliseconds: 100);
+      final deadline = DateTime.now().add(maxWait);
 
-      authState.when(
-        data: (user) {
-          if (!mounted) return;
+      while (DateTime.now().isBefore(deadline)) {
+        await Future.delayed(pollInterval);
+        if (!mounted || _hasNavigated) return;
 
-          final targetRoute = _getTargetRoute(user);
-          print('📍 Splash: Navigating to $targetRoute');
-
-          // Use replace instead of go to remove splash from stack
-          context.replace(targetRoute);
-        },
-        loading: () {
-          // If still loading after delay, go to login
-          Future.delayed(const Duration(milliseconds: 500), () {
-            if (mounted) {
-              print('📍 Splash: Loading timeout - Navigating to Login');
-              context.replace(AppRouter.login);
-            }
-          });
-        },
-        error: (error, stack) {
-          if (mounted) {
-            print('❌ Splash: Auth error - $error');
-            context.replace(AppRouter.login);
-          }
-        },
-      );
-    } catch (e) {
-      print('❌ Splash: Unexpected error - $e');
-      if (mounted) {
-        context.replace(AppRouter.login);
+        final current = ref.read(authStateProvider);
+        if (!current.isLoading) {
+          // Loading finished — now navigate
+          _navigateBasedOnAuth(current.value);
+          return;
+        }
       }
+
+      // Safety net: if still loading after 5s something is wrong, go to login
+      debugPrint('⚠️ Splash: Auth load timeout — going to login as fallback');
+      _navigateBasedOnAuth(null);
+    } else {
+      // Auth resolved immediately (e.g. no token in storage — fast path)
+      _navigateBasedOnAuth(authState.value);
     }
+  }
+
+  void _navigateBasedOnAuth(dynamic user) {
+    if (!mounted || _hasNavigated) return;
+    _hasNavigated = true;
+
+    final target = _getTargetRoute(user);
+    debugPrint('📍 Splash: Navigating to $target');
+    context.replace(target);
   }
 
   String _getTargetRoute(dynamic user) {
     if (user == null) {
       return AppRouter.login;
-    } else if (user.hasRole) {
+    } else if (user.hasRole && user.currentRole != null) {
       return AppRouter.home;
     } else {
       return AppRouter.roleIntent;
@@ -85,12 +93,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ FIX: Prevent any rebuilds by using a const widget
-    return _SplashContent();
+    return const _SplashContent();
   }
 }
 
-// ✅ FIX: Separate widget to prevent rebuilds
 class _SplashContent extends StatelessWidget {
   const _SplashContent();
 

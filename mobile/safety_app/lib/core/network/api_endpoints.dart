@@ -8,7 +8,7 @@ class ApiEndpoints {
 
   // ✅ Use your laptop's IP address for physical device
   // Change this to match your actual backend server IP
-  // static const String baseUrl = 'http://localhost:8000/api';
+  //static const String baseUrl = 'http://localhost:8000/api';
   //'http://192.168.21.102:8000/api';
 
   //static const String baseUrl = "http://10.0.2.2:8000/api";
@@ -280,7 +280,6 @@ class ApiEndpoints {
   // ============================================================================
   // ⏱️ TIMEOUT CONFIGURATION
   // ============================================================================
-
   static const Duration connectTimeout = Duration(seconds: 10);
   static const Duration receiveTimeout = Duration(seconds: 10);
 

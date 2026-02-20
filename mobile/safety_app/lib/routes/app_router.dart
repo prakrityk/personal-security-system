@@ -1,7 +1,5 @@
 // lib/routes/app_router.dart
-// ✅ MERGED: Combines Firebase auth flow with role-based navigation
-// lib/routes/app_router.dart
-// ✅ MERGED: Combines Firebase auth flow with role-based navigation
+// ✅ FIXED: Handles AsyncValue.loading() — does not redirect while auth is being restored
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -60,15 +58,31 @@ class AppRouter {
 
       redirect: (context, state) {
         final authState = ref.read(authStateProvider);
-        final user = authState.value;
         final location = state.matchedLocation;
 
         print('🔀 Router redirect: $location');
+
+        // ✅ CRITICAL FIX: While _loadUser() is still running (restoring session
+        // from secure storage), authState is AsyncValue.loading().
+        // Do NOT redirect during this time — just stay on splash and wait.
+        // Without this check, the router sees user == null (because loading
+        // hasn't finished yet) and immediately sends the user to /login even
+        // though their token is perfectly valid in storage.
+        if (authState.isLoading) {
+          print('⏳ Auth still loading — holding at splash, no redirect');
+          // Only hold on splash. If we're already past splash somehow, don't
+          // interfere — let the screen stay where it is until loading resolves.
+          if (location == splash) return null;
+          return null;
+        }
+
+        final user = authState.value;
         print(
           '👤 User state: ${user != null ? "Authenticated" : "Not authenticated"}',
         );
 
-        // ✅ FIX 1: Handle splash screen redirect - always navigate away from splash
+        // ==================== SPLASH ====================
+        // Now that loading is done, decide where to go from splash.
         if (location == splash) {
           print('📍 Redirecting from splash...');
 
@@ -84,7 +98,8 @@ class AppRouter {
           }
         }
 
-        // ✅ FIX 2: Allow all auth screens without restriction
+        // ==================== AUTH SCREENS ====================
+        // Always allow these screens regardless of auth state.
         const authScreens = [
           login,
           letsGetStarted,
@@ -99,14 +114,15 @@ class AppRouter {
           return null;
         }
 
-        // ✅ FIX 3: CRITICAL - If not authenticated, redirect to login
-        // This handles logout - when user becomes null, redirect immediately
+        // ==================== NOT AUTHENTICATED ====================
+        // If loading is done and there is genuinely no user, redirect to login.
+        // This handles the explicit logout case.
         if (user == null) {
           print('❌ No user → Redirecting to Login');
           return login;
         }
 
-        // ✅ FIX 4: Allow role-specific onboarding flows (these are part of setup)
+        // ==================== ONBOARDING FLOWS ====================
         const onboardingFlows = [
           guardianSetup,
           guardianAddDependent,
@@ -122,18 +138,12 @@ class AppRouter {
           return null;
         }
 
-        // ✅ FIX 5: If authenticated but no role, redirect to role selection
-        // BUT: Allow navigation to home (it will redirect when role updates)
+        // ==================== NO ROLE YET ====================
         if (!user.hasRole || user.currentRole == null) {
-          // Don't block navigation to home - let it load and wait for role assignment
-          // The authStateProvider will trigger a redirect when the role is assigned
           if (location == home) {
-            print(
-              '⚠️ No role but allowing home navigation (waiting for role assignment)',
-            );
+            print('⚠️ No role but allowing home navigation');
             return null;
           }
-
           if (location != roleIntent) {
             print('⚠️ No role → RoleIntent');
             return roleIntent;
@@ -142,7 +152,7 @@ class AppRouter {
           return null;
         }
 
-        // ✅ FIX 6: Allow home and account screens for authenticated users with roles
+        // ==================== AUTHENTICATED WITH ROLE ====================
         const allowedScreens = [
           home,
           account,
@@ -160,7 +170,6 @@ class AppRouter {
 
       routes: [
         // ==================== NOTIFICATIONS ====================
-        // ==================== NOTIFICATIONS ====================
         GoRoute(
           path: '/notifications',
           name: 'notifications',
@@ -172,7 +181,6 @@ class AppRouter {
 
         // ==================== AUTH FLOW ====================
 
-        // Splash Screen
         GoRoute(
           path: splash,
           name: 'splash',
@@ -180,7 +188,6 @@ class AppRouter {
               const MaterialPage(child: SplashScreen(), fullscreenDialog: true),
         ),
 
-        // Login Screen
         GoRoute(
           path: login,
           name: 'login',
@@ -188,7 +195,6 @@ class AppRouter {
               const MaterialPage(child: LoginScreen()),
         ),
 
-        // Let's Get Started Screen
         GoRoute(
           path: letsGetStarted,
           name: 'letsGetStarted',
@@ -196,7 +202,6 @@ class AppRouter {
               const MaterialPage(child: LetsGetStartedScreen()),
         ),
 
-        // Phone Number Screen
         GoRoute(
           path: phoneNumber,
           name: 'phoneNumber',
@@ -204,10 +209,6 @@ class AppRouter {
               const MaterialPage(child: PhoneNumberScreen()),
         ),
 
-        // ✅ OTP Verification Screen (Phone) - FRIEND'S VERSION
-        // Passes verificationId from Firebase
-        // ✅ OTP Verification Screen (Phone) - FRIEND'S VERSION
-        // Passes verificationId from Firebase
         GoRoute(
           path: otpVerification,
           name: 'otpVerification',
@@ -216,9 +217,6 @@ class AppRouter {
             final phoneNumber = extra['phoneNumber'] as String? ?? '';
             final verificationId = extra['verificationId'] as String? ?? '';
 
-            // Redirect if missing required data
-
-            // Redirect if missing required data
             if (phoneNumber.isEmpty) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 context.go(AppRouter.phoneNumber);
@@ -234,10 +232,6 @@ class AppRouter {
           },
         ),
 
-        // ✅ Email Verification Screen - FRIEND'S VERSION
-        // Passes phoneNumber (NOT email) parameter
-        // ✅ Email Verification Screen - FRIEND'S VERSION
-        // Passes phoneNumber (NOT email) parameter
         GoRoute(
           path: emailVerification,
           name: 'emailVerification',
@@ -245,7 +239,6 @@ class AppRouter {
             final extra = state.extra as Map<String, dynamic>? ?? {};
             final phoneNumber = extra['phoneNumber'] as String? ?? '';
 
-            // Redirect if missing required data
             if (phoneNumber.isEmpty) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 context.go(AppRouter.phoneNumber);
@@ -258,10 +251,6 @@ class AppRouter {
           },
         ),
 
-        // ✅ Registration Screen - FRIEND'S VERSION
-        // Passes phoneNumber, email, and password
-        // ✅ Registration Screen - FRIEND'S VERSION
-        // Passes phoneNumber, email, and password
         GoRoute(
           path: registration,
           name: 'registration',
@@ -271,7 +260,6 @@ class AppRouter {
             final email = extra['email'] as String? ?? '';
             final password = extra['password'] as String? ?? '';
 
-            // Redirect if missing required data
             if (phoneNumber.isEmpty || email.isEmpty || password.isEmpty) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 context.go(AppRouter.phoneNumber);
@@ -285,13 +273,11 @@ class AppRouter {
                 password: password,
               ),
             );
-         
           },
         ),
 
         // ==================== ROLE SELECTION ====================
 
-        // Role Intent Screen
         GoRoute(
           path: roleIntent,
           name: 'roleIntent',
@@ -300,6 +286,7 @@ class AppRouter {
         ),
 
         // ==================== ACCOUNT SCREENS ====================
+
         GoRoute(
           path: account,
           name: 'account',
@@ -316,7 +303,6 @@ class AppRouter {
 
         // ==================== PERSONAL USER FLOW ====================
 
-        // Personal Onboarding Screen
         GoRoute(
           path: personalOnboarding,
           name: 'personalOnboarding',
@@ -326,7 +312,6 @@ class AppRouter {
 
         // ==================== GUARDIAN FLOW ====================
 
-        // Guardian Setup Choice Screen
         GoRoute(
           path: guardianSetup,
           name: 'guardianSetup',
@@ -334,7 +319,6 @@ class AppRouter {
               const MaterialPage(child: GuardianSetupChoiceScreen()),
         ),
 
-        // Guardian Add Dependent Screen
         GoRoute(
           path: guardianAddDependent,
           name: 'guardianAddDependent',
@@ -342,7 +326,6 @@ class AppRouter {
               const MaterialPage(child: GuardianAddDependentScreen()),
         ),
 
-        // Collaborator Join Screen
         GoRoute(
           path: collaboratorJoin,
           name: 'collaboratorJoin',
@@ -352,7 +335,6 @@ class AppRouter {
 
         // ==================== DEPENDENT FLOW ====================
 
-        // Dependent Type Selection Screen
         GoRoute(
           path: dependentTypeSelection,
           name: 'dependentTypeSelection',
@@ -360,7 +342,6 @@ class AppRouter {
               const MaterialPage(child: DependentTypeSelectionScreen()),
         ),
 
-        // Scan or Upload QR Screen
         GoRoute(
           path: scanQr,
           name: 'scanQr',
@@ -373,7 +354,6 @@ class AppRouter {
           },
         ),
 
-        // Dependent detail screen
         GoRoute(
           path: dependentDetailScreen,
           name: 'dependentDetailScreen',
@@ -395,7 +375,6 @@ class AppRouter {
 
         // ==================== HOME ====================
 
-        // Home Screen (Role-based navigation handled within)
         GoRoute(
           path: home,
           name: 'home',
@@ -404,7 +383,6 @@ class AppRouter {
         ),
       ],
 
-      // Error handler
       errorBuilder: (context, state) => Scaffold(
         body: Center(
           child: Column(

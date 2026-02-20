@@ -13,6 +13,7 @@ import 'package:safety_app/core/network/api_endpoints.dart';
 /// - Fallback to initials
 /// - Loading and error states
 /// - Customizable size and styling
+/// - Cache busting via [cacheKey] to force refresh after profile picture update
 class ProfilePictureWidget extends StatelessWidget {
   final String? profilePicturePath;
   final String fullName;
@@ -21,6 +22,12 @@ class ProfilePictureWidget extends StatelessWidget {
   final Color? borderColor;
   final double borderWidth;
   final Color? backgroundColor;
+
+  /// Optional cache key to bust the image cache when the profile picture
+  /// is updated. Pass a value that changes on each update, e.g.:
+  ///   cacheKey: '${user.profilePicture}_${user.updatedAt}'
+  /// When null, falls back to the image URL (default CachedNetworkImage behaviour).
+  final String? cacheKey;
 
   const ProfilePictureWidget({
     super.key,
@@ -31,6 +38,7 @@ class ProfilePictureWidget extends StatelessWidget {
     this.borderColor,
     this.borderWidth = 2,
     this.backgroundColor,
+    this.cacheKey,
   });
 
   @override
@@ -64,6 +72,10 @@ class ProfilePictureWidget extends StatelessWidget {
             ? ClipOval(
                 child: CachedNetworkImage(
                   imageUrl: _getFullImageUrl(profilePicturePath!),
+                  // ✅ Cache bust: use provided cacheKey, otherwise fall back to URL.
+                  // A unique key forces CachedNetworkImage to treat this as a new
+                  // request and evict the old cached image immediately.
+                  cacheKey: cacheKey ?? _getFullImageUrl(profilePicturePath!),
                   width: radius * 2,
                   height: radius * 2,
                   fit: BoxFit.cover,

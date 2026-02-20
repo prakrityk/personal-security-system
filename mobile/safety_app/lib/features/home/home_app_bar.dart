@@ -1,4 +1,12 @@
+// ===================================================================
+// FIXED: home_app_bar.dart — Live profile picture update
+// ===================================================================
 // lib/features/home/home_app_bar.dart
+//
+// Same fix as AccountHeader — mirrors the ProfileSectionWidget pattern
+// of tracking picture version in local state so CachedNetworkImage is
+// always forced to re-fetch after an upload.
+// ===================================================================
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,15 +18,25 @@ import 'package:safety_app/core/providers/notification_provider.dart';
 import 'package:safety_app/core/widgets/profile_picture_widget.dart';
 import 'package:safety_app/routes/app_router.dart';
 
-class HomeAppBar extends ConsumerWidget implements PreferredSizeWidget {
+class HomeAppBar extends ConsumerStatefulWidget implements PreferredSizeWidget {
   const HomeAppBar({super.key});
+
+  @override
+  ConsumerState<HomeAppBar> createState() => _HomeAppBarState();
+
+  @override
+  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+}
+
+class _HomeAppBarState extends ConsumerState<HomeAppBar> {
+  String? _lastKnownPicture;
+  // ignore: unused_field
+  int _pictureVersion = 0;
 
   void _handleProfileTap(BuildContext context, bool isDependent) {
     if (isDependent) {
-      // Show message to dependents
       _showDependentMessage(context);
     } else {
-      // Navigate to account screen for non-dependents
       context.push(AppRouter.account);
     }
   }
@@ -32,7 +50,7 @@ class HomeAppBar extends ConsumerWidget implements PreferredSizeWidget {
         backgroundColor: isDark
             ? AppColors.darkSurface
             : AppColors.lightSurface,
-        icon: Icon(
+        icon: const Icon(
           Icons.shield_outlined,
           color: AppColors.primaryGreen,
           size: 48,
@@ -50,7 +68,7 @@ class HomeAppBar extends ConsumerWidget implements PreferredSizeWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text(
+            child: const Text(
               'OK',
               style: TextStyle(
                 color: AppColors.primaryGreen,
@@ -64,22 +82,31 @@ class HomeAppBar extends ConsumerWidget implements PreferredSizeWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final userState = ref.watch(authStateProvider);
     final user = userState.value;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final userName = user?.fullName ?? 'Guest';
-
-    // Check if user is dependent
     final roleName = user?.currentRole?.roleName;
     final isDependent = roleName == 'child' || roleName == 'elderly';
 
-    // ✅ Watch notification count
     final unreadCount = ref.watch(unreadNotificationCountProvider);
+    final canSeeNotifications = !isDependent;
 
-    // ✅ Check if user can see notifications (guardian or personal only)
-    final canSeeNotifications = !isDependent; // Hide for dependents
+    final currentPicture = user?.profilePicture;
+
+    // Mirror of ProfileSectionWidget's didUpdateWidget pattern:
+    // bump the version stamp whenever the picture path changes so
+    // CachedNetworkImage is forced to re-fetch, even if the filename
+    // is the same (server reuse case).
+    if (currentPicture != _lastKnownPicture) {
+      _lastKnownPicture = currentPicture;
+      _pictureVersion = DateTime.now().millisecondsSinceEpoch;
+    }
+    final pictureCacheKey = user?.profilePicture != null
+        ? '${user!.profilePicture}_${user.updatedAt.millisecondsSinceEpoch}'
+        : null;
 
     return AppBar(
       elevation: 0,
@@ -91,29 +118,23 @@ class HomeAppBar extends ConsumerWidget implements PreferredSizeWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Profile Picture with Notification Badge
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                ProfilePictureWidget(
-                  profilePicturePath: user?.profilePicture,
-                  fullName: userName,
-                  radius: 20,
-                  showBorder: false,
-                ),
-              ],
+            ProfilePictureWidget(
+              profilePicturePath: user?.profilePicture,
+              fullName: userName,
+              radius: 20,
+              showBorder: false,
+              cacheKey: pictureCacheKey,
             ),
 
             const SizedBox(width: 10),
 
-            // User Name
             Flexible(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    'Hello, $userName',
+                    '$userName',
                     style: AppTextStyles.h4.copyWith(
                       color: isDark
                           ? AppColors.darkOnSurface
@@ -122,7 +143,6 @@ class HomeAppBar extends ConsumerWidget implements PreferredSizeWidget {
                     overflow: TextOverflow.ellipsis,
                     maxLines: 1,
                   ),
-                  // Show dependent badge if applicable
                   if (isDependent)
                     Text(
                       'Managed Account',
@@ -138,20 +158,15 @@ class HomeAppBar extends ConsumerWidget implements PreferredSizeWidget {
         ),
       ),
       actions: [
-        // ✅ Notifications Button - Only show for guardians and personal users
         if (canSeeNotifications)
           Stack(
             alignment: Alignment.topRight,
             children: [
               IconButton(
                 icon: const Icon(Icons.notifications_outlined),
-                onPressed: () {
-                  // Navigate to notifications screen
-                  context.push('/notifications');
-                },
+                onPressed: () => context.push('/notifications'),
                 tooltip: 'Notifications',
               ),
-              // Unread badge
               if (unreadCount > 0)
                 Positioned(
                   right: 10,
@@ -183,7 +198,4 @@ class HomeAppBar extends ConsumerWidget implements PreferredSizeWidget {
       ],
     );
   }
-
-  @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
 }

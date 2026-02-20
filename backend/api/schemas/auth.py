@@ -160,7 +160,8 @@ class UserResponse(BaseModel):
                 "email": "john.doe@example.com",
                 "full_name": "John Doe",
                 "phone_number": "+9779812345678",
-                 "profile_picture": "/uploads/profile_pictures/user_1_abc123.jpg",
+                "profile_picture": "/uploads/profile_pictures/user_1_abc123.jpg",
+                "updated_at": "2026-02-20T10:30:00Z",
                 "roles": []  # Empty until user selects path after login
             }
         }
