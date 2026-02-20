@@ -133,11 +133,9 @@ class _ContactPickerScreenState extends ConsumerState<ContactPickerScreen> {
 
   // ✅ NEW: Handle single contact selection with callback
   Future<void> _handleSingleSelection(PhoneContactModel contact) async {
-    // Show relationship dialog first
     final relationship = await _showRelationshipDialog();
     if (relationship == null) return;
 
-    // Convert to map format expected by callback
     final contactMap = {
       'name': contact.displayName,
       'phone': contact.phoneNumber ?? '',
@@ -145,12 +143,12 @@ class _ContactPickerScreenState extends ConsumerState<ContactPickerScreen> {
       'relationship': relationship,
     };
 
-    // Call the callback
+    // Send data to parent (parent will handle API)
     widget.onContactSelected!(contactMap);
 
-    // Close the picker screen
+    // Close picker WITHOUT returning true
     if (mounted) {
-      Navigator.of(context).pop(true);
+      Navigator.of(context).pop(); // ✅ FIX
     }
   }
 
