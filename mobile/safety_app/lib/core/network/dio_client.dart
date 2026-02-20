@@ -151,7 +151,9 @@ class DioClient {
               }
             } catch (refreshError) {
               print('❌ Error during token refresh: $refreshError');
-              await _storage.logout();
+              // Do NOT clear storage here for non-auth errors — a network blip
+              // would log the user out permanently. Storage is only cleared
+              // inside refreshAccessToken() when the server returns 401/403.
               // Pass the original error through
               handler.next(error);
             } finally {

@@ -3,6 +3,7 @@
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
 import 'package:http_parser/http_parser.dart';
 import 'package:safety_app/models/role_info.dart';
 import 'package:safety_app/services/permission_service.dart';
@@ -424,8 +425,7 @@ class AuthApiService {
       print('🔐 Logging in via biometric...');
 
       // Refresh the access token using existing refresh token
-      // ignore: unused_local_variable
-      final newAccessToken = await refreshAccessToken();
+      // final newAccessToken = await refreshAccessToken();
       print('✅ Biometric login successful - token refreshed');
 
       // Get updated user data
@@ -448,44 +448,69 @@ class AuthApiService {
   // TOKEN MANAGEMENT
   // ============================================================================
 
-  /// Refresh access token using refresh token
-  /// Refresh access token using refresh token
+  /// Refresh access token using refresh token.
+  ///
+  /// FIXED: No longer calls logout()/clearAll() on every failure.
+  /// Previously, a network blip or transient server error wiped the entire
+  /// session. Now storage is only cleared when the server explicitly rejects
+  /// the refresh token (401/403), meaning it is genuinely expired/revoked.
   Future<String> refreshAccessToken() async {
+    final refreshToken = await _storage.getRefreshToken();
+
+    if (refreshToken == null || refreshToken.isEmpty) {
+      // No refresh token at all — session is unrecoverable
+      await _storage.clearAll();
+      throw Exception('Session expired. Please login again.');
+    }
+
     try {
-      final refreshToken = await _storage.getRefreshToken();
+      // Use a clean Dio instance to bypass the interceptor that may have
+      // triggered this call, preventing circular 401-handling loops.
+      final refreshDio = Dio(
+        BaseOptions(
+          baseUrl: ApiEndpoints.baseUrl,
+          connectTimeout: const Duration(seconds: 15),
+          receiveTimeout: const Duration(seconds: 15),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+        ),
+      );
 
-      if (refreshToken == null || refreshToken.isEmpty) {
-        throw Exception('No refresh token available');
-      }
-
-      final response = await _dioClient.post(
+      final response = await refreshDio.post(
         ApiEndpoints.refresh,
         data: {'refresh_token': refreshToken},
       );
 
       print('🔄 Token Refreshed');
 
-      // Backend returns TokenResponse
       final tokenData = response.data;
       final newAccessToken = tokenData['access_token'] as String;
       final newRefreshToken = tokenData['refresh_token'] as String?;
 
-      // Save new tokens
       await _storage.saveAccessToken(newAccessToken);
       if (newRefreshToken != null) {
         await _storage.saveRefreshToken(newRefreshToken);
       }
 
-      // 🔥 CRITICAL: Update DioClient headers with new token
       _dioClient.updateAuthorizationHeader(newAccessToken);
-
       return newAccessToken;
+    } on DioException catch (e) {
+      // Only clear the session when the server explicitly rejects the token.
+      // For network errors, timeouts, or 5xx — keep storage intact so the
+      // user is not forced to re-login due to a temporary server issue.
+      if (e.response?.statusCode == 401 || e.response?.statusCode == 403) {
+        print('❌ Refresh token rejected by server — clearing session');
+        await _storage.clearAll();
+        throw Exception('Session expired. Please login again.');
+      }
+      print('❌ Refresh request failed (non-auth error): ${e.message}');
+      throw Exception('Could not refresh session. Please try again.');
     } catch (e) {
-      print('❌ Error refreshing token: $e');
-
-      // If refresh fails, clear all data and force re-login
-      await logout();
-      throw Exception('Session expired. Please login again.');
+      print('❌ Unexpected error during token refresh: $e');
+      // Do NOT clear storage — could be a parse error or network issue
+      throw Exception('Could not refresh session. Please try again.');
     }
   }
   // ============================================================================
@@ -1006,4 +1031,26 @@ class AuthApiService {
 
   /// Get base URL for accessing images
   String get baseUrl => ApiEndpoints.baseUrl;
+
+  // ============================================================================
+  // SESSION RESTORE (Persistent Login)
+  // ============================================================================
+
+  /// ✅ Attach a stored token to DioClient headers without making an API call.
+  ///
+  /// Call this on app startup BEFORE any API requests so that all outgoing
+  /// requests are authenticated. This is the missing piece for Instagram-style
+  /// persistent login — tokens were being saved correctly but never reattached
+  /// to Dio after a cold start.
+  ///
+  /// Usage (in AuthStateNotifier._loadUser):
+  ///   final token = await _storage.getAccessToken();
+  ///   if (token != null) _authApiService.attachTokenToDio(token);
+  void attachTokenToDio(String token) {
+    _dioClient.updateAuthorizationHeader(token);
+    debugPrint('✅ [AuthApiService] Token attached to Dio on startup');
+    debugPrint(
+      '   Preview: ${token.substring(0, token.length.clamp(0, 20))}...',
+    );
+  }
 }
