@@ -1,5 +1,6 @@
 // lib/services/device_permission_service.dart
 import 'package:permission_handler/permission_handler.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:flutter/material.dart';
 
 class DevicePermissionService {
@@ -33,20 +34,52 @@ class DevicePermissionService {
     return status.isGranted;
   }
 
-  /// Request location permission
+  /// Request location permission using Geolocator
   static Future<bool> requestLocationPermission() async {
-    final status = await Permission.location.request();
-    return status.isGranted;
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      print('⚠️ Location services are disabled');
+      return false;
+    }
+
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    
+    if (permission == LocationPermission.deniedForever) {
+      print('⚠️ Location permission permanently denied');
+      return false;
+    }
+    
+    return permission == LocationPermission.always || 
+           permission == LocationPermission.whileInUse;
   }
 
-  /// Request all SOS-related permissions
-  static Future<Map<Permission, PermissionStatus>> requestSOSPermissions() async {
-    return await [
-      Permission.camera,
-      Permission.microphone,
-      Permission.location,
-      Permission.sensors,
-    ].request();
+  /// Request all SOS-related permissions (microphone, location, sensors)
+  static Future<bool> requestAllSOSPermissions() async {
+    print('🔐 [DevicePermission] Requesting all SOS permissions...');
+    
+    bool allGranted = true;
+    
+    // 1. Request Microphone Permission
+    final micStatus = await Permission.microphone.request();
+    final micGranted = micStatus.isGranted;
+    print('🎤 Microphone: ${micGranted ? 'GRANTED' : 'DENIED'}');
+    if (!micGranted) allGranted = false;
+    
+    // 2. Request Location Permission
+    final locationGranted = await requestLocationPermission();
+    print('📍 Location: ${locationGranted ? 'GRANTED' : 'DENIED'}');
+    if (!locationGranted) allGranted = false;
+    
+    // 3. Request Sensors Permission (optional - for motion detection)
+    final sensorsStatus = await Permission.sensors.request();
+    final sensorsGranted = sensorsStatus.isGranted;
+    print('📱 Sensors: ${sensorsGranted ? 'GRANTED' : 'DENIED'}');
+    // Sensors are optional, don't fail if not granted
+    
+    return allGranted;
   }
 
   /// Check if camera permission is granted
@@ -64,19 +97,21 @@ class DevicePermissionService {
     return await Permission.sensors.isGranted;
   }
 
-  /// Check if location permission is granted
+  /// Check if location permission is granted (using Geolocator)
   static Future<bool> hasLocationPermission() async {
-    return await Permission.location.isGranted;
+    LocationPermission permission = await Geolocator.checkPermission();
+    return permission == LocationPermission.always || 
+           permission == LocationPermission.whileInUse;
   }
 
   /// Check if all SOS permissions are granted
   static Future<bool> hasAllSOSPermissions() async {
-    final camera = await Permission.camera.isGranted;
     final mic = await Permission.microphone.isGranted;
-    final location = await Permission.location.isGranted;
+    final location = await hasLocationPermission();
     final sensors = await Permission.sensors.isGranted;
     
-    return camera && mic && location && sensors;
+    print('🔍 [DevicePermission] Current status - Mic: $mic, Location: $location, Sensors: $sensors');
+    return mic && location; // Sensors are optional
   }
 
   /// Show permission rationale dialog
@@ -122,8 +157,7 @@ class DevicePermissionService {
                     granted = await requestLocationPermission();
                     break;
                   case 'all':
-                    final results = await requestSOSPermissions();
-                    granted = results.values.every((status) => status.isGranted);
+                    granted = await requestAllSOSPermissions();
                     break;
                 }
                 
@@ -180,7 +214,7 @@ class DevicePermissionService {
             const SizedBox(width: 12),
             const Expanded(
               child: Text(
-                'Camera & mic permissions needed for evidence recording',
+                'Microphone & location permissions needed for SOS alerts',
                 style: TextStyle(fontWeight: FontWeight.w500),
               ),
             ),
@@ -201,5 +235,48 @@ class DevicePermissionService {
         margin: const EdgeInsets.all(16),
       ),
     );
+  }
+
+  /// Ensure permissions are granted (shows dialog if needed)
+  static Future<bool> ensureSOSPermissions(BuildContext context) async {
+    final hasPermissions = await hasAllSOSPermissions();
+    
+    if (hasPermissions) {
+      print('✅ [DevicePermission] All SOS permissions already granted');
+      return true;
+    }
+    
+    // Show dialog explaining why permissions are needed
+    final shouldRequest = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('SOS Permissions Required'),
+        content: const Text(
+          'To use SOS features, we need:\n\n'
+          '🎤 Microphone - to record voice messages\n'
+          '📍 Location - to share your location with guardians\n\n'
+          'You can also grant these later from app settings.'
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Not Now'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+            ),
+            child: const Text('Grant Permissions'),
+          ),
+        ],
+      ),
+    );
+    
+    if (shouldRequest == true) {
+      return await requestAllSOSPermissions();
+    }
+    
+    return false;
   }
 }

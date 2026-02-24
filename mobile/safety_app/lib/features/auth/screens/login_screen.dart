@@ -14,6 +14,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import 'package:safety_app/services/firebase/firebase_auth_service.dart';
 import 'package:safety_app/core/providers/auth_provider.dart';
+import 'package:safety_app/services/device_permission_service.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -191,61 +192,68 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       }
 
       // ── Step 3: Success — navigate ────────────────────────────────
-      if (!mounted) return;
+      // ── Step 3: Success — navigate ────────────────────────────────
+if (!mounted) return;
 
-      final user = response.user;
+final user = response.user;
 
-      if (user != null) {
-        print('✅ Login successful for: ${user.fullName}');
+if (user != null) {
+  print('✅ Login successful for: ${user.fullName}');
 
-        // Save phone for future reference
-        await _secureStorage.saveLastLoginPhone(phone);
+  // Save phone for future reference
+  await _secureStorage.saveLastLoginPhone(phone);
 
-        // ✅ CRITICAL: Refresh auth state so router knows user is logged in
-        print('🔄 Refreshing auth state...');
-        await ref.read(authStateProvider.notifier).refreshUser();
-        print('✅ Auth state refreshed');
+  // ✅ CRITICAL: Refresh auth state so router knows user is logged in
+  print('🔄 Refreshing auth state...');
+  await ref.read(authStateProvider.notifier).refreshUser();
+  print('✅ Auth state refreshed');
 
-        _showSuccess("Welcome back, ${user.fullName}!");
+  // ✅ REQUEST SOS PERMISSIONS IMMEDIATELY AFTER LOGIN
+  print('🔐 Requesting SOS permissions after login...');
+  final permissionsGranted = await DevicePermissionService.ensureSOSPermissions(context);
+  print('🔐 Permissions result: $permissionsGranted');
 
-        // ✅ FIX: Wrap biometric check in try-catch with delay
-        bool deviceSupports = false;
-        bool biometricEnabled = false;
-        
-        try {
-          // Add small delay to ensure platform channels are ready
-          await Future.delayed(const Duration(milliseconds: 300));
-          
-          deviceSupports = await _biometricService.isBiometricAvailable();
-          biometricEnabled = await _secureStorage.isBiometricEnabled();
+  _showSuccess("Welcome back, ${user.fullName}!");
 
-          print('🔐 Post-login biometric check:');
-          print('   Device supports: $deviceSupports');
-          print('   Already enabled: $biometricEnabled');
-        } catch (e) {
-          print('⚠️ Biometric check failed (continuing anyway): $e');
-          // Don't crash - just skip biometric setup
-          deviceSupports = false;
-          biometricEnabled = false;
-        }
+  // ✅ FIX: Wrap biometric check in try-catch with delay
+  bool deviceSupports = false;
+  bool biometricEnabled = false;
+  
+  try {
+    // Add small delay to ensure platform channels are ready
+    await Future.delayed(const Duration(milliseconds: 300));
+    
+    deviceSupports = await _biometricService.isBiometricAvailable();
+    biometricEnabled = await _secureStorage.isBiometricEnabled();
 
-        // Navigate first
-        if (user.hasRole) {
-          context.go('/home');
-        } else {
-          context.go('/role-intent');
-        }
+    print('🔐 Post-login biometric check:');
+    print('   Device supports: $deviceSupports');
+    print('   Already enabled: $biometricEnabled');
+  } catch (e) {
+    print('⚠️ Biometric check failed (continuing anyway): $e');
+    // Don't crash - just skip biometric setup
+    deviceSupports = false;
+    biometricEnabled = false;
+  }
 
-        // Prompt to enable biometric if device supports it and user hasn't enabled yet
-        if (deviceSupports && !biometricEnabled) {
-          print('💡 Prompting user to enable biometric...');
-          Future.delayed(const Duration(milliseconds: 800), () {
-            if (mounted) _promptEnableBiometric();
-          });
-        }
-      } else {
-        _showError("Login failed: No user data received");
-      }
+  // Navigate first
+  if (user.hasRole) {
+    context.go('/home');
+  } else {
+    context.go('/role-intent');
+  }
+
+  // Prompt to enable biometric if device supports it and user hasn't enabled yet
+  if (deviceSupports && !biometricEnabled) {
+    print('💡 Prompting user to enable biometric...');
+    Future.delayed(const Duration(milliseconds: 800), () {
+      if (mounted) _promptEnableBiometric();
+    });
+  }
+} else {
+  _showError("Login failed: No user data received");
+}
+      
     } catch (e) {
       print('❌ Login error: $e');
       if (!mounted) return;

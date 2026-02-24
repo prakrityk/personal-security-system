@@ -18,6 +18,7 @@ import 'package:safety_app/core/providers/permission_provider.dart';
 import 'package:safety_app/features/home/sos/widgets/personal_emergency_contacts_widget.dart';
 import 'package:safety_app/services/voice_message_service.dart'; // ✅ Only using VoiceMessageService
 import '../widgets/sos_button.dart';
+import 'package:safety_app/services/device_permission_service.dart';
 import 'package:safety_app/core/network/dio_client.dart';
 
 class SosHomeScreen extends ConsumerStatefulWidget {
@@ -59,33 +60,19 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
   }
 
   // ── Get current location helper ──────────────────────────────────────────
-  Future<Position?> _getCurrentLocation() async {
-    try {
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        return null;
-      }
-
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) {
-          return null;
-        }
-      }
-
-      if (permission == LocationPermission.deniedForever) {
-        return null;
-      }
-
-      return await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
-    } catch (e) {
-      print('❌ Location error: $e');
-      return null;
-    }
+  // ── Get current location helper ──────────────────────────────────────────
+Future<Position?> _getCurrentLocation() async {
+  try {
+    // ✅ Permission checks removed - handled at login by DevicePermissionService
+    // Just get the location directly
+    return await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    );
+  } catch (e) {
+    print('❌ Location error: $e');
+    return null;
   }
+}
 
   // ── Long press: start recording ──────────────────────────────────────────
 

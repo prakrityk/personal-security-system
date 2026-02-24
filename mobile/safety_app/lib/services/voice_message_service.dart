@@ -9,7 +9,6 @@ import 'dart:async';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:dio/dio.dart';
 import 'package:http_parser/http_parser.dart';
 import 'package:safety_app/core/network/dio_client.dart';
@@ -30,27 +29,15 @@ class VoiceMessageService {
   // Constructor with DioClient injection
   VoiceMessageService({required DioClient dioClient}) : _dioClient = dioClient;
 
-  // ── Permissions ──────────────────────────────────────────────────────────
-
-  Future<bool> _requestMicPermission() async {
-    final status = await Permission.microphone.request();
-    return status.isGranted;
-  }
-
   // ── Manual recording (long press) ────────────────────────────────────────
   // ✅ User can release early to stop recording
+  // ✅ Permission checks removed - handled at login
 
   Future<void> startManualRecording({
     required void Function(String filePath) onComplete,
     required void Function(String error) onError,
   }) async {
     if (_isRecording) return;
-
-    final hasPermission = await _requestMicPermission();
-    if (!hasPermission) {
-      onError('Microphone permission denied.');
-      return;
-    }
 
     try {
       final path = await _buildFilePath();
@@ -93,7 +80,7 @@ class VoiceMessageService {
 
       if (path != null && path.isNotEmpty) {
         _currentFilePath = path;
-        print('🎙️ [VoiceMessage] Manual recording stopped early after ${_getRecordingDuration(path)}');
+        print('🎙️ [VoiceMessage] Manual recording stopped early');
         onComplete(path);
       } else {
         onError('Recording produced no file.');
@@ -106,18 +93,13 @@ class VoiceMessageService {
 
   // ── Auto recording (voice activation & motion detection) ─────────────────
   // ✅ Fixed 20s duration - CANNOT be stopped early
+  // ✅ Permission checks removed - handled at login
 
   Future<void> startAutoRecording({
     required void Function(String filePath) onComplete,
     required void Function(String error) onError,
   }) async {
     if (_isRecording) return;
-
-    final hasPermission = await _requestMicPermission();
-    if (!hasPermission) {
-      onError('Microphone permission denied.');
-      return;
-    }
 
     try {
       final path = await _buildFilePath();
@@ -171,7 +153,7 @@ class VoiceMessageService {
     required void Function(int eventId, String? voiceUrl) onComplete,
     required void Function(String error) onError,
   }) async {
-    // ✅ Use the new fixed-duration auto recording
+    // ✅ Use the fixed-duration auto recording
     await startAutoRecording(
       onComplete: (filePath) async {
         final result = await createSosWithVoice(
@@ -266,14 +248,6 @@ class VoiceMessageService {
       print('❌ [VoiceMessage] Error: $e');
       return null;
     }
-  }
-
-  // ── Helper to get recording duration ─────────────────────────────────────
-
-  String _getRecordingDuration(String filePath) {
-    // This is a placeholder - you'd need a proper audio file reader
-    // For now, just return a placeholder
-    return 'some seconds';
   }
 
   // ── Cleanup ───────────────────────────────────────────────────────────────
