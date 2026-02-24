@@ -61,11 +61,11 @@ class User(Base):
         secondary="user_roles",
         back_populates="users"
     )
-    evidences = relationship(
-        "Evidence",
-        back_populates="user",
-        cascade="all, delete-orphan"
-    )
+    # evidences = relationship(
+    #     "Evidence",
+    #     back_populates="user",
+    #     cascade="all, delete-orphan"
+    # )
 
     def __repr__(self):
         return f"<User(id={self.id}, firebase_uid={self.firebase_uid}, email={self.email}, full_name={self.full_name}, biometric_enabled={self.biometric_enabled})>"

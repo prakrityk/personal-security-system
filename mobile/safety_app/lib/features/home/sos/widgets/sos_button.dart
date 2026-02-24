@@ -1,14 +1,26 @@
+// lib/features/home/sos/widgets/sos_button.dart
+
 import 'package:flutter/material.dart';
 import 'package:safety_app/core/theme/app_colors.dart';
 import 'package:safety_app/core/theme/app_text_styles.dart';
 
 class SosButton extends StatefulWidget {
+  /// Tap: shows confirm dialog (existing flow)
   final VoidCallback onPressed;
+
+  /// Long press started: begin recording immediately
+  final VoidCallback? onLongPressStart;
+
+  /// Long press released before 20s: send SOS with whatever was recorded
+  final VoidCallback? onLongPressEnd;
+
   final double size;
 
   const SosButton({
     super.key,
     required this.onPressed,
+    this.onLongPressStart,
+    this.onLongPressEnd,
     this.size = 200,
   });
 
@@ -21,6 +33,7 @@ class _SosButtonState extends State<SosButton>
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
   bool _isPressed = false;
+  bool _isLongPressing = false;
 
   @override
   void initState() {
@@ -46,6 +59,7 @@ class _SosButtonState extends State<SosButton>
   }
 
   void _handleTapUp(TapUpDetails details) {
+    if (_isLongPressing) return;
     setState(() => _isPressed = false);
     _controller.reverse();
     widget.onPressed();
@@ -56,15 +70,33 @@ class _SosButtonState extends State<SosButton>
     _controller.reverse();
   }
 
+  void _handleLongPressStart(LongPressStartDetails details) {
+    setState(() => _isLongPressing = true);
+    _controller.forward();
+    widget.onLongPressStart?.call();
+  }
+
+  void _handleLongPressEnd(LongPressEndDetails details) {
+    setState(() {
+      _isLongPressing = false;
+      _isPressed = false;
+    });
+    _controller.reverse();
+    widget.onLongPressEnd?.call();
+  }
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTapDown: _handleTapDown,
       onTapUp: _handleTapUp,
       onTapCancel: _handleTapCancel,
+      onLongPressStart: _handleLongPressStart,
+      onLongPressEnd: _handleLongPressEnd,
       child: ScaleTransition(
         scale: _scaleAnimation,
-        child: Container(
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
           width: widget.size,
           height: widget.size,
           decoration: BoxDecoration(
@@ -79,10 +111,12 @@ class _SosButtonState extends State<SosButton>
             ),
             boxShadow: [
               BoxShadow(
-                color: AppColors.sosRed.withOpacity(_isPressed ? 0.5 : 0.3),
-                blurRadius: _isPressed ? 20 : 30,
+                color: AppColors.sosRed.withOpacity(
+                  _isLongPressing ? 0.7 : (_isPressed ? 0.5 : 0.3),
+                ),
+                blurRadius: _isLongPressing ? 40 : (_isPressed ? 20 : 30),
                 offset: const Offset(0, 10),
-                spreadRadius: _isPressed ? 0 : 5,
+                spreadRadius: _isLongPressing ? 10 : (_isPressed ? 0 : 5),
               ),
             ],
           ),
@@ -91,17 +125,36 @@ class _SosButtonState extends State<SosButton>
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               border: Border.all(
-                color: Colors.white.withOpacity(0.3),
-                width: 2,
+                color: Colors.white.withOpacity(
+                  _isLongPressing ? 0.7 : 0.3,
+                ),
+                width: _isLongPressing ? 3 : 2,
               ),
             ),
             child: Center(
-              child: Text(
-                'SOS',
-                style: AppTextStyles.sosEmphasis.copyWith(
-                  color: Colors.white,
-                  fontSize: 42,
-                ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'SOS',
+                    style: AppTextStyles.sosEmphasis.copyWith(
+                      color: Colors.white,
+                      fontSize: 42,
+                    ),
+                  ),
+                  if (_isLongPressing) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Recording...',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.9),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ),

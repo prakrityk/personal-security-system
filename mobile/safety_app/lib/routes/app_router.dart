@@ -1,7 +1,5 @@
 // lib/routes/app_router.dart
 // ✅ MERGED: Combines Firebase auth flow with role-based navigation
-// lib/routes/app_router.dart
-// ✅ MERGED: Combines Firebase auth flow with role-based navigation
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,6 +13,7 @@ import 'package:safety_app/features/auth/screens/registration_screen.dart';
 import 'package:safety_app/features/auth/screens/email_verification_screen.dart';
 import 'package:safety_app/features/home/family/screens/family_member_detail_screen.dart';
 import 'package:safety_app/features/home/general_home_screen.dart';
+import 'package:safety_app/features/home/sos/screens/sos_alert_detail_screen.dart';
 import 'package:safety_app/features/notifications/screens/notification_list_screen.dart';
 import 'package:safety_app/features/onboarding/screens/lets_get_started_screen.dart';
 import 'package:safety_app/features/auth/screens/phone_number_screen.dart';
@@ -51,6 +50,9 @@ class AppRouter {
   static const String dependentTypeSelection = '/dependent-type-selection';
   static const String dependentDetailScreen = '/dependent-detail';
   static const String scanQr = '/scan-qr';
+
+  // SOS Routes
+  static const String sosDetail = '/sos/detail';
 
   /// Create router with role-based navigation
   static GoRouter createRouter(WidgetRef ref) {
@@ -100,13 +102,12 @@ class AppRouter {
         }
 
         // ✅ FIX 3: CRITICAL - If not authenticated, redirect to login
-        // This handles logout - when user becomes null, redirect immediately
         if (user == null) {
           print('❌ No user → Redirecting to Login');
           return login;
         }
 
-        // ✅ FIX 4: Allow role-specific onboarding flows (these are part of setup)
+        // ✅ FIX 4: Allow role-specific onboarding flows
         const onboardingFlows = [
           guardianSetup,
           guardianAddDependent,
@@ -123,10 +124,7 @@ class AppRouter {
         }
 
         // ✅ FIX 5: If authenticated but no role, redirect to role selection
-        // BUT: Allow navigation to home (it will redirect when role updates)
         if (!user.hasRole || user.currentRole == null) {
-          // Don't block navigation to home - let it load and wait for role assignment
-          // The authStateProvider will trigger a redirect when the role is assigned
           if (location == home) {
             print(
               '⚠️ No role but allowing home navigation (waiting for role assignment)',
@@ -142,12 +140,13 @@ class AppRouter {
           return null;
         }
 
-        // ✅ FIX 6: Allow home and account screens for authenticated users with roles
+        // ✅ FIX 6: Allow authenticated screens
         const allowedScreens = [
           home,
           account,
           editProfile,
           dependentDetailScreen,
+          sosDetail,
         ];
         if (allowedScreens.any((path) => location.startsWith(path))) {
           print('✅ Allowing authenticated screen: $location');
@@ -159,7 +158,84 @@ class AppRouter {
       },
 
       routes: [
-        // ==================== NOTIFICATIONS ====================
+   // ==================== SOS ROUTES ====================
+GoRoute(
+  path: sosDetail,
+  name: 'sosDetail',
+  pageBuilder: (context, state) {
+    final extra = state.extra as Map<String, dynamic>?;
+    
+    debugPrint('🔍 [AppRouter] ========== ROUTER CALLED ==========');
+    debugPrint('🔍 [AppRouter] Extra data: $extra');
+    
+    if (extra != null) {
+      // Check for voice URL specifically
+      final voiceUrl = extra['voiceMessageUrl']?.toString();
+      debugPrint('🔊 [AppRouter] Voice URL from extra: "$voiceUrl"');
+      debugPrint('🔊 [AppRouter] Voice URL exists: ${voiceUrl != null && voiceUrl.isNotEmpty}');
+      
+      // Handle eventId
+      int eventId;
+      if (extra['eventId'] is int) {
+        eventId = extra['eventId'] as int;
+      } else {
+        eventId = int.tryParse(extra['eventId']?.toString() ?? '0') ?? 0;
+      }
+
+      // Handle location
+      double? latitude;
+      if (extra['latitude'] != null) {
+        latitude = double.tryParse(extra['latitude'].toString());
+      }
+
+      double? longitude;
+      if (extra['longitude'] != null) {
+        longitude = double.tryParse(extra['longitude'].toString());
+      }
+
+      final alertData = SosAlertData(
+        dependentName: extra['dependentName']?.toString() ?? 'Unknown',
+        dependentAvatarUrl: extra['dependentAvatarUrl']?.toString() ?? '',
+        triggeredAt: extra['triggeredAt'] is DateTime 
+            ? extra['triggeredAt'] as DateTime 
+            : DateTime.now(),
+        triggerType: extra['triggerType'] ?? SosTriggerType.manual,
+        sosEventId: eventId,
+        latitude: latitude,
+        longitude: longitude,
+        voiceMessageUrl: voiceUrl,
+      );
+      
+      debugPrint('✅ [AppRouter] Created SosAlertData with voice: ${alertData.voiceMessageUrl}');
+      
+      return MaterialPage(
+        key: state.pageKey,
+        child: SosAlertDetailScreen(
+          alert: alertData,
+        ),
+      );
+    }
+    
+    debugPrint('⚠️ [AppRouter] No extra data, using fallback');
+    
+    final eventIdFromQuery = int.tryParse(
+        state.uri.queryParameters['eventId']?.toString() ?? '0'
+    ) ?? 0;
+    
+    return MaterialPage(
+      key: state.pageKey,
+      child: SosAlertDetailScreen(
+        alert: SosAlertData(
+          dependentName: 'Loading...',
+          dependentAvatarUrl: '',
+          triggeredAt: DateTime.now(),
+          triggerType: SosTriggerType.manual,
+          sosEventId: eventIdFromQuery,
+        ),
+      ),
+    );
+  },
+),
         // ==================== NOTIFICATIONS ====================
         GoRoute(
           path: '/notifications',
@@ -171,43 +247,30 @@ class AppRouter {
         ),
 
         // ==================== AUTH FLOW ====================
-
-        // Splash Screen
         GoRoute(
           path: splash,
           name: 'splash',
           pageBuilder: (context, state) =>
               const MaterialPage(child: SplashScreen(), fullscreenDialog: true),
         ),
-
-        // Login Screen
         GoRoute(
           path: login,
           name: 'login',
           pageBuilder: (context, state) =>
               const MaterialPage(child: LoginScreen()),
         ),
-
-        // Let's Get Started Screen
         GoRoute(
           path: letsGetStarted,
           name: 'letsGetStarted',
           pageBuilder: (context, state) =>
               const MaterialPage(child: LetsGetStartedScreen()),
         ),
-
-        // Phone Number Screen
         GoRoute(
           path: phoneNumber,
           name: 'phoneNumber',
           pageBuilder: (context, state) =>
               const MaterialPage(child: PhoneNumberScreen()),
         ),
-
-        // ✅ OTP Verification Screen (Phone) - FRIEND'S VERSION
-        // Passes verificationId from Firebase
-        // ✅ OTP Verification Screen (Phone) - FRIEND'S VERSION
-        // Passes verificationId from Firebase
         GoRoute(
           path: otpVerification,
           name: 'otpVerification',
@@ -216,9 +279,6 @@ class AppRouter {
             final phoneNumber = extra['phoneNumber'] as String? ?? '';
             final verificationId = extra['verificationId'] as String? ?? '';
 
-            // Redirect if missing required data
-
-            // Redirect if missing required data
             if (phoneNumber.isEmpty) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 context.go(AppRouter.phoneNumber);
@@ -233,11 +293,6 @@ class AppRouter {
             );
           },
         ),
-
-        // ✅ Email Verification Screen - FRIEND'S VERSION
-        // Passes phoneNumber (NOT email) parameter
-        // ✅ Email Verification Screen - FRIEND'S VERSION
-        // Passes phoneNumber (NOT email) parameter
         GoRoute(
           path: emailVerification,
           name: 'emailVerification',
@@ -245,7 +300,6 @@ class AppRouter {
             final extra = state.extra as Map<String, dynamic>? ?? {};
             final phoneNumber = extra['phoneNumber'] as String? ?? '';
 
-            // Redirect if missing required data
             if (phoneNumber.isEmpty) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 context.go(AppRouter.phoneNumber);
@@ -257,11 +311,6 @@ class AppRouter {
             );
           },
         ),
-
-        // ✅ Registration Screen - FRIEND'S VERSION
-        // Passes phoneNumber, email, and password
-        // ✅ Registration Screen - FRIEND'S VERSION
-        // Passes phoneNumber, email, and password
         GoRoute(
           path: registration,
           name: 'registration',
@@ -271,7 +320,6 @@ class AppRouter {
             final email = extra['email'] as String? ?? '';
             final password = extra['password'] as String? ?? '';
 
-            // Redirect if missing required data
             if (phoneNumber.isEmpty || email.isEmpty || password.isEmpty) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 context.go(AppRouter.phoneNumber);
@@ -285,13 +333,10 @@ class AppRouter {
                 password: password,
               ),
             );
-         
           },
         ),
 
         // ==================== ROLE SELECTION ====================
-
-        // Role Intent Screen
         GoRoute(
           path: roleIntent,
           name: 'roleIntent',
@@ -306,7 +351,6 @@ class AppRouter {
           pageBuilder: (context, state) =>
               const MaterialPage(child: AccountScreen()),
         ),
-
         GoRoute(
           path: editProfile,
           name: 'editProfile',
@@ -315,8 +359,6 @@ class AppRouter {
         ),
 
         // ==================== PERSONAL USER FLOW ====================
-
-        // Personal Onboarding Screen
         GoRoute(
           path: personalOnboarding,
           name: 'personalOnboarding',
@@ -325,24 +367,18 @@ class AppRouter {
         ),
 
         // ==================== GUARDIAN FLOW ====================
-
-        // Guardian Setup Choice Screen
         GoRoute(
           path: guardianSetup,
           name: 'guardianSetup',
           pageBuilder: (context, state) =>
               const MaterialPage(child: GuardianSetupChoiceScreen()),
         ),
-
-        // Guardian Add Dependent Screen
         GoRoute(
           path: guardianAddDependent,
           name: 'guardianAddDependent',
           pageBuilder: (context, state) =>
               const MaterialPage(child: GuardianAddDependentScreen()),
         ),
-
-        // Collaborator Join Screen
         GoRoute(
           path: collaboratorJoin,
           name: 'collaboratorJoin',
@@ -351,16 +387,12 @@ class AppRouter {
         ),
 
         // ==================== DEPENDENT FLOW ====================
-
-        // Dependent Type Selection Screen
         GoRoute(
           path: dependentTypeSelection,
           name: 'dependentTypeSelection',
           pageBuilder: (context, state) =>
               const MaterialPage(child: DependentTypeSelectionScreen()),
         ),
-
-        // Scan or Upload QR Screen
         GoRoute(
           path: scanQr,
           name: 'scanQr',
@@ -372,8 +404,6 @@ class AppRouter {
             );
           },
         ),
-
-        // Dependent detail screen
         GoRoute(
           path: dependentDetailScreen,
           name: 'dependentDetailScreen',
@@ -394,8 +424,6 @@ class AppRouter {
         ),
 
         // ==================== HOME ====================
-
-        // Home Screen (Role-based navigation handled within)
         GoRoute(
           path: home,
           name: 'home',

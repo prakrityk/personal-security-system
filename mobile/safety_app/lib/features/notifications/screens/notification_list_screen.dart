@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:safety_app/core/providers/notification_provider.dart';
 import 'package:safety_app/core/theme/app_colors.dart';
 import 'package:safety_app/core/theme/app_text_styles.dart';
+import 'package:safety_app/features/home/sos/screens/sos_alert_detail_screen.dart';
 import 'package:timeago/timeago.dart' as timeago;
 
 class NotificationListScreen extends ConsumerWidget {
@@ -98,7 +99,16 @@ class NotificationListScreen extends ConsumerWidget {
 
     // Navigate based on notification type
     if (notification.eventId != null) {
-      context.push('/sos/${notification.eventId}');
+      // ✅ Use /sos/detail with extra data instead of /sos/18
+      context.push('/sos/detail', extra: {
+        'eventId': notification.eventId,
+        'dependentName': notification.title?.replaceAll('SOS Alert from ', '') ?? 'Unknown',
+        'triggeredAt': notification.timestamp,
+        'triggerType': SosTriggerType.manual,
+        'latitude': null, // Will be fetched from API if needed
+        'longitude': null,
+        'voiceMessageUrl': null,
+      });
     } else {
       switch (notification.type) {
         case 'SOS_EVENT':

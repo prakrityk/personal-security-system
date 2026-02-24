@@ -35,6 +35,9 @@ class SOSEvent(Base):
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
 
+    voice_message_url = Column(String, nullable=True)
+
+
     # Client timestamp (optional); server will use created_at if not provided.
     event_timestamp = Column(DateTime(timezone=True), nullable=True)
 

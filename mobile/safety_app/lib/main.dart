@@ -14,8 +14,10 @@ import 'package:safety_app/core/providers/theme_provider.dart';
 import 'package:safety_app/core/providers/auth_provider.dart';
 import 'package:safety_app/services/notification_service.dart';
 import 'package:safety_app/services/motion_detection_service.dart';
+import 'package:safety_app/features/home/sos/screens/sos_alert_detail_screen.dart';
+import 'package:safety_app/core/network/dio_client.dart'; // ADD THIS
 
-// ✅ Global navigator key
+// ✅ Global navigator key - EXPORTED for use in NotificationService
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 /// 🔥 Background notification handler
@@ -53,7 +55,6 @@ Future<void> main() async {
     debugPrint('✅ Firebase initialized');
 
     // ✅ FIX: Ensure platform channels are fully ready before proceeding
-    // This prevents "MissingPluginException" for local_auth and other plugins
     await Future.delayed(const Duration(milliseconds: 300));
     debugPrint('✅ Platform channels ready');
 
@@ -97,11 +98,18 @@ class SOSApp extends ConsumerStatefulWidget {
 
 class _SOSAppState extends ConsumerState<SOSApp> {
   late final GoRouter _router;
+  late final DioClient _dioClient; // ADD THIS
 
   @override
   void initState() {
     super.initState();
-
+    
+    // ✅ Initialize DioClient
+    _dioClient = DioClient();
+    
+    // ✅ Initialize MotionDetectionService with DioClient
+    MotionDetectionService.instance.initialize(dioClient: _dioClient);
+    
     _router = AppRouter.createRouter(ref);
     _initNotificationService();
   }
@@ -132,13 +140,47 @@ class _SOSAppState extends ConsumerState<SOSApp> {
 
   void _handleNotificationTap(RemoteMessage message) {
     final data = message.data;
+    debugPrint('👉 Notification tapped with data: $data');
 
-    if (data.containsKey('event_id')) {
-      _router.go('/sos/${data['event_id']}');
+    // Extract data for SOS alert
+    final type = data['type'];
+    final eventId = data['event_id'] != null ? int.tryParse(data['event_id'].toString()) : null;
+    final dependentName = data['dependent_name']?.toString() ?? 'Unknown';
+    final lat = data['lat'] != null ? double.tryParse(data['lat'].toString()) : null;
+    final lng = data['lng'] != null ? double.tryParse(data['lng'].toString()) : null;
+    final voiceMessageUrl = data['voice_message_url']?.toString();
+    final triggerTypeStr = data['trigger_type']?.toString() ?? 'manual';
+
+    // Handle SOS alert navigation with full data
+    if ((type == 'SOS_EVENT' || type == 'MOTION_DETECTION') && eventId != null) {
+      // Convert trigger type
+      SosTriggerType triggerType;
+      switch (triggerTypeStr) {
+        case 'motion':
+          triggerType = SosTriggerType.motion;
+          break;
+        case 'voice':
+          triggerType = SosTriggerType.voice;
+          break;
+        default:
+          triggerType = SosTriggerType.manual;
+      }
+
+      // Navigate to detail screen with all available data
+      _router.push('/sos/detail', extra: {
+        'eventId': eventId,
+        'dependentName': dependentName,
+        'triggerType': triggerType,
+        'latitude': lat,
+        'longitude': lng,
+        'voiceMessageUrl': voiceMessageUrl,
+        'triggeredAt': DateTime.now(), // Will be refreshed from API
+      });
       return;
     }
 
-    switch (data['type']) {
+    // Fallback navigation based on type
+    switch (type) {
       case 'SOS_EVENT':
       case 'PANIC_MODE':
       case 'MOTION_DETECTION':
@@ -156,6 +198,13 @@ class _SOSAppState extends ConsumerState<SOSApp> {
   }
 
   @override
+  void dispose() {
+    // ✅ Clean up MotionDetectionService
+    MotionDetectionService.instance.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final themeMode = ref.watch(themeModeProvider);
 
@@ -165,7 +214,10 @@ class _SOSAppState extends ConsumerState<SOSApp> {
       final enabled = prefs.getBool('motion_detection_enabled') ?? false;
 
       if (user != null && enabled) {
-        MotionDetectionService.instance.start();
+        // ✅ Make sure service is initialized before starting
+        if (!MotionDetectionService.instance.isRunning) {
+          MotionDetectionService.instance.start();
+        }
       } else {
         MotionDetectionService.instance.stop();
       }

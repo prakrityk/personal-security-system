@@ -40,31 +40,43 @@ class FirebaseService:
     def _initialize_firebase(self):
         """Initialize Firebase Admin SDK"""
         try:
+            print("🔥 INITIALIZING FIREBASE ADMIN SDK...")
             # backend/ directory
             BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            print(f"📁 BASE_DIR: {BASE_DIR}")
 
             creds_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
+            print(f"📁 CREDS_PATH from env: {creds_path}")
 
             if not creds_path:
                 creds_path = os.path.join(BASE_DIR, "firebase-credentials.json")
+                print(f"📁 Using default path: {creds_path}")
 
             if not os.path.isabs(creds_path):
                 creds_path = os.path.join(BASE_DIR, creds_path)
+                print(f"📁 Made absolute: {creds_path}")
 
             if not os.path.exists(creds_path):
+                print(f"❌ Firebase credentials file NOT FOUND at: {creds_path}")
                 raise FileNotFoundError(
                     f"Firebase credentials file not found at: {creds_path}"
                 )
+            
+            print(f"✅ Firebase credentials file FOUND at: {creds_path}")
 
             cred = credentials.Certificate(creds_path)
+            print(f"✅ Firebase credentials loaded successfully")
 
             if not firebase_admin._apps:
                 firebase_admin.initialize_app(cred)
-
-            print("✅ Firebase Admin SDK initialized successfully")
+                print("✅ Firebase Admin SDK initialized successfully")
+            else:
+                print("✅ Firebase Admin SDK already initialized")
 
         except Exception as e:
             print(f"❌ Firebase initialization failed: {e}")
+            import traceback
+            traceback.print_exc()
             raise
 
     # -----------------------------
@@ -166,13 +178,26 @@ class FirebaseService:
         - title/body: notification content
         - data: small key/value payload (e.g. {"event_id": "...", "type": "SOS_EVENT"})
         """
+        print(f"\n🔥🔥🔥 FIREBASE SERVICE: send_sos_notification CALLED")
+        
         token_list = [t for t in tokens if t]
+        print(f"📋 Raw tokens received: {len(tokens)}")
+        print(f"📋 Valid tokens after filter: {len(token_list)}")
+        
         if not token_list:
             print("⚠️ No valid FCM tokens to send notification to")
             return
 
+        # Print first few tokens for debugging
+        for i, token in enumerate(token_list[:3]):
+            print(f"📋 Token {i}: {token[:30]}...")
+        
+        if len(token_list) > 3:
+            print(f"📋 ... and {len(token_list) - 3} more tokens")
+
         # Convert data values to strings
         str_data = {k: str(v) for k, v in (data or {}).items()}
+        print(f"📦 Formatted data payload: {str_data}")
 
         success_count = 0
         failure_count = 0
@@ -181,6 +206,8 @@ class FirebaseService:
         # Send to each token individually
         for idx, token in enumerate(token_list):
             try:
+                print(f"📨 Attempting to send to token {idx}...")
+                
                 message = messaging.Message(
                     notification=messaging.Notification(title=title, body=body),
                     data=str_data,
@@ -191,30 +218,47 @@ class FirebaseService:
                 print(f"✅ FCM notification sent to token {idx}: {response}")
                 success_count += 1
                 
-            except messaging.UnregisteredError:
-                print(f"⚠️ Token expired: {token[:20]}...")
+            except messaging.UnregisteredError as e:
+                print(f"⚠️ Token expired (UnregisteredError): {token[:30]}...")
+                print(f"   Error: {e}")
                 expired_tokens.append(token)
                 failure_count += 1
-            except messaging.InvalidArgumentError:
-                print(f"⚠️ Invalid token format: {token[:20]}...")
+            except messaging.InvalidArgumentError as e:
+                print(f"⚠️ Invalid token format: {token[:30]}...")
+                print(f"   Error: {e}")
                 expired_tokens.append(token)
+                failure_count += 1
+            except messaging.SenderIdMismatchError as e:
+                print(f"⚠️ Sender ID mismatch: {token[:30]}...")
+                print(f"   Error: {e}")
+                failure_count += 1
+            except messaging.ThirdPartyAuthError as e:
+                print(f"⚠️ Third party auth error: {e}")
+                failure_count += 1
+            except messaging.QuotaExceededError as e:
+                print(f"⚠️ Quota exceeded: {e}")
                 failure_count += 1
             except Exception as e:
                 print(f"❌ Failed to send to token {idx}: {e}")
+                print(f"   Error type: {type(e)}")
+                import traceback
+                traceback.print_exc()
                 failure_count += 1
 
         # 🔥 CLEAN UP EXPIRED TOKENS
         if expired_tokens:
+            print(f"🧹 Cleaning up {len(expired_tokens)} expired tokens...")
             self._cleanup_expired_tokens(expired_tokens)
 
         print(
-            f"📨 FCM batch: success={success_count}, failure={failure_count}, "
+            f"📊 FCM BATCH SUMMARY: success={success_count}, failure={failure_count}, "
             f"expired={len(expired_tokens)}"
         )
 
     def _cleanup_expired_tokens(self, expired_tokens: list[str]) -> None:
         """Remove expired tokens from database"""
         try:
+            print(f"🧹 Cleaning up {len(expired_tokens)} expired tokens...")
             # Import here to avoid circular imports
             from database.connection import get_db
             from sqlalchemy.orm import Session
@@ -250,11 +294,11 @@ class FirebaseService:
             traceback.print_exc()
 
 
-# At the end of firebase_service.py, replace lines 228-233 with:
-
 # ✅ Create singleton instance at module load
+print("🔥 Creating FirebaseService singleton instance...")
 firebase_service = FirebaseService()
 
 def get_firebase_service() -> FirebaseService:
     """Get the singleton FirebaseService instance"""
+    print("🔥 get_firebase_service() called")
     return firebase_service

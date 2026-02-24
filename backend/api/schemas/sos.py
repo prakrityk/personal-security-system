@@ -27,4 +27,4 @@ class SOSEventCreateResponse(BaseModel):
     status: Literal["success"] = "success"
     event_id: int
     message: str
-
+    voice_message_url: Optional[str] = Field(None, description="URL of the voice message if uploaded")
