@@ -30,7 +30,7 @@ class SosHomeScreen extends ConsumerStatefulWidget {
 
 class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
   // ✅ Removed SosEventService - not needed anymore
-  late final VoiceMessageService _voiceService;
+  late final VoiceMessageService _voiceMessageService;
 
   static const int _countdownSeconds = 3;
 
@@ -43,7 +43,7 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
   void initState() {
     super.initState();
     
-    _voiceService = VoiceMessageService(
+    _voiceMessageService = VoiceMessageService(
       dioClient: ref.read(dioClientProvider),
     );
     
@@ -55,7 +55,7 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
   @override
   void dispose() {
     _recordingTimer?.cancel();
-    _voiceService.dispose();
+    _voiceMessageService.dispose();
     super.dispose();
   }
 
@@ -99,7 +99,7 @@ Future<Position?> _getCurrentLocation() async {
       setState(() => _recordingSeconds++);
     });
 
-    _voiceService.startManualRecording(
+    _voiceMessageService.startManualRecording(
       onComplete: (filePath) {
         // 20s hit — auto sends SOS
         _finishRecordingAndSendSOS(filePath);
@@ -123,9 +123,9 @@ Future<Position?> _getCurrentLocation() async {
   // ── Long press: release → send SOS with recorded audio ──────────────────
 
   void _onLongPressEnd() {
-    if (!_voiceService.isRecording) return;
+    if (!_voiceMessageService.isRecording) return;
 
-    _voiceService.stopRecording(
+    _voiceMessageService.stopRecording(
       onComplete: (filePath) => _finishRecordingAndSendSOS(filePath),
       onError: (error) {
         _stopRecordingOverlay();
@@ -145,7 +145,7 @@ Future<Position?> _getCurrentLocation() async {
       final position = await _getCurrentLocation();
       
       // ✅ Use unified endpoint that creates SOS + uploads voice in one call
-      final result = await _voiceService.createSosWithVoice(
+      final result = await _voiceMessageService.createSosWithVoice(
         filePath: filePath, // Has file for voice SOS
         triggerType: 'manual',
         eventType: 'panic_button',
@@ -316,7 +316,7 @@ Future<Position?> _getCurrentLocation() async {
       final position = await _getCurrentLocation();
       
       // ✅ Use the SAME unified method with null filePath for no-voice SOS
-      final result = await _voiceService.createSosWithVoice(
+      final result = await _voiceMessageService.createSosWithVoice(
         filePath: null,  // ← No voice file for tap SOS
         triggerType: 'manual',
         eventType: 'panic_button',
