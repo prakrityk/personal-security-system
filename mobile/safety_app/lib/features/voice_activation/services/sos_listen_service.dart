@@ -89,62 +89,71 @@ class SOSListenService {
     });
   }
 
-  
+  void _runModel(
+    List<double> samples,
+    int userId,
+    SOSCallback onSOSConfirmed,
+    StatusCallback? onStatusChange,
+  ) async {
+    if (_interpreter == null || _isVerifying) return;
 
-  void _runModel(List<double> samples, int userId, SOSCallback onSOSConfirmed, StatusCallback? onStatusChange) async {
-  if (_interpreter == null || _isVerifying) return;
+    var input = [Float32List.fromList(samples)];
+    var output = List.generate(1, (_) => List.filled(2, 0.0));
 
-  var input = [Float32List.fromList(samples)];
-  var output = List.generate(1, (_) => List.filled(2, 0.0));
+    _interpreter!.run(input, output);
 
-  _interpreter!.run(input, output);
+    double helpScore = output[0][1];
+    final now = DateTime.now();
 
-  double helpScore = output[0][1];
-  final now = DateTime.now();
+    print(
+      " HELP score: $helpScore, Confidence: ${(helpScore * 100).toStringAsFixed(2)}%",
+    );
 
- 
-  print(" HELP score: $helpScore, Confidence: ${(helpScore * 100).toStringAsFixed(2)}%");
+    if (helpScore > 0.8) {
+      if (!_lastFrameWasPositive) {
+        // reset if outside detection window
+        if (_firstDetectionTime == null ||
+            now.difference(_firstDetectionTime!).inSeconds >
+                detectionWindowSeconds) {
+          _positiveFrames = 1;
+          _firstDetectionTime = now;
+        } else {
+          _positiveFrames++;
+        }
+        _lastFrameWasPositive = true;
 
- 
-  if (helpScore > 0.8) {
-    if (!_lastFrameWasPositive) {
-      // reset if outside detection window
-      if (_firstDetectionTime == null || now.difference(_firstDetectionTime!).inSeconds > detectionWindowSeconds) {
-        _positiveFrames = 1;
-        _firstDetectionTime = now;
-      } else {
-        _positiveFrames++;
+        // Print which help frame detected
+        if (_positiveFrames == 1) {
+          print(" First HELP detected!");
+        } else if (_positiveFrames == 2) {
+          print(" Second HELP detected!");
+        } else {
+          print(" HELP detected - Frame #$_positiveFrames");
+        }
       }
-      _lastFrameWasPositive = true;
-
-      // Print which help frame detected
-      if (_positiveFrames == 1) {
-        print(" First HELP detected!");
-      } else if (_positiveFrames == 2) {
-        print(" Second HELP detected!");
-      } else {
-        print(" HELP detected - Frame #$_positiveFrames");
-      }
+    } else {
+      _lastFrameWasPositive = false;
     }
-  } else {
-    _lastFrameWasPositive = false;
+
+    if (helpScore > 0.8 && _positiveFrames >= requiredFrames) {
+      if (_lastTrigger == null ||
+          now.difference(_lastTrigger!).inSeconds > cooldownSeconds) {
+        _lastTrigger = now;
+        print(" SOS TRIGGERED!");
+        _verifyVoiceInternal(samples, userId, onSOSConfirmed, onStatusChange);
+      }
+      _positiveFrames = 0;
+      _firstDetectionTime = null;
+      _lastFrameWasPositive = false;
+    }
   }
 
- 
-  if (helpScore > 0.8 && _positiveFrames >= requiredFrames) {
-    if (_lastTrigger == null || now.difference(_lastTrigger!).inSeconds > cooldownSeconds) {
-      _lastTrigger = now;
-      print(" SOS TRIGGERED!");
-      _verifyVoiceInternal(samples, userId, onSOSConfirmed, onStatusChange);
-    }
-    _positiveFrames = 0;
-    _firstDetectionTime = null;
-    _lastFrameWasPositive = false;
-  }
-}
-
-
-  Future<void> _verifyVoiceInternal(List<double> audioSamples, int userId, SOSCallback onConfirmed, StatusCallback? onStatusChange) async {
+  Future<void> _verifyVoiceInternal(
+    List<double> audioSamples,
+    int userId,
+    SOSCallback onConfirmed,
+    StatusCallback? onStatusChange,
+  ) async {
     _isVerifying = true;
     onStatusChange?.call("Verifying Voice...");
 
@@ -154,26 +163,26 @@ class SOSListenService {
       final file = File('${tempDir.path}/sos_verify.wav');
       await file.writeAsBytes(wavBytes);
 
-      bool isVerified = await _voiceService.verifyVoiceSos(userId: userId, filePath: file.path);
+      bool isVerified = await _voiceService.verifyVoiceSos(
+        userId: userId,
+        filePath: file.path,
+      );
 
       if (isVerified) {
         onStatusChange?.call("SOS Activated!");
         onConfirmed();
 
-        try{
-          await _sosService.createSosEvent(
-            triggerType:'voice',
-            eventType:'voice_activation',
-            appState:'foreground',
-          );
-          print(" Voice SOS event created successfully");
-        } catch (e) {
-            print(" Failed to create Voice SOS: $e");
-          }
-            
-
-        }
-       else {
+        // try{
+        //   await _sosService.createSosEvent(
+        //     triggerType:'voice',
+        //     eventType:'voice_activation',
+        //     appState:'foreground',
+        //   );
+        //   print(" Voice SOS event created successfully");
+        // } catch (e) {
+        //     print(" Failed to create Voice SOS: $e");
+        //   }
+      } else {
         onStatusChange?.call("Voice Mismatch - Ignored");
       }
     } catch (e) {
