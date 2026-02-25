@@ -5,6 +5,7 @@ import 'package:record/record.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:safety_app/services/voice_service.dart';
 import 'package:safety_app/core/utils/wav_header.dart';
+import 'package:safety_app/services/sos_event_service.dart';
 
 typedef SOSCallback = void Function();
 typedef StatusCallback = void Function(String status);
@@ -12,6 +13,8 @@ typedef StatusCallback = void Function(String status);
 class SOSListenService {
   final AudioRecorder _recorder = AudioRecorder();
   final VoiceService _voiceService = VoiceService();
+  final SosEventService _sosService = SosEventService();
+
   Interpreter? _interpreter;
   bool _isListening = false;
   bool _isVerifying = false;
@@ -156,7 +159,21 @@ class SOSListenService {
       if (isVerified) {
         onStatusChange?.call("SOS Activated!");
         onConfirmed();
-      } else {
+
+        try{
+          await _sosService.createSosEvent(
+            triggerType:'voice',
+            eventType:'voice_activation',
+            appState:'foreground',
+          );
+          print(" Voice SOS event created successfully");
+        } catch (e) {
+            print(" Failed to create Voice SOS: $e");
+          }
+            
+
+        }
+       else {
         onStatusChange?.call("Voice Mismatch - Ignored");
       }
     } catch (e) {
