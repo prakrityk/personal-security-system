@@ -1,5 +1,6 @@
 // lib/routes/app_router.dart
 // ✅ FIXED: Handles AsyncValue.loading() — does not redirect while auth is being restored
+// ✅ NEW: Dependent voice registration gate — dependents must register voice once before home
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -22,6 +23,7 @@ import 'package:safety_app/features/dependent/screens/scan_or_upload_qr_screen.d
 import 'package:safety_app/features/guardian/screens/guardian_setup_choice_screen.dart';
 import 'package:safety_app/features/guardian/screens/guardian_add_dependent_screen.dart';
 import 'package:safety_app/features/guardian/screens/collaborator_join_screen.dart';
+import 'package:safety_app/features/voice_activation/screens/voice_registration_screen.dart';
 import 'package:safety_app/models/dependent_model.dart';
 import 'package:safety_app/routes/router_notifier.dart';
 import 'package:safety_app/routes/splash_screen.dart';
@@ -50,6 +52,17 @@ class AppRouter {
   static const String dependentDetailScreen = '/dependent-detail';
   static const String scanQr = '/scan-qr';
 
+  // ✅ NEW: Voice registration gate for dependents
+  static const String voiceRegistration = '/voice-registration';
+
+  /// Returns true if the user has a dependent-type role.
+  /// Backend returns 'child' or 'elderly' — both require the voice gate.
+  static bool _isDependent(dynamic user) {
+    final roleName =
+        user?.currentRole?.roleName?.toString().toLowerCase() ?? '';
+    return roleName == 'child' || roleName == 'elderly';
+  }
+
   /// Create router with role-based navigation
   static GoRouter createRouter(WidgetRef ref) {
     return GoRouter(
@@ -65,14 +78,8 @@ class AppRouter {
         // ✅ CRITICAL FIX: While _loadUser() is still running (restoring session
         // from secure storage), authState is AsyncValue.loading().
         // Do NOT redirect during this time — just stay on splash and wait.
-        // Without this check, the router sees user == null (because loading
-        // hasn't finished yet) and immediately sends the user to /login even
-        // though their token is perfectly valid in storage.
         if (authState.isLoading) {
           print('⏳ Auth still loading — holding at splash, no redirect');
-          // Only hold on splash. If we're already past splash somehow, don't
-          // interfere — let the screen stay where it is until loading resolves.
-          if (location == splash) return null;
           return null;
         }
 
@@ -82,7 +89,6 @@ class AppRouter {
         );
 
         // ==================== SPLASH ====================
-        // Now that loading is done, decide where to go from splash.
         if (location == splash) {
           print('📍 Redirecting from splash...');
 
@@ -90,6 +96,13 @@ class AppRouter {
             print('📍 Splash → Login (no user)');
             return login;
           } else if (user.hasRole && user.currentRole != null) {
+            // ✅ NEW: Dependent voice gate check at splash redirect
+            if (_isDependent(user) && !(user.isVoiceRegistered ?? false)) {
+              print(
+                '📍 Splash → VoiceRegistration (dependent, voice not registered)',
+              );
+              return voiceRegistration;
+            }
             print('📍 Splash → Home (has role: ${user.currentRole?.roleName})');
             return home;
           } else {
@@ -99,7 +112,6 @@ class AppRouter {
         }
 
         // ==================== AUTH SCREENS ====================
-        // Always allow these screens regardless of auth state.
         const authScreens = [
           login,
           letsGetStarted,
@@ -115,11 +127,28 @@ class AppRouter {
         }
 
         // ==================== NOT AUTHENTICATED ====================
-        // If loading is done and there is genuinely no user, redirect to login.
-        // This handles the explicit logout case.
         if (user == null) {
           print('❌ No user → Redirecting to Login');
           return login;
+        }
+
+        // ==================== VOICE REGISTRATION GATE ====================
+        // Allow the voice registration screen itself to render (no loop).
+        if (location == voiceRegistration) {
+          // Once voice is registered, push them to home instead.
+          if (user.isVoiceRegistered ?? false) {
+            print('✅ Voice already registered → Home');
+            return home;
+          }
+          print('✅ Allowing voice registration screen');
+          return null;
+        }
+
+        // ✅ NEW: If user is a dependent with an unregistered voice, block
+        // navigation to any protected screen and send them to voice registration.
+        if (_isDependent(user) && !(user.isVoiceRegistered ?? false)) {
+          print('🎤 Dependent voice not registered → VoiceRegistration');
+          return voiceRegistration;
         }
 
         // ==================== ONBOARDING FLOWS ====================
@@ -180,7 +209,6 @@ class AppRouter {
         ),
 
         // ==================== AUTH FLOW ====================
-
         GoRoute(
           path: splash,
           name: 'splash',
@@ -277,7 +305,6 @@ class AppRouter {
         ),
 
         // ==================== ROLE SELECTION ====================
-
         GoRoute(
           path: roleIntent,
           name: 'roleIntent',
@@ -286,7 +313,6 @@ class AppRouter {
         ),
 
         // ==================== ACCOUNT SCREENS ====================
-
         GoRoute(
           path: account,
           name: 'account',
@@ -302,7 +328,6 @@ class AppRouter {
         ),
 
         // ==================== PERSONAL USER FLOW ====================
-
         GoRoute(
           path: personalOnboarding,
           name: 'personalOnboarding',
@@ -311,7 +336,6 @@ class AppRouter {
         ),
 
         // ==================== GUARDIAN FLOW ====================
-
         GoRoute(
           path: guardianSetup,
           name: 'guardianSetup',
@@ -334,7 +358,6 @@ class AppRouter {
         ),
 
         // ==================== DEPENDENT FLOW ====================
-
         GoRoute(
           path: dependentTypeSelection,
           name: 'dependentTypeSelection',
@@ -374,12 +397,27 @@ class AppRouter {
         ),
 
         // ==================== HOME ====================
-
         GoRoute(
           path: home,
           name: 'home',
           pageBuilder: (context, state) =>
               const MaterialPage(child: GeneralHomeScreen()),
+        ),
+
+        // ==================== VOICE REGISTRATION (DEPENDENT GATE) ====================
+        // ✅ NEW: Shown once to dependents who haven't registered their voice.
+        // After successful registration, updateVoiceRegistrationStatus(true) is
+        // called in AuthStateNotifier which triggers a router refresh → home.
+        // The back button / system back is intentionally blocked via WillPopScope
+        // inside VoiceRegistrationScreen so the dependent cannot skip this step.
+        GoRoute(
+          path: voiceRegistration,
+          name: 'voiceRegistration',
+          pageBuilder: (context, state) => const MaterialPage(
+            child: VoiceRegistrationScreen(),
+            // Prevent swipe-back on iOS from bypassing the gate
+            fullscreenDialog: true,
+          ),
         ),
       ],
 

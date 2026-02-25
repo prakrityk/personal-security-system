@@ -8,6 +8,7 @@ class ApiEndpoints {
 
   // ✅ Use your laptop's IP address for physical device
   // Change this to match your actual backend server IP
+
   static const String baseUrl = 'http://localhost:8000/api';
   //'http://192.168.21.102:8000/api';
 
@@ -293,6 +294,6 @@ class ApiEndpoints {
   // Additional endpoints can be added here as backend develops
 
   // for voice registration
-  static const String voiceRegister ='/voice/voice/register';
+  static const String voiceRegister = '/voice/voice/register';
   static const String voiceverify = '/voice/voice/verify-sos';
 }

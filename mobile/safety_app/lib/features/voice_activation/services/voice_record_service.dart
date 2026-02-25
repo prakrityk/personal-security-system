@@ -14,9 +14,7 @@ class VoiceRecordService {
     final path = '${dir.path}/voice_sample_$sampleNo.wav';
 
     await _recorder.start(
-      const RecordConfig(
-        encoder: AudioEncoder.wav,
-      ),
+      const RecordConfig(encoder: AudioEncoder.wav),
       path: path,
     );
 
