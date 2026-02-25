@@ -31,8 +31,9 @@ async def register_voice(
         f.write(await file.read())
 
     try:
+        n_mfcc=129
         y, sr= librosa.load(file_path, sr=16000)
-        mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
+        mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=n_mfcc)
         mfcc_mean = np.mean(mfcc, axis=1)
 
         mfcc_bytes = io.BytesIO()
@@ -106,7 +107,8 @@ async def verify_sos(
         y, sr = librosa.load(io.BytesIO(content), sr=16000)
         
         # Extract MFCC
-        mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
+        n_mfcc=129
+        mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=n_mfcc)
         live_mfcc_mean = np.mean(mfcc, axis=1) # Shape: (13,)
         
     except Exception as e:
