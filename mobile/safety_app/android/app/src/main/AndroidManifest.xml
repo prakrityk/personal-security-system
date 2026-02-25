@@ -10,6 +10,8 @@
     <!-- ✅ Needed for foreground background service with motion detection -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
 
     
     <!-- 🔐 Biometric authentication permissions (NEWLY ADDED) -->
@@ -51,6 +53,11 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+
+        <!-- ⚡ Foreground service -->
+    <service
+        android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+        android:exported="false"/>
 <!-- 🔑 Google Maps API Key -->
     <meta-data
         android:name="com.google.android.geo.API_KEY"

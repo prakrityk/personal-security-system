@@ -4,7 +4,7 @@ Device routes
 Handles registration of FCM device tokens for push notifications.
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Body
 from sqlalchemy.orm import Session
 
 from api.utils.auth_utils import get_current_user_with_roles
@@ -58,3 +58,38 @@ async def register_device(
         message="Device registered successfully",
     )
 
+
+@router.post("/devices/remove-token")
+async def remove_device_token(
+    fcm_token: str = Body(..., embed=True),
+    current_user: User = Depends(get_current_user_with_roles),
+    db: Session = Depends(get_db),
+):
+    """
+    Remove an old/expired FCM token for the current user.
+    
+    This is called when the client detects that their FCM token has changed
+    (e.g., after app reinstall, cache clear, or token rotation).
+    The old token is deleted from the database to prevent expired token errors.
+    """
+    device = db.query(Device).filter(
+        Device.fcm_token == fcm_token,
+        Device.user_id == current_user.id
+    ).first()
+    
+    if device:
+        db.delete(device)
+        db.commit()
+        return {"status": "removed", "message": "Token removed successfully"}
+    
+    # Also try to find token without user_id (orphaned tokens)
+    orphaned = db.query(Device).filter(
+        Device.fcm_token == fcm_token
+    ).first()
+    
+    if orphaned:
+        db.delete(orphaned)
+        db.commit()
+        return {"status": "removed", "message": "Orphaned token removed"}
+    
+    return {"status": "not_found", "message": "Token not found"}
