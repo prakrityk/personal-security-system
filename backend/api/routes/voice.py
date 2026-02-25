@@ -67,6 +67,8 @@ async def register_voice(
         print(user)
         if user:
             user.is_voice_registered = True
+            db.add(user)
+            print("usder",user.is_voice_registered)
     db.commit()
 
     return {
@@ -88,13 +90,13 @@ async def verify_sos(
     file: UploadFile = File(...), 
     db: Session = Depends(get_db)
 ):
-    print(f"🎤 Verifying SOS for User {user_id}...")
+    print(f" Verifying SOS for User {user_id}...")
 
     # 1. Fetch User's Registered Voice
     stored_voices = db.query(UserVoice).filter(UserVoice.user_id == user_id).all()
     
     if not stored_voices:
-        print("❌ No voice samples found.")
+        print(" No voice samples found.")
         raise HTTPException(status_code=400, detail="No voice registered")
 
     # 2. Process Live Audio
@@ -108,7 +110,7 @@ async def verify_sos(
         live_mfcc_mean = np.mean(mfcc, axis=1) # Shape: (13,)
         
     except Exception as e:
-        print(f"❌ Audio Error: {e}")
+        print(f" Audio Error: {e}")
         raise HTTPException(status_code=500, detail="Invalid audio file")
 
     # 3. Compare with Stored Samples

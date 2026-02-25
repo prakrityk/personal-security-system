@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:safety_app/services/auth_service.dart';
+import 'package:safety_app/services/auth_api_service.dart';
 import '../services/voice_record_service.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:path_provider/path_provider.dart';
@@ -68,7 +68,7 @@ class _VoiceRegistrationScreenState extends ConsumerState<VoiceRegistrationScree
   if (latestSamplePath != null) {
     final user = ref.read(authStateProvider).value;
     if (user != null) {
-      final response = await AuthService().uploadVoice(
+      final response = await AuthApiService().uploadVoice(
         userId: int.parse(user.id),
         sampleNumber: sampleCount,
         filePath: latestSamplePath!,
@@ -83,10 +83,12 @@ class _VoiceRegistrationScreenState extends ConsumerState<VoiceRegistrationScree
       if (mounted) {
         setState(() {
           registrationCompleted = true;
-          statusText = "🎉 Registration Successful!";
+          statusText = " Registration Successful!";
         });
       }
-        Navigator.pop(context, true);
+        Future.delayed(const Duration(seconds: 1), () {
+              if (mounted) Navigator.pop(context, true);
+            });
 
     }
       

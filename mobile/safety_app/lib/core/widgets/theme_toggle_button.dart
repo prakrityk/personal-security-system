@@ -65,7 +65,7 @@ class ThemeToggleSwitch extends ConsumerWidget {
           onChanged: (value) {
             ref.read(themeModeProvider.notifier).toggleTheme();
           },
-          activeColor: AppColors.primaryGreen,
+          activeThumbColor: AppColors.primaryGreen,
         ),
         if (showLabel) ...[
           const SizedBox(width: 8),

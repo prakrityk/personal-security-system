@@ -1,11 +1,39 @@
-# Environment variables (NEVER commit this!)
-.env
+# ============================================
+# SENSITIVE FILES - NEVER COMMIT!
+# ============================================
 
-# Python
+# Firebase & Credentials
+
+firebase_*.json
+firebase-*.json
+**/firebase_credentials.json
+**/firebase-adminsdk-*.json
+*.pem
+*.key
+*credentials*.json
+
+# Environment Variables
+.env
+.env.local
+.env.*.local
+*.env
+
+# Backups
+*.bak
+*.json.bak
+
+
+# ============================================
+# PYTHON
+# ============================================
+
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
+
+# Distribution / packaging
 .Python
 env/
 venv/
@@ -16,7 +44,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib64/
+
 parts/
 sdist/
 var/
@@ -24,28 +52,14 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+pip-log.txt
+pip-delete-this-directory.txt
 
-# Database
-*.db
-*.sqlite
-*.sqlite3
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
+# ============================================
+# FLUTTER / DART
+# ============================================
 
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
-logs/
-
-# Flutter/Dart (add these for your frontend)
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
@@ -53,3 +67,102 @@ logs/
 .pub-cache/
 .pub/
 build/
+
+
+# ============================================
+# DATABASE
+# ============================================
+
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+
+
+# ============================================
+# IDE / EDITORS
+# ============================================
+
+# VSCode
+.vscode/
+*.code-workspace
+
+# IntelliJ / Android Studio
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+
+# ============================================
+# OPERATING SYSTEMS
+# ============================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+.directory
+
+
+# ============================================
+# LOGS & TEMPORARY FILES
+# ============================================
+
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+
+# ============================================
+# NODE MODULES (if using Node.js)
+# ============================================
+
+node_modules/
+package-lock.json
+yarn.lock
+
+
+# ============================================
+# TESTING
+# ============================================
+
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+coverage.xml
+*.cover
+
+
+# ============================================
+# OTHER
+# ============================================
+
+# Miscellaneous
+*.class
+*.lock
+*.tmp
+*.temp

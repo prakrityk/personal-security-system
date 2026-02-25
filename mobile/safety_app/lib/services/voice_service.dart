@@ -10,22 +10,20 @@ class VoiceService {
     required int userId,
     required String filePath,
   }) async {
-    const String endpoint = ApiEndpoints.voiceverify; 
 
     try {
       print('📤 Uploading voice for verification (User: $userId)...');
       
-      // ✅ Move user_id inside FormData
       final formData = FormData.fromMap({
         'file': await MultipartFile.fromFile(
           filePath,
           filename: 'sos_verify.wav',
         ),
-        'user_id': userId, // <--- moved here
+        'user_id': userId, 
       });
 
-      final response = await _dioClient.postFormData(
-        endpoint, 
+      final response = await _dioClient.post(
+        ApiEndpoints.voiceverify, 
         data: formData,
         // queryParameters removed
       );

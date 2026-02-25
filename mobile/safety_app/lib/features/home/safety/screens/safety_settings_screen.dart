@@ -5,6 +5,7 @@ import 'package:safety_app/core/theme/app_text_styles.dart';
 import '../widgets/safety_toggle_tile.dart';
 import 'package:safety_app/core/providers/auth_provider.dart';
 import 'package:safety_app/features/voice_activation/screens/voice_registration_screen.dart';
+import 'package:safety_app/features/voice_activation/services/sos_listen_service.dart';
 
 class SafetySettingsScreen extends ConsumerStatefulWidget {
   const SafetySettingsScreen({super.key});
@@ -18,10 +19,14 @@ class _SafetySettingsScreenState extends ConsumerState<SafetySettingsScreen> {
   bool _liveLocation = false;
   bool _motionDetection = false;
   bool _recordEvidence = false;
+  bool _isVoiceActivationEnabled = false;
+
+  late final SOSListenService sosService;
 
   @override
   void initState() {
     super.initState();
+      sosService = SOSListenService(); // ✅ ADD THIS
 
     // 🔹 Refresh user state on screen load to get the latest isVoiceRegistered
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -35,6 +40,8 @@ class _SafetySettingsScreenState extends ConsumerState<SafetySettingsScreen> {
 
     // Watch user async state
     final userAsync = ref.watch(authStateProvider);
+    final user = userAsync.value;
+    final bool isAlreadyRegistered = user?.isVoiceRegistered ?? false;
 
     return Container(
       color: isDark ? AppColors.darkBackground : AppColors.lightBackground,
@@ -98,57 +105,96 @@ class _SafetySettingsScreenState extends ConsumerState<SafetySettingsScreen> {
 
               const SizedBox(height: 16),
 
+             
               // 2. Voice Registration Toggle
-              // 2. Voice Registration Toggle
-userAsync.when(
-  data: (user) {
-    if (user == null) return const SizedBox();
+              SafetyToggleTile(
+                // ✅ Visuals depend ONLY on DB status
+                icon: isAlreadyRegistered ? Icons.check_circle : Icons.mic_outlined,
+                title: 'Voice Registration',
+                subtitle: isAlreadyRegistered
+                    ? 'Voice is successfully registered'
+                    : 'Register your voice to activate SOS hands-free',
+                
+                // ✅ Toggle State depends ONLY on DB status
+                isEnabled: isAlreadyRegistered,
+                
+                onToggle: (value) async {
+                  // ✅ Gatekeeper: If DB says true, BLOCK EVERYTHING
+                  if (isAlreadyRegistered) {
+                    
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Voice registration is already active."),
+                        backgroundColor: Colors.blueGrey,
+                      ),
+                    );
+                    return; // 🛑 STOP HERE
+                  }
 
-    // 🔹 Debug: print user's voice registration status
-    print("📢 DEBUG: User's isVoiceRegistered = ${user.isVoiceRegistered}");
 
-    final isAlreadyRegistered = user.isVoiceRegistered;
+                  // If not registered, allow navigation
+                  if (value == true) {
+                    final result = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const VoiceRegistrationScreen(),
+                      ),
+                    );
+                    
+                    // If they returned with success (true), refresh the provider
+                    if (result == true) {
+                         await ref.read(authStateProvider.notifier).updateVoiceRegistrationStatus(true);
+                    }
+                  }
+                },
+              ),              const SizedBox(height: 16),
 
-    return SafetyToggleTile(
-      icon: isAlreadyRegistered
-          ? Icons.check_circle
-          : Icons.mic_outlined,
-      title: 'Voice Registration',
-      subtitle: isAlreadyRegistered
-          ? 'Voice is successfully registered'
-          : 'Register your voice to activate SOS hands-free',
-      isEnabled: isAlreadyRegistered,
-      onToggle: (value) async {
-        if (isAlreadyRegistered) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Voice registration is already active."),
-              backgroundColor: Colors.blueGrey,
-            ),
-          );
-          return;
-        }
+//  voice activtion toggle 
+              SafetyToggleTile(
+                    icon: Icons.mic_outlined,
+                    title: 'Voice Activation',
+                    subtitle: 'Enable voice activation for SOS',
+                    isEnabled: _isVoiceActivationEnabled,
+                    onToggle: (value) async {
+                      final user = ref.read(authStateProvider).value;
 
-        if (value == true) {
-          final registered = await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => const VoiceRegistrationScreen(),
-            ),
-          );
+                      // 1️⃣ Must register voice first
+                      if (user == null || user.isVoiceRegistered != true) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text("Please register your voice first."),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
 
-          if (registered == true) {
-            await ref
-                .read(authStateProvider.notifier)
-                .updateVoiceRegistrationStatus(true);
-          }
-        }
-      },
-    );
-  },
-  loading: () => const Center(child: CircularProgressIndicator()),
-  error: (err, _) => Text('Error loading user: $err'),
-),
+                      setState(() => _isVoiceActivationEnabled = value);
+
+                      final int? userId = int.tryParse(user.id);
+                      if (userId == null) return;
+
+                      if (value == true) {
+                        print("🎤 Starting SOS Listener...");
+
+                        await sosService.startListening(
+                          userId: userId,
+                          onSOSConfirmed: () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text("🚨 SOS ACTIVATED!"),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          },
+                          onStatusChange: (status) => print("SOS: $status"),
+                        );
+                      } else {
+                        print("🛑 Stopping SOS Listener...");
+                        await sosService.stopListening();
+                      }
+                    },
+                  ),
 
 
               const SizedBox(height: 16),
@@ -180,4 +226,11 @@ userAsync.when(
       ),
     );
   }
+
+
+  @override
+void dispose() {
+  sosService.stopListening(); // ✅ prevent background mic
+  super.dispose();
+}
 }

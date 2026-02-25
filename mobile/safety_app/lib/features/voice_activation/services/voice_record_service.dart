@@ -23,13 +23,12 @@ class VoiceRecordService {
     return path;
   }
 
-  // ✅ stopRecording method थपियो — यो नभई screen crash गर्थ्यो
   Future<void> stopRecording() async {
     try {
       await _recorder.stop();
-      print('✅ Voice recording stopped.');
+      print(' Voice recording stopped.');
     } catch (e) {
-      print('⚠️ Stop recording error (safe to ignore): $e');
+      print(' Stop recording error (safe to ignore): $e');
     }
   }
 }

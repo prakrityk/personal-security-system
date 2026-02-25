@@ -37,68 +37,56 @@ class TokenModel {
 
 /// Auth Response Model - matches backend UserWithToken schema
 class AuthResponseModel {
-  final UserModel user;
-  final TokenModel token;
+  final UserModel? user; // ✅ nullable now
+  final TokenModel? token; // optional too, for OTP-only responses
+  final bool? success; // for success messages without user
+  final String? message;
 
-  AuthResponseModel({required this.user, required this.token});
-  // lib/models/auth_response_model.dart
+  AuthResponseModel({this.user, this.token, this.success, this.message});
 
   factory AuthResponseModel.fromJson(Map<String, dynamic> json) {
     print('🔍 Parsing AuthResponseModel...');
     print('📦 Raw JSON: $json');
     print('📋 JSON Keys: ${json.keys.toList()}');
 
-    // Check if user exists
-    if (!json.containsKey('user')) {
-      print('❌ ERROR: Missing "user" key in response');
-      throw Exception('Server response missing "user" field');
+    UserModel? parsedUser;
+    TokenModel? parsedToken;
+
+    // Parse user if it exists
+    if (json.containsKey('user') && json['user'] != null) {
+      if (json['user'] is Map<String, dynamic>) {
+        parsedUser = UserModel.fromJson(json['user']);
+      } else {
+        print('⚠️ Warning: user key exists but is not a Map');
+      }
     }
 
-    final userData = json['user'];
-    print('👤 User data type: ${userData.runtimeType}');
-
-    if (userData == null) {
-      print('❌ ERROR: User data is NULL');
-      throw Exception('Server returned null user data');
-    }
-
-    if (userData is! Map<String, dynamic>) {
-      print('❌ ERROR: User data is not a Map');
-      throw Exception(
-        'Invalid user data format: expected Map, got ${userData.runtimeType}',
-      );
-    }
-
-    // ⚠️ FIX: Handle both 'token' (singular) AND 'tokens' (plural)
+    // Parse token if it exists
     final tokenData = json['tokens'] ?? json['token'];
-    print('🔑 Token data type: ${tokenData.runtimeType}');
-
-    if (tokenData == null) {
-      print('❌ ERROR: No token data found');
-      throw Exception('No token/tokens data found in response');
+    if (tokenData != null && tokenData is Map<String, dynamic>) {
+      parsedToken = TokenModel.fromJson(tokenData);
     }
-
-    if (tokenData is! Map<String, dynamic>) {
-      print('❌ ERROR: Token data is not a Map');
-      throw Exception(
-        'Invalid token data format: expected Map, got ${tokenData.runtimeType}',
-      );
-    }
-
-    print('✅ Valid user and token data - proceeding to parse models');
 
     return AuthResponseModel(
-      user: UserModel.fromJson(userData),
-      token: TokenModel.fromJson(tokenData),
+      user: parsedUser,
+      token: parsedToken,
+      success: json['success'] as bool?,
+      message: json['message'] as String?,
     );
   }
+
   Map<String, dynamic> toJson() {
-    return {'user': user.toJson(), 'token': token.toJson()};
+    return {
+      if (user != null) 'user': user!.toJson(),
+      if (token != null) 'token': token!.toJson(),
+      if (success != null) 'success': success,
+      if (message != null) 'message': message,
+    };
   }
 
   @override
   String toString() =>
-      'AuthResponseModel(user: $user, token: ${token.accessToken})';
+      'AuthResponseModel(user: $user, token: ${token?.accessToken}, message: $message)';
 }
 
 /// Email/Phone Check Response Models

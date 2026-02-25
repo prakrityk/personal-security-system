@@ -1,124 +1,142 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 /// App Text Styles
-/// Defines typography using Roboto font family
+/// Defines typography using Inter font family from local assets
 class AppTextStyles {
   AppTextStyles._();
 
-  static const String _fontFamily = 'Roboto';
+  static const String _fontFamily = 'Inter';
 
   // Headings - Bold/Black weights
-  static TextStyle h1 = GoogleFonts.roboto(
-    fontSize: 32,
-    fontWeight: FontWeight.w900, // Black
-    letterSpacing: -0.5,
-  );
-    static TextStyle heading = GoogleFonts.roboto(
+  static const TextStyle h1 = TextStyle(
+    fontFamily: _fontFamily,
     fontSize: 32,
     fontWeight: FontWeight.w900, // Black
     letterSpacing: -0.5,
   );
 
-  static TextStyle h2 = GoogleFonts.roboto(
+  static const TextStyle heading = TextStyle(
+    fontFamily: _fontFamily,
+    fontSize: 32,
+    fontWeight: FontWeight.w900, // Black
+    letterSpacing: -0.5,
+  );
+
+  static const TextStyle h2 = TextStyle(
+    fontFamily: _fontFamily,
     fontSize: 28,
     fontWeight: FontWeight.w700, // Bold
     letterSpacing: -0.5,
   );
 
-  static TextStyle h3 = GoogleFonts.roboto(
+  static const TextStyle h3 = TextStyle(
+    fontFamily: _fontFamily,
     fontSize: 24,
     fontWeight: FontWeight.w700, // Bold
     letterSpacing: 0,
   );
 
-  static TextStyle h4 = GoogleFonts.roboto(
+  static const TextStyle h4 = TextStyle(
+    fontFamily: _fontFamily,
     fontSize: 20,
     fontWeight: FontWeight.w700, // Bold
     letterSpacing: 0.15,
   );
 
   // SOS Emphasis - Black weight for critical actions
-  static TextStyle sosEmphasis = GoogleFonts.roboto(
+  static const TextStyle sosEmphasis = TextStyle(
+    fontFamily: _fontFamily,
     fontSize: 18,
     fontWeight: FontWeight.w900, // Black
     letterSpacing: 1.2,
   );
 
-  // Labels & Buttons - Medium weight
-  static TextStyle labelLarge = GoogleFonts.roboto(
+  // Labels & Buttons - Medium/SemiBold weight
+  static const TextStyle labelLarge = TextStyle(
+    fontFamily: _fontFamily,
     fontSize: 16,
-    fontWeight: FontWeight.w500, // Medium
+    fontWeight: FontWeight.w600, // SemiBold
     letterSpacing: 0.5,
   );
 
-  static TextStyle labelMedium = GoogleFonts.roboto(
+  static const TextStyle labelMedium = TextStyle(
+    fontFamily: _fontFamily,
     fontSize: 14,
-    fontWeight: FontWeight.w500, // Medium
+    fontWeight: FontWeight.w600, // SemiBold
     letterSpacing: 0.5,
   );
 
-  static TextStyle labelSmall = GoogleFonts.roboto(
+  static const TextStyle labelSmall = TextStyle(
+    fontFamily: _fontFamily,
     fontSize: 12,
-    fontWeight: FontWeight.w500, // Medium
+    fontWeight: FontWeight.w600, // SemiBold
     letterSpacing: 0.5,
   );
 
   // Body Text - Regular weight
-  static TextStyle bodyLarge = GoogleFonts.roboto(
+  static const TextStyle bodyLarge = TextStyle(
+    fontFamily: _fontFamily,
     fontSize: 16,
     fontWeight: FontWeight.w400, // Regular
     letterSpacing: 0.5,
   );
 
-  static TextStyle bodyMedium = GoogleFonts.roboto(
+  static const TextStyle bodyMedium = TextStyle(
+    fontFamily: _fontFamily,
     fontSize: 14,
     fontWeight: FontWeight.w400, // Regular
     letterSpacing: 0.25,
   );
 
-  static TextStyle body = GoogleFonts.roboto(
+  static const TextStyle body = TextStyle(
+    fontFamily: _fontFamily,
     fontSize: 14,
     fontWeight: FontWeight.w400, // Regular
     letterSpacing: 0.25,
   );
 
-  static TextStyle bodySmall = GoogleFonts.roboto(
+  static const TextStyle bodySmall = TextStyle(
+    fontFamily: _fontFamily,
     fontSize: 12,
     fontWeight: FontWeight.w400, // Regular
     letterSpacing: 0.25,
   );
 
-  // Subtext & Hints - Thin/Light weights
-  static TextStyle subtitle = GoogleFonts.roboto(
+  // Subtext & Hints - Light weights
+  static const TextStyle subtitle = TextStyle(
+    fontFamily: _fontFamily,
     fontSize: 14,
     fontWeight: FontWeight.w300, // Light
     letterSpacing: 0.15,
   );
 
-  static TextStyle caption = GoogleFonts.roboto(
+  static const TextStyle caption = TextStyle(
+    fontFamily: _fontFamily,
     fontSize: 12,
     fontWeight: FontWeight.w300, // Light
     letterSpacing: 0.4,
   );
 
-  static TextStyle hint = GoogleFonts.roboto(
+  static const TextStyle hint = TextStyle(
+    fontFamily: _fontFamily,
     fontSize: 12,
-    fontWeight: FontWeight.w100, // Thin
+    fontWeight: FontWeight.w300, // Light
     letterSpacing: 0.4,
     fontStyle: FontStyle.italic,
   );
 
   // Button Text
-  static TextStyle button = GoogleFonts.roboto(
+  static const TextStyle button = TextStyle(
+    fontFamily: _fontFamily,
     fontSize: 14,
-    fontWeight: FontWeight.w500, // Medium
+    fontWeight: FontWeight.w600, // SemiBold
     letterSpacing: 1.25,
   );
 
-  static TextStyle buttonLarge = GoogleFonts.roboto(
+  static const TextStyle buttonLarge = TextStyle(
+    fontFamily: _fontFamily,
     fontSize: 16,
-    fontWeight: FontWeight.w500, // Medium
+    fontWeight: FontWeight.w600, // SemiBold
     letterSpacing: 1.25,
   );
 }
