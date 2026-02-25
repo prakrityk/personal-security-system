@@ -1,17 +1,18 @@
-// lib/features/home/general_home_screen.dart
-
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:safety_app/core/navigation/role_based_navigation_config.dart';
 import 'package:safety_app/core/providers/auth_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:safety_app/models/user_model.dart';
 import 'package:safety_app/features/home/widgets/role_based_bottom_nav_bar.dart';
 import 'package:safety_app/features/home/home_app_bar.dart';
-import 'package:safety_app/models/user_model.dart';
 import 'package:safety_app/services/notification_service.dart';
 import 'sos/screens/sos_home_screen.dart';
 import 'map/screens/live_location_screen.dart';
 import 'safety/screens/safety_settings_screen.dart';
 import 'family/screens/smart_family_list_screen.dart';
+import 'package:safety_app/features/voice_activation/services/sos_listen_service.dart';
 
 class GeneralHomeScreen extends ConsumerStatefulWidget {
   const GeneralHomeScreen({super.key});
@@ -22,10 +23,11 @@ class GeneralHomeScreen extends ConsumerStatefulWidget {
 
 class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
   int _currentIndex = 0;
+  final SOSListenService _sosService = SOSListenService();
   bool _isLoadingRole = false;
   bool _fcmTokenRegistered = false;
 
-  final Map<String, Widget> _screenMap = const {
+  final Map<String, Widget> _screenMap =  { //const{}
     'sos': SosHomeScreen(),
     'family': SmartFamilyListScreen(),
     'safety': SafetySettingsScreen(),
@@ -37,6 +39,7 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAndLoadRole();
+      // _initSOSListener();
     });
   }
 
@@ -97,6 +100,70 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
     }
   }
 
+
+  /// ✅ Initialize SOS listener if user is logged in and voice is registered
+  // void _initSOSListener() {
+  //   WidgetsBinding.instance.addPostFrameCallback((_) {
+  //     final user = ref.read(authStateProvider).value;
+  //     _startListeningIfEligible(user);
+  //   });
+  // }
+
+  // /// ✅ Start listener only if user exists, voice registered, and not already listening
+  // void _startListeningIfEligible(UserModel? user) {
+  //   if (user != null &&
+  //       user.isVoiceRegistered &&
+  //       !_sosService.isCurrentlyListening) {
+  //     _startSOSListening(user);
+  //   } else if (user != null && !user.isVoiceRegistered) {
+  //     print("ℹ️ Voice not registered → SOS not started");
+  //   }
+  // }
+
+  // Future<void> _startSOSListening(UserModel user) async {
+  //   final int? userId = int.tryParse(user.id);
+  //   if (userId == null) return;
+
+  //   // ✅ Ask microphone permission
+  //   var status = await Permission.microphone.status;
+  //   if (!status.isGranted) {
+  //     status = await Permission.microphone.request();
+  //     if (!status.isGranted) {
+  //       print("⚠️ Mic permission denied");
+  //       if (mounted) {
+  //         ScaffoldMessenger.of(context).showSnackBar(
+  //           const SnackBar(content: Text("Microphone needed for SOS")),
+  //         );
+  //       }
+  //       return;
+  //     }
+  //   }
+
+  //   await Future.delayed(const Duration(milliseconds: 500));
+
+  //   print("👤 SOS Listener started for user: $userId");
+
+  //   await _sosService.startListening(
+  //     userId: userId,
+  //     onSOSConfirmed: () {
+  //       if (!mounted) return;
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         const SnackBar(
+  //           content: Text(" SOS ACTIVATED!"),
+  //           backgroundColor: Colors.red,
+  //         ),
+  //       );
+  //     },
+  //     onStatusChange: (status) => print(" SOS Status: $status"),
+  //   );
+  // }
+
+  @override
+  void dispose() {
+    _sosService.stopListening();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final userState = ref.watch(authStateProvider);
@@ -137,9 +204,20 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
       });
     }
 
+    // ✅ React to login changes dynamically
+  //   ref.listen<AsyncValue<UserModel?>>(authStateProvider, (previous, next) {
+  //   final user = next.value;
+  //   if (user != null &&
+  //       user.isVoiceRegistered &&
+  //       !_sosService.isCurrentlyListening) {
+  //     _startSOSListening(user);
+  //   }
+  // });
+
     return Scaffold(
-      // Only show app bar for Home tab (index 0)
-      appBar: _currentIndex == 0 ? const HomeAppBar() : null,
+      appBar: _currentIndex == 0
+          ? const HomeAppBar()
+          : null,
       body: Stack(
         children: [
           // Main Content
@@ -152,16 +230,11 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
           Positioned(
             left: 0,
             right: 0,
-            bottom: MediaQuery.of(context).padding.bottom,
-            child: SafeArea(
-              top: false,
-              child: RoleBasedBottomNavBar(
-                currentIndex: _currentIndex,
-                navigationItems: navItems,
-                onTap: (index) {
-                  setState(() => _currentIndex = index);
-                },
-              ),
+            bottom: 0,
+            child: RoleBasedBottomNavBar(
+              currentIndex: _currentIndex,
+              navigationItems: navItems,
+              onTap: (index) => setState(() => _currentIndex = index),
             ),
           ),
         ],

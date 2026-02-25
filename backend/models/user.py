@@ -45,6 +45,8 @@ class User(Base):
     # Guardian users must enable biometric authentication
     # Personal users can optionally enable it
     biometric_enabled = Column(Boolean, default=False, nullable=False)
+    is_voice_registered = Column(Boolean, default=False, nullable=False)
+
     
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -61,11 +63,11 @@ class User(Base):
         secondary="user_roles",
         back_populates="users"
     )
-    evidences = relationship(
-        "Evidence",
-        back_populates="user",
-        cascade="all, delete-orphan"
-    )
+    # evidences = relationship(
+    #     "Evidence",
+    #     back_populates="user",
+    #     cascade="all, delete-orphan"
+    # )
 
     def __repr__(self):
         return f"<User(id={self.id}, firebase_uid={self.firebase_uid}, email={self.email}, full_name={self.full_name}, biometric_enabled={self.biometric_enabled})>"

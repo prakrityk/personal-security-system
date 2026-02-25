@@ -15,9 +15,11 @@ from api.routes import emergency_contact
 from api.routes import guardian_auto_contacts
 from api.routes import device
 from api.routes import sos
+from api.routes import voice
+
 
 from contextlib import asynccontextmanager
-from api.routes import evidence_routes
+import os  # ADD THIS
 
 
 # Import Firebase service
@@ -52,22 +54,35 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Configure CORS
+# ✅ FIXED CORS - Allow ngrok URLs
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify your Flutter app domains
+    allow_origins=[
+        "*",  # For testing - remove in production
+        "http://localhost:5000",
+        "http://127.0.0.1:5000",
+        "http://localhost:8000",
+        "https://isaias-nonfermented-odorously.ngrok-free.dev",  # Your CURRENT ngrok URL
+        "https://*.ngrok-free.dev",  # Allow all ngrok URLs (wildcard)
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
+# ✅ FIXED: Use absolute path for uploads directory
+# Get the directory where this file is located
+BASE_DIR = Path(__file__).resolve().parent
+UPLOAD_DIR = BASE_DIR / "uploads"
+
 # Create uploads directory if it doesn't exist
-UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+# Mount static files with absolute path
+app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
-print("✅ Static files mounted at /uploads")
+print(f"✅ Static files mounted from: {UPLOAD_DIR}")
 
 @app.get("/")
 def root():
@@ -94,12 +109,14 @@ from api.routes import auth,guardian,dependent,pending_dependent
 
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(pending_dependent.router, prefix="/api/pending-dependent", tags=["Pending Dependent"])
+app.include_router(voice.router, prefix="/api/voice", tags=["Voice Activation"])
 app.include_router(guardian.router,prefix="/api/guardian",tags=["guardian"])
 app.include_router(dependent.router,prefix="/api/dependent",tags=["dependent"])
 app.include_router(emergency_contact.router, prefix="/api", tags=["emergency"]) 
 app.include_router(guardian_auto_contacts.router, prefix="/api/guardian", tags=["guardian_auto_contacts"])  
 app.include_router(device.router, prefix="/api", tags=["devices"])
 app.include_router(sos.router, prefix="/api", tags=["sos"])
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(

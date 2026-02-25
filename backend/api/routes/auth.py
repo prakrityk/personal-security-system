@@ -11,6 +11,8 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
+import random
+from models.user_voices import UserVoice
 import asyncio
 import logging
 # Add these with your existing imports
@@ -586,6 +588,9 @@ def login_user(
         email=user.email,
         full_name=user.full_name,
         phone_number=user.phone_number,
+        is_voice_registered=bool(
+         db.query(UserVoice).filter(UserVoice.user_id == user.id).count() >= 3
+        ),
         roles=user_roles
     )
     
@@ -722,6 +727,7 @@ def get_current_user_info(
         profile_picture=current_user.profile_picture,       # ✅ was missing
         biometric_enabled=current_user.biometric_enabled,   # ✅ was missing
         roles=user_roles,
+        is_voice_registered=current_user. is_voice_registered,
     )
 # =====================================================
 # 🔐 BIOMETRIC & ROLE ASSIGNMENT (MODIFIED)

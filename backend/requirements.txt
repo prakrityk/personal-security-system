@@ -40,4 +40,11 @@ pytest-asyncio==0.23.3
 python-dotenv
 psycopg2-binary
 
+
+# fro voice 
+librosa== 0.11.0
+numpy==2.3.5
+scipy==1.17.0
+
+
 firebase-admin==6.4.0

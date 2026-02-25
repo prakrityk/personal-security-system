@@ -1,15 +1,20 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:convert'; // ADD THIS for JSON encoding/decoding
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:go_router/go_router.dart';
+import 'package:dio/dio.dart';
 
 import '../core/network/api_endpoints.dart';
 import '../core/network/dio_client.dart';
+import '../features/home/sos/screens/sos_alert_detail_screen.dart';
+import '../main.dart'; // Import navigatorKey
 
 // ==============================
 // BACKGROUND MESSAGE HANDLER
@@ -35,7 +40,7 @@ class NotificationService {
   static final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   static final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
-  static final DioClient _dioClient = DioClient();
+  static late final DioClient _dioClient;
 
   static bool _isFlutterLocalNotificationsInitialized = false;
 
@@ -60,6 +65,9 @@ class NotificationService {
   static Future<void> init() async {
     try {
       debugPrint('📱 Initializing NotificationService');
+      
+      // Initialize DioClient
+      _dioClient = DioClient();
 
       // 1. Set background message handler
       FirebaseMessaging.onBackgroundMessage(
@@ -75,12 +83,8 @@ class NotificationService {
       // 4. Setup message handlers for different app states
       await _setupMessageHandlers();
 
-      // 5. Get and save FCM token
-      final token = await _messaging.getToken();
-      if (token != null) {
-        await _saveTokenLocally(token);
-        debugPrint('🔥 FCM Token: $token');
-      }
+      // 5. Check for token changes and register
+      await _checkAndRegisterToken();
 
       // 6. Setup token refresh listener
       _setupTokenRefreshListener();
@@ -93,10 +97,75 @@ class NotificationService {
   }
 
   // ==============================
+  // TOKEN CHANGE DETECTION
+  // ==============================
+  static Future<void> _checkAndRegisterToken() async {
+    try {
+      final currentToken = await _messaging.getToken();
+      if (currentToken == null) {
+        debugPrint('❌ No FCM token available');
+        return;
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      final oldToken = prefs.getString(_tokenKey);
+      final sentToken = prefs.getString(_tokenSentKey);
+
+      debugPrint('🔍 Token check:');
+      debugPrint('   Current token: ${currentToken.substring(0, 20)}...');
+      debugPrint('   Old token: ${oldToken?.substring(0, 20)}...');
+      debugPrint('   Sent token: ${sentToken?.substring(0, 20)}...');
+
+      // If token changed, delete old one from backend
+      if (oldToken != null && oldToken != currentToken) {
+        debugPrint('🔄 Token changed! Deleting old token...');
+        await _deleteOldToken(oldToken);
+      }
+
+      // Save current token locally
+      await prefs.setString(_tokenKey, currentToken);
+
+      // Register if needed
+      if (sentToken != currentToken) {
+        await registerDeviceToken();
+      } else {
+        debugPrint('✅ Token already registered');
+      }
+    } catch (e) {
+      debugPrint('❌ Error in token check: $e');
+    }
+  }
+
+  static Future<void> _deleteOldToken(String oldToken) async {
+    try {
+      debugPrint('🗑️ Attempting to delete old token from backend...');
+      
+      // Try to delete the old token
+      await _dioClient.post(
+        '/api/devices/remove-token',
+        data: {'fcm_token': oldToken},
+      );
+      
+      debugPrint('✅ Old token deleted successfully');
+      
+      // Clear the sent flag so new token will be registered
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_tokenSentKey);
+      
+    } catch (e) {
+      // If it fails (token already expired, etc.), just log and continue
+      debugPrint('⚠️ Could not delete old token (may already be expired): $e');
+      
+      // Still clear the sent flag
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_tokenSentKey);
+    }
+  }
+
+  // ==============================
   // PERMISSION HANDLING
   // ==============================
   static Future<void> _requestPermission() async {
-    // Request FCM permissions (iOS and some Android versions)
     final settings = await _messaging.requestPermission(
       alert: true,
       badge: true,
@@ -106,7 +175,6 @@ class NotificationService {
 
     debugPrint('📋 FCM Permission: ${settings.authorizationStatus}');
 
-    // Request Android 13+ runtime notification permission
     if (Platform.isAndroid) {
       final status = await Permission.notification.status;
       if (status.isDenied || status.isRestricted) {
@@ -126,7 +194,6 @@ class NotificationService {
   static Future<void> setupFlutterNotifications() async {
     if (_isFlutterLocalNotificationsInitialized) return;
 
-    // Initialize local notifications
     const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosInit = DarwinInitializationSettings(
       requestAlertPermission: true,
@@ -140,9 +207,9 @@ class NotificationService {
         iOS: iosInit,
       ),
       onDidReceiveNotificationResponse: _onNotificationTap,
+      onDidReceiveBackgroundNotificationResponse: _onNotificationTap,
     );
 
-    // Create Android notification channels
     final android = _localNotifications
         .resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin
@@ -225,8 +292,6 @@ class NotificationService {
       debugPrint('   Title: ${message.notification?.title}');
       debugPrint('   Body: ${message.notification?.body}');
       debugPrint('   Data: ${message.data}');
-
-      // ✅ CRITICAL: Display the notification
       showNotification(message);
     });
 
@@ -235,15 +300,133 @@ class NotificationService {
       debugPrint('🔔 Background message opened');
       debugPrint('   Title: ${message.notification?.title}');
       debugPrint('   Data: ${message.data}');
-      _handleBackgroundMessage(message);
+      _handleNotificationNavigation(message.data);
     });
 
     // 3. TERMINATED: Handle app launch from terminated state via notification
     final initialMessage = await _messaging.getInitialMessage();
     if (initialMessage != null) {
       debugPrint('🔔 App opened from terminated state');
-      _handleBackgroundMessage(initialMessage);
+      _handleNotificationNavigation(initialMessage.data);
     }
+  }
+
+  // ==============================
+  // NOTIFICATION TAP HANDLER
+  // ==============================
+  static void _onNotificationTap(NotificationResponse response) {
+    debugPrint('👉 Notification tapped from system tray: ${response.payload}');
+    
+    if (response.payload != null) {
+      final eventId = int.tryParse(response.payload!);
+      if (eventId != null) {
+        // ✅ Retrieve the full stored data from SharedPreferences
+        SharedPreferences.getInstance().then((prefs) {
+          final storedData = prefs.getString('notification_data_$eventId');
+          if (storedData != null) {
+            try {
+              final Map<String, dynamic> fullData = jsonDecode(storedData);
+              debugPrint('📦 Retrieved full notification data for event $eventId: $fullData');
+              _handleNotificationNavigation(fullData);
+            } catch (e) {
+              debugPrint('❌ Error parsing stored data: $e');
+              _navigateToSosDetail(eventId: eventId);
+            }
+          } else {
+            debugPrint('⚠️ No stored data found for event $eventId, using fallback');
+            _navigateToSosDetail(eventId: eventId);
+          }
+        });
+      }
+    }
+  }
+
+  static void _handleNotificationNavigation(Map<String, dynamic> data) {
+    debugPrint('🔔 ========== NOTIFICATION TAPPED ==========');
+    debugPrint('🔔 Raw notification data: $data');
+    
+    // Check voice URL specifically
+    final voiceMessageUrl = data['voice_message_url']?.toString();
+    debugPrint('🔊 Voice URL from notification: "$voiceMessageUrl"');
+    
+    final type = data['type'];
+    final eventId = data['event_id'] != null ? int.tryParse(data['event_id'].toString()) : null;
+    
+    // ✅ FIX: Get the actual dependent name, not the notification title
+    final dependentName = data['dependent_name']?.toString() ?? 'Unknown';
+    
+    final lat = data['lat'] != null ? double.tryParse(data['lat'].toString()) : null;
+    final lng = data['lng'] != null ? double.tryParse(data['lng'].toString()) : null;
+    final triggerTypeStr = data['trigger_type']?.toString() ?? 'manual';
+    
+    debugPrint('📛 Dependent name from data: "$dependentName"');
+    debugPrint('📍 Location: lat=$lat, lng=$lng');
+    debugPrint('🎤 Voice URL present: ${voiceMessageUrl != null && voiceMessageUrl.isNotEmpty}');
+    
+    SosTriggerType triggerType;
+    switch (triggerTypeStr) {
+      case 'motion':
+        triggerType = SosTriggerType.motion;
+        break;
+      case 'voice':
+        triggerType = SosTriggerType.voice;
+        break;
+      default:
+        triggerType = SosTriggerType.manual;
+    }
+
+    if ((type == 'SOS_EVENT' || type == 'MOTION_DETECTION') && eventId != null) {
+      debugPrint('✅ Creating SosAlertData with voice URL: "$voiceMessageUrl"');
+      debugPrint('✅ Dependent name: "$dependentName"');
+      
+      final alertData = SosAlertData(
+        dependentName: dependentName,
+        dependentAvatarUrl: '',
+        triggeredAt: DateTime.now(),
+        triggerType: triggerType,
+        sosEventId: eventId,
+        latitude: lat,
+        longitude: lng,
+        voiceMessageUrl: voiceMessageUrl,
+      );
+      
+      _navigateToSosDetailWithData(alertData);
+    } else {
+      debugPrint('❌ Not a valid SOS notification: type=$type, eventId=$eventId');
+    }
+  }
+
+  static void _navigateToSosDetail({required int eventId}) {
+    debugPrint('🚀 Navigating to SosAlertDetailScreen with eventId: $eventId');
+    navigatorKey.currentState?.push(
+      MaterialPageRoute(
+        builder: (context) => SosAlertDetailScreen(
+          alert: SosAlertData(
+            dependentName: 'Loading...',
+            dependentAvatarUrl: '',
+            triggeredAt: DateTime.now(),
+            triggerType: SosTriggerType.manual,
+            sosEventId: eventId,
+          ),
+        ),
+      ),
+    );
+  }
+
+  static void _navigateToSosDetailWithData(SosAlertData alertData) {
+    debugPrint('🚀 Navigating to SosAlertDetailScreen with:');
+    debugPrint('   dependentName: ${alertData.dependentName}');
+    debugPrint('   eventId: ${alertData.sosEventId}');
+    debugPrint('   voiceUrl: ${alertData.voiceMessageUrl}');
+    debugPrint('   hasVoice: ${alertData.voiceMessageUrl != null && alertData.voiceMessageUrl!.isNotEmpty}');
+    
+    navigatorKey.currentState?.push(
+      MaterialPageRoute(
+        builder: (context) => SosAlertDetailScreen(
+          alert: alertData,
+        ),
+      ),
+    );
   }
 
   // ==============================
@@ -261,8 +444,17 @@ class NotificationService {
 
     debugPrint('📨 Showing notification: $title - $body');
 
-    // Dedupe: if the same SOS/motion notification arrives multiple times in a
-    // very short window, only show it once to the user.
+    // ✅ STORE the full notification data locally for later retrieval
+    if (eventId != null) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('notification_data_$eventId', jsonEncode(message.data));
+        debugPrint('💾 Stored full notification data for event $eventId');
+      } catch (e) {
+        debugPrint('⚠️ Failed to store notification data: $e');
+      }
+    }
+
     final dedupeKey = '$type:$eventId:$title:$body';
     final now = DateTime.now();
     if (_lastNotificationKey == dedupeKey &&
@@ -274,7 +466,6 @@ class NotificationService {
     _lastNotificationKey = dedupeKey;
     _lastNotificationAt = now;
 
-    // Determine channel and priority based on type
     String channelId;
     Importance importance;
     Priority priority;
@@ -329,25 +520,10 @@ class NotificationService {
           presentSound: true,
         ),
       ),
-      payload: eventId,
+      payload: eventId, // Store eventId in payload for navigation
     );
 
     debugPrint('✅ Notification displayed successfully');
-  }
-
-  // ==============================
-  // NAVIGATION HANDLERS
-  // ==============================
-  static void _onNotificationTap(NotificationResponse response) {
-    debugPrint('👉 Notification tapped: ${response.payload}');
-    // TODO: Navigate using GoRouter
-    // Example: navigatorKey.currentState?.push(...)
-  }
-
-  static void _handleBackgroundMessage(RemoteMessage message) {
-    debugPrint('🔔 Handling background message navigation');
-    // TODO: Navigate using GoRouter
-    // Example: navigatorKey.currentState?.push(...)
   }
 
   // ==============================
@@ -360,10 +536,22 @@ class NotificationService {
 
   static void _setupTokenRefreshListener() {
     _messaging.onTokenRefresh.listen((token) async {
+      debugPrint('🔄 FCM token refreshed: ${token.substring(0, 20)}...');
+      
       final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_tokenSentKey);
+      final oldToken = prefs.getString(_tokenKey);
+      
+      // Delete old token if it exists
+      if (oldToken != null && oldToken != token) {
+        await _deleteOldToken(oldToken);
+      }
+      
+      // Save new token
       await prefs.setString(_tokenKey, token);
-      debugPrint('🔄 FCM token refreshed: $token');
+      await prefs.remove(_tokenSentKey);
+      
+      // Register new token
+      await registerDeviceToken();
     });
   }
 
@@ -378,13 +566,13 @@ class NotificationService {
       final prefs = await SharedPreferences.getInstance();
       final sentToken = prefs.getString(_tokenSentKey);
 
-      // Skip if already sent this token
       if (sentToken == token) {
         debugPrint('✅ Token already registered');
         return true;
       }
 
       debugPrint('📤 Registering FCM token with backend...');
+      debugPrint('   Token: ${token.substring(0, 30)}...');
 
       final res = await _dioClient.post(
         ApiEndpoints.deviceRegister,
@@ -402,6 +590,16 @@ class NotificationService {
         debugPrint('❌ Failed to register token: ${res.statusCode}');
         return false;
       }
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 401) {
+        debugPrint('⚠️ Token rejected by backend (may be expired)');
+        // Clear sent flag so we try again later
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(_tokenSentKey);
+      } else {
+        debugPrint('❌ Error registering FCM token: $e');
+      }
+      return false;
     } catch (e, st) {
       debugPrint('❌ Error registering FCM token: $e');
       debugPrint('$st');
@@ -410,7 +608,7 @@ class NotificationService {
   }
 
   // ==============================
-  // TOPIC SUBSCRIPTION (For broadcasts)
+  // TOPIC SUBSCRIPTION
   // ==============================
   static Future<void> subscribeToTopic(String topic) async {
     try {

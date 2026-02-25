@@ -547,6 +547,7 @@ class AuthApiService {
     try {
       final response = await _dioClient.get(ApiEndpoints.me);
       final user = UserModel.fromJson(response.data);
+      print('✅ Fetched current user from API: ${user.isVoiceRegistered}');
 
       // Update stored user data
       await _storage.saveUserData(user.toJson());
@@ -1016,6 +1017,46 @@ class AuthApiService {
       throw Exception('Session expired. Please login again.');
     }
   }
+
+
+  // ============================================================================
+// VOICE REGISTRATION (MERGED FROM AuthService)
+// ============================================================================
+
+Future<bool> uploadVoice({
+  required int userId,
+  required int sampleNumber,
+  required String filePath,
+}) async {
+  try {
+    final formData = FormData.fromMap({
+      'file': await MultipartFile.fromFile(
+        filePath,
+        filename: 'sample_$sampleNumber.wav',
+      ),
+    });
+
+    final response = await _dioClient.post(
+      ApiEndpoints.voiceRegister,
+      data: formData,
+      queryParameters: {
+        'user_id': userId,
+        'sample_number': sampleNumber,
+      },
+    );
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      print('🎤 Voice sample uploaded successfully');
+      return true;
+    } else {
+      print('❌ Failed to upload voice sample: ${response.data}');
+      return false;
+    }
+  } catch (e) {
+    print('❌ Error uploading voice sample: $e');
+    return false;
+  }
+}
   // ============================================================================
   // PERMISSION HELPERS
   // ============================================================================
