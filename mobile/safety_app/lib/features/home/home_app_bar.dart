@@ -134,7 +134,7 @@ class _HomeAppBarState extends ConsumerState<HomeAppBar> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    '$userName',
+                    userName,
                     style: AppTextStyles.h4.copyWith(
                       color: isDark
                           ? AppColors.darkOnSurface
