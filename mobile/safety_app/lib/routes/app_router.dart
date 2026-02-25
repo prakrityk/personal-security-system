@@ -1,5 +1,7 @@
 // lib/routes/app_router.dart
-// ✅ FIXED: Handles AsyncValue.loading() — does not redirect while auth is being restored
+// ✅ MERGED: Combines Firebase auth flow with role-based navigation
+// lib/routes/app_router.dart
+// ✅ MERGED: Combines Firebase auth flow with role-based navigation
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,6 +15,7 @@ import 'package:safety_app/features/auth/screens/registration_screen.dart';
 import 'package:safety_app/features/auth/screens/email_verification_screen.dart';
 import 'package:safety_app/features/home/family/screens/family_member_detail_screen.dart';
 import 'package:safety_app/features/home/general_home_screen.dart';
+import 'package:safety_app/features/home/sos/screens/sos_alert_detail_screen.dart';
 import 'package:safety_app/features/notifications/screens/notification_list_screen.dart';
 import 'package:safety_app/features/onboarding/screens/lets_get_started_screen.dart';
 import 'package:safety_app/features/auth/screens/phone_number_screen.dart';
@@ -49,6 +52,9 @@ class AppRouter {
   static const String dependentTypeSelection = '/dependent-type-selection';
   static const String dependentDetailScreen = '/dependent-detail';
   static const String scanQr = '/scan-qr';
+
+  // SOS Routes
+  static const String sosDetail = '/sos/detail';
 
   /// Create router with role-based navigation
   static GoRouter createRouter(WidgetRef ref) {
@@ -122,7 +128,7 @@ class AppRouter {
           return login;
         }
 
-        // ==================== ONBOARDING FLOWS ====================
+        // ✅ FIX 4: Allow role-specific onboarding flows
         const onboardingFlows = [
           guardianSetup,
           guardianAddDependent,
@@ -138,7 +144,7 @@ class AppRouter {
           return null;
         }
 
-        // ==================== NO ROLE YET ====================
+        // ✅ FIX 5: If authenticated but no role, redirect to role selection
         if (!user.hasRole || user.currentRole == null) {
           if (location == home) {
             print('⚠️ No role but allowing home navigation');
@@ -152,12 +158,13 @@ class AppRouter {
           return null;
         }
 
-        // ==================== AUTHENTICATED WITH ROLE ====================
+        // ✅ FIX 6: Allow authenticated screens
         const allowedScreens = [
           home,
           account,
           editProfile,
           dependentDetailScreen,
+          sosDetail,
         ];
         if (allowedScreens.any((path) => location.startsWith(path))) {
           print('✅ Allowing authenticated screen: $location');
@@ -169,6 +176,84 @@ class AppRouter {
       },
 
       routes: [
+   // ==================== SOS ROUTES ====================
+GoRoute(
+  path: sosDetail,
+  name: 'sosDetail',
+  pageBuilder: (context, state) {
+    final extra = state.extra as Map<String, dynamic>?;
+    
+    debugPrint('🔍 [AppRouter] ========== ROUTER CALLED ==========');
+    debugPrint('🔍 [AppRouter] Extra data: $extra');
+    
+    if (extra != null) {
+      // Check for voice URL specifically
+      final voiceUrl = extra['voiceMessageUrl']?.toString();
+      debugPrint('🔊 [AppRouter] Voice URL from extra: "$voiceUrl"');
+      debugPrint('🔊 [AppRouter] Voice URL exists: ${voiceUrl != null && voiceUrl.isNotEmpty}');
+      
+      // Handle eventId
+      int eventId;
+      if (extra['eventId'] is int) {
+        eventId = extra['eventId'] as int;
+      } else {
+        eventId = int.tryParse(extra['eventId']?.toString() ?? '0') ?? 0;
+      }
+
+      // Handle location
+      double? latitude;
+      if (extra['latitude'] != null) {
+        latitude = double.tryParse(extra['latitude'].toString());
+      }
+
+      double? longitude;
+      if (extra['longitude'] != null) {
+        longitude = double.tryParse(extra['longitude'].toString());
+      }
+
+      final alertData = SosAlertData(
+        dependentName: extra['dependentName']?.toString() ?? 'Unknown',
+        dependentAvatarUrl: extra['dependentAvatarUrl']?.toString() ?? '',
+        triggeredAt: extra['triggeredAt'] is DateTime 
+            ? extra['triggeredAt'] as DateTime 
+            : DateTime.now(),
+        triggerType: extra['triggerType'] ?? SosTriggerType.manual,
+        sosEventId: eventId,
+        latitude: latitude,
+        longitude: longitude,
+        voiceMessageUrl: voiceUrl,
+      );
+      
+      debugPrint('✅ [AppRouter] Created SosAlertData with voice: ${alertData.voiceMessageUrl}');
+      
+      return MaterialPage(
+        key: state.pageKey,
+        child: SosAlertDetailScreen(
+          alert: alertData,
+        ),
+      );
+    }
+    
+    debugPrint('⚠️ [AppRouter] No extra data, using fallback');
+    
+    final eventIdFromQuery = int.tryParse(
+        state.uri.queryParameters['eventId']?.toString() ?? '0'
+    ) ?? 0;
+    
+    return MaterialPage(
+      key: state.pageKey,
+      child: SosAlertDetailScreen(
+        alert: SosAlertData(
+          dependentName: 'Loading...',
+          dependentAvatarUrl: '',
+          triggeredAt: DateTime.now(),
+          triggerType: SosTriggerType.manual,
+          sosEventId: eventIdFromQuery,
+        ),
+      ),
+    );
+  },
+),
         // ==================== NOTIFICATIONS ====================
         GoRoute(
           path: '/notifications',
@@ -180,7 +265,6 @@ class AppRouter {
         ),
 
         // ==================== AUTH FLOW ====================
-
         GoRoute(
           path: splash,
           name: 'splash',
@@ -188,6 +272,7 @@ class AppRouter {
               const MaterialPage(child: SplashScreen(), fullscreenDialog: true),
         ),
 
+        // Login Screen
         GoRoute(
           path: login,
           name: 'login',
@@ -195,6 +280,7 @@ class AppRouter {
               const MaterialPage(child: LoginScreen()),
         ),
 
+        // Let's Get Started Screen
         GoRoute(
           path: letsGetStarted,
           name: 'letsGetStarted',
@@ -202,6 +288,7 @@ class AppRouter {
               const MaterialPage(child: LetsGetStartedScreen()),
         ),
 
+        // Phone Number Screen
         GoRoute(
           path: phoneNumber,
           name: 'phoneNumber',
@@ -209,6 +296,10 @@ class AppRouter {
               const MaterialPage(child: PhoneNumberScreen()),
         ),
 
+        // ✅ OTP Verification Screen (Phone) - FRIEND'S VERSION
+        // Passes verificationId from Firebase
+        // ✅ OTP Verification Screen (Phone) - FRIEND'S VERSION
+        // Passes verificationId from Firebase
         GoRoute(
           path: otpVerification,
           name: 'otpVerification',
@@ -232,6 +323,10 @@ class AppRouter {
           },
         ),
 
+        // ✅ Email Verification Screen - FRIEND'S VERSION
+        // Passes phoneNumber (NOT email) parameter
+        // ✅ Email Verification Screen - FRIEND'S VERSION
+        // Passes phoneNumber (NOT email) parameter
         GoRoute(
           path: emailVerification,
           name: 'emailVerification',
@@ -251,6 +346,10 @@ class AppRouter {
           },
         ),
 
+        // ✅ Registration Screen - FRIEND'S VERSION
+        // Passes phoneNumber, email, and password
+        // ✅ Registration Screen - FRIEND'S VERSION
+        // Passes phoneNumber, email, and password
         GoRoute(
           path: registration,
           name: 'registration',
@@ -278,6 +377,7 @@ class AppRouter {
 
         // ==================== ROLE SELECTION ====================
 
+        // Role Intent Screen
         GoRoute(
           path: roleIntent,
           name: 'roleIntent',
@@ -293,7 +393,6 @@ class AppRouter {
           pageBuilder: (context, state) =>
               const MaterialPage(child: AccountScreen()),
         ),
-
         GoRoute(
           path: editProfile,
           name: 'editProfile',
@@ -302,7 +401,6 @@ class AppRouter {
         ),
 
         // ==================== PERSONAL USER FLOW ====================
-
         GoRoute(
           path: personalOnboarding,
           name: 'personalOnboarding',
@@ -311,21 +409,18 @@ class AppRouter {
         ),
 
         // ==================== GUARDIAN FLOW ====================
-
         GoRoute(
           path: guardianSetup,
           name: 'guardianSetup',
           pageBuilder: (context, state) =>
               const MaterialPage(child: GuardianSetupChoiceScreen()),
         ),
-
         GoRoute(
           path: guardianAddDependent,
           name: 'guardianAddDependent',
           pageBuilder: (context, state) =>
               const MaterialPage(child: GuardianAddDependentScreen()),
         ),
-
         GoRoute(
           path: collaboratorJoin,
           name: 'collaboratorJoin',
@@ -334,14 +429,12 @@ class AppRouter {
         ),
 
         // ==================== DEPENDENT FLOW ====================
-
         GoRoute(
           path: dependentTypeSelection,
           name: 'dependentTypeSelection',
           pageBuilder: (context, state) =>
               const MaterialPage(child: DependentTypeSelectionScreen()),
         ),
-
         GoRoute(
           path: scanQr,
           name: 'scanQr',
@@ -353,7 +446,6 @@ class AppRouter {
             );
           },
         ),
-
         GoRoute(
           path: dependentDetailScreen,
           name: 'dependentDetailScreen',
@@ -374,7 +466,6 @@ class AppRouter {
         ),
 
         // ==================== HOME ====================
-
         GoRoute(
           path: home,
           name: 'home',

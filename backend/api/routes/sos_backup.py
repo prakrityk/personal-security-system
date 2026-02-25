@@ -28,9 +28,6 @@ import os
 import uuid
 from fastapi import File, UploadFile, Form
 
-# ✅ NEW: Import S3 service
-from services.s3_service import s3_service
-
 
 router = APIRouter()
 
@@ -55,7 +52,7 @@ async def create_sos_with_voice(
 ):
     """
     Unified endpoint for SOS events with optional voice message.
-    - If voice_message provided: uploads to S3, stores URL with event
+    - If voice_message provided: uploads to local/S3, stores URL with event
     - If no voice_message: creates SOS event without voice
     - Sends FCM with voice URL included (if available)
     """
@@ -82,26 +79,29 @@ async def create_sos_with_voice(
     else:
         event_timestamp = datetime.utcnow()
 
-    # Step 1: Handle voice upload to S3 (if present)
+    # Step 1: Handle voice upload FIRST (if present)
     voice_message_url = None
     if voice_message:
         try:
-            # Read file content
-            file_content = await voice_message.read()
-            
-            # Generate filename
+            # Generate unique filename
             filename = f"voice_{uuid.uuid4().hex[:16]}.aac"
             
-            # ✅ Upload to S3 using our service
-            voice_message_url = s3_service.upload_file(
-                file_content=file_content,
-                filename=filename
-            )
+            # For now, save locally (swap to S3 later)
+            file_path = f"uploads/{filename}"
+            os.makedirs("uploads", exist_ok=True)
             
-            print(f"✅ Voice message saved to S3: {voice_message_url}")
+            # Write file
+            with open(file_path, "wb") as f:
+                f.write(await voice_message.read())
+            
+            # Generate URL
+            base_url = os.getenv("BASE_URL", "http://localhost:8000")
+            voice_message_url = f"{base_url}/uploads/{filename}"
+            
+            print(f"✅ Voice message saved: {voice_message_url}")
             
         except Exception as e:
-            print(f"❌ Voice upload to S3 failed: {e}")
+            print(f"❌ Voice upload failed: {e}")
             # Continue without voice - don't fail the whole SOS
             voice_message_url = None
 
@@ -114,7 +114,7 @@ async def create_sos_with_voice(
         latitude=latitude,
         longitude=longitude,
         event_timestamp=event_timestamp,
-        voice_message_url=voice_message_url,  # Now S3 URL!
+        voice_message_url=voice_message_url,  # Now included!
     )
 
     db.add(event)
@@ -231,7 +231,6 @@ async def create_sos_with_voice(
         voice_message_url=voice_message_url,
     )
 
-
 @router.get("/sos/events/{event_id}")
 async def get_sos_event(
     event_id: int,
@@ -265,7 +264,7 @@ async def get_sos_event(
         "app_state": event.app_state,
         "latitude": event.latitude,
         "longitude": event.longitude,
-        "voice_message_url": event.voice_message_url,  # This is now an S3 URL!
+        "voice_message_url": event.voice_message_url,
         "created_at": event.created_at.isoformat() if event.created_at else None,
         "event_timestamp": event.event_timestamp.isoformat() if event.event_timestamp else None,
     }
