@@ -73,10 +73,20 @@ dependencies:
   record: ^6.2.0
   camera: ^0.11.3
   googleapis_auth: ^2.0.0
+  # permission_handler: ^11.3.1
+  audioplayers: ^6.5.1
+  tflite_flutter: ^0.11.0
+  scidart: ^0.0.2-dev.12
+
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+
+dependency_overrides:
+  record_linux: ^1.0.0
+  record_platform_interface: ^1.2.0
+  tflite_flutter: ^0.11.0
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
@@ -98,6 +108,8 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
     - assets/lottie/
+    - assets/tflite/help_raw_model.tflite
+
 
   # ✅ LOCAL FONTS - Inter Font Family
   fonts:

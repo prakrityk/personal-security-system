@@ -6,6 +6,7 @@ import 'package:safety_app/models/role_info.dart';
 import 'package:safety_app/models/user_model.dart';
 import 'package:safety_app/services/auth_api_service.dart'; // Your service (if still needed)
 
+
 /// Provider for AuthApiService instance (your friend's - for Firebase)
 final authApiServiceProvider = Provider<AuthApiService>((ref) {
   return AuthApiService();
@@ -38,19 +39,7 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<UserModel?>> {
     _loadUser();
   }
 
-  /// Restores the user session on cold start — the Instagram-style persistent login.
-  ///
-  /// Strategy:
-  ///   1. No token in storage → logged out immediately (fast path).
-  ///   2. Token found → restore user from cached JSON → state = logged in.
-  ///      The router sees a non-null user and does NOT redirect to login.
-  ///   3. Background API refresh → updates state with fresh data silently.
-  ///      If the access token expired, DioClient's interceptor auto-refreshes
-  ///      using the refresh token (this is already wired up in dio_client.dart).
-  ///   4. If the background refresh fails for any reason → we keep the cached
-  ///      user in state. The user stays logged in and can retry naturally.
-  ///      Storage is only wiped when the server explicitly rejects the refresh
-  ///      token (handled inside refreshAccessToken()).
+  /// Load current user (your friend's implementation) from local storage
   Future<void> _loadUser() async {
     state = const AsyncValue.loading();
     try {
@@ -113,7 +102,9 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<UserModel?>> {
     }
   }
 
-  /// Refresh user data from API
+  /// Login user and refresh state from backend
+  
+  /// Refresh user data from backend
   /// ✅ MERGED: Keeps your friend's error handling, adds your logging
   Future<void> refreshUser() async {
     print('🔄 AuthProvider: Starting user refresh...');
@@ -123,9 +114,11 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<UserModel?>> {
 
       print('✅ AuthProvider: User refreshed - ${user.fullName}');
       print('   Role: ${user.currentRole?.roleName ?? "No role"}');
+      print('✅ User refreshed. isVoiceRegistered: ${user.isVoiceRegistered}');
 
       state = AsyncValue.data(user);
       print('✅ AuthProvider: State updated successfully');
+      print('✅ User refreshed. isVoiceRegistered: ${user.isVoiceRegistered}');
     } catch (e, stack) {
       print('❌ AuthProvider: Error refreshing user - $e');
       state = AsyncValue.error(e, stack);
@@ -139,107 +132,64 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<UserModel?>> {
     state = AsyncValue.data(user);
   }
 
-  /// Logout user (your friend's implementation - handles Firebase + storage)
+  /// Logout user - clears all data and resets state
   Future<void> logout() async {
     print('🔄 AuthStateNotifier: Starting logout...');
-
     try {
-      // Call service logout (handles backend + storage + Firebase)
+      // Call service logout (handles backend + storage)
       await _authApiService.logout();
+
       // Reset state to null (no user)
       state = const AsyncValue.data(null);
       print('✅ AuthStateNotifier: Logout successful - User state cleared');
-    } catch (e) {
+    } catch (e, stack) {
       // Log error but ALWAYS reset state
       print('⚠️ AuthStateNotifier: Logout error: $e');
+
       // CRITICAL: Reset state to null even on error
+      // This ensures user is logged out in UI even if something failed
       state = const AsyncValue.data(null);
       print('✅ AuthStateNotifier: State reset despite error');
+
       // Don't rethrow - we want logout to always succeed in the UI
+      // The service already handled the actual logout
     }
-  }
-
-  /// ✅ Get access token from SecureStorageService (your feature)
-  /// This matches how your login code saves the token
-  Future<String?> getAccessToken() async {
-    try {
-      debugPrint(
-        '🔍 [AuthProvider] Getting access token from secure storage...',
-      );
-
-      final token = await _storage.getAccessToken();
-
-      if (token != null && token.isNotEmpty) {
-        debugPrint('✅ [AuthProvider] Found access token');
-        debugPrint('   Token preview: ${token.substring(0, 20)}...');
-        return token;
-      } else {
-        debugPrint('⚠️ [AuthProvider] No access token found in secure storage');
-        return null;
-      }
-    } catch (e) {
-      debugPrint('❌ [AuthProvider] Error getting access token: $e');
-      return null;
-    }
-  }
-
-  /// ✅ Update user profile picture (your feature)
-  void updateProfilePicture(String? newProfilePicture) {
-    final currentUser = state.value;
-    if (currentUser == null) {
-      print('⚠️ Cannot update profile picture: No user in state');
-      return;
-    }
-
-    final updatedUser = currentUser.copyWith(profilePicture: newProfilePicture);
-    state = AsyncValue.data(updatedUser);
-    print('✅ Auth Provider: Profile picture updated in state');
-  }
-
-  /// ✅ Update entire user object (your feature)
-  void updateUser(UserModel updatedUser) {
-    state = AsyncValue.data(updatedUser);
-    print('✅ Auth Provider: User data updated');
-  }
-
-  /// ✅ Remove profile picture (your feature)
-  void removeProfilePicture() {
-    updateProfilePicture(null);
-    print('✅ Auth Provider: Profile picture removed');
-  }
-
-  /// ✅ Update user roles (your feature)
-  void updateUserRoles(List<RoleInfo> newRoles) {
-    final currentUser = state.value;
-    if (currentUser == null) {
-      print('⚠️ Cannot update roles: No user in state');
-      return;
-    }
-
-    final updatedUser = currentUser.copyWith(
-      roles: newRoles,
-      updatedAt: DateTime.now(),
-    );
-
-    state = AsyncValue.data(updatedUser);
-    print('✅ Auth Provider: User roles updated');
   }
 
   /// Get current user synchronously (both versions had this)
-  UserModel? get currentUser {
-    return state.value;
-  }
+  UserModel? get currentUser => state.value;
 
-  /// Check if user is logged in (both versions had this)
+  /// Check if user is logged in
   bool get isLoggedIn {
     return state.value != null;
   }
+
+
+  Future<void> updateVoiceRegistrationStatus(bool status) async {
+    final currentUser = state.value;
+    if (currentUser != null) {
+      // Update user object
+      final updatedUser = currentUser.copyWith(isVoiceRegistered: status);
+
+      // Replace state to trigger UI rebuild
+      state = AsyncValue.data(updatedUser);
+      print("✅ Local State Updated: isVoiceRegistered = $status");
+
+      // Optional: sync with backend
+      // try {
+      //   await _authApiService.fetchCurrentUser();
+      // } catch (e) {
+      //   print("⚠️ Background sync failed, but local UI is updated.");
+      // }
+    }
+  }
 }
 
+
+
 /// Provider for auth state
-/// ✅ MERGED: Uses AuthApiService (your friend's) with extended functionality (yours)
 final authStateProvider =
     StateNotifierProvider<AuthStateNotifier, AsyncValue<UserModel?>>((ref) {
-      final authApiService = ref.watch(authApiServiceProvider);
-      return AuthStateNotifier(authApiService);
+      final authService = ref.watch(authServiceProvider);
+      return AuthStateNotifier(authService);
     });

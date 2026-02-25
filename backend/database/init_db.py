@@ -36,6 +36,8 @@ try:
     from models.refresh_token import RefreshToken
     from models.qr_invitation import QRInvitation  # Depends on pending_dependent
     from models.guardian_dependent import GuardianDependent  # Depends on pending_dependent
+    from models.user_voices import UserVoice
+
     from models.evidence import Evidence  #
 
     from models.dependent_safety_settings import DependentSafetySettings
@@ -173,11 +175,12 @@ def verify_tables():
             'users',
             'roles',
             'user_roles',
-            'otp',
-            'pending_dependents',
+            'otps',
+            'pending_dependent',
             'refresh_tokens',
             'qr_invitations',
             'guardian_dependents',
+            'user_voices',
             'devices',
             'sos_events',
         ]

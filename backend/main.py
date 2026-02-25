@@ -15,6 +15,8 @@ from api.routes import emergency_contact
 from api.routes import guardian_auto_contacts
 from api.routes import device
 from api.routes import sos
+from api.routes import voice
+
 
 from contextlib import asynccontextmanager
 from api.routes import evidence_routes
@@ -94,6 +96,7 @@ from api.routes import auth,guardian,dependent,pending_dependent
 
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(pending_dependent.router, prefix="/api/pending-dependent", tags=["Pending Dependent"])
+app.include_router(voice.router, prefix="/api/voice", tags=["Voice Activation"])
 app.include_router(guardian.router,prefix="/api/guardian",tags=["guardian"])
 app.include_router(dependent.router,prefix="/api/dependent",tags=["dependent"])
 app.include_router(emergency_contact.router, prefix="/api", tags=["emergency"]) 

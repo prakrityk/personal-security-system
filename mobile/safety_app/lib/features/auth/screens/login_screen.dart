@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart'; // ✅ Added Riverpod
 import 'package:safety_app/core/widgets/animated_bottom_button.dart';
 import 'package:safety_app/core/widgets/app_text_field.dart';
 import 'package:safety_app/features/auth/widgets/biometric_button.dart';
@@ -13,6 +14,7 @@ import 'package:safety_app/core/storage/secure_storage_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import 'package:safety_app/services/firebase/firebase_auth_service.dart';
+import 'package:safety_app/core/providers/auth_provider.dart';
 import 'package:safety_app/core/providers/auth_provider.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
