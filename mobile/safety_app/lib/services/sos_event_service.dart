@@ -14,20 +14,23 @@ class SosEventService {
   /// Create an SOS event for the current authenticated user.
   ///
   /// Backend derives user_id from the access token (no spoofing).
-  Future<int> createSosEvent({
-    required String triggerType, // "manual" | "motion"
-    required String eventType, // e.g. "panic_button", "possible_fall"
-    String appState = 'foreground', // "foreground" | "background"
-    double? latitude, // ADDED: separate lat parameter
-    double? longitude, // ADDED: separate lng parameter
-    Map<String, double>? location, // kept for backward compatibility
-  }) async {
-    final data = <String, dynamic>{
-      'trigger_type': triggerType,
-      'event_type': eventType,
-      'timestamp': DateTime.now().toUtc().toIso8601String(),
-      'app_state': appState,
-    };
+
+
+  //=============================== WE DONT USE THIS FUNCTION, ONLY CREATE SOS WITH VOICE FROM VOICE MESSAGE SERVICE============================================
+  // Future<int> createSosEvent({
+  //   required String triggerType, // "manual" | "motion"
+  //   required String eventType, // e.g. "panic_button", "possible_fall"
+  //   String appState = 'foreground', // "foreground" | "background"
+  //   double? latitude, // ADDED: separate lat parameter
+  //   double? longitude, // ADDED: separate lng parameter
+  //   Map<String, double>? location, // kept for backward compatibility
+  // }) async {
+  //   final data = <String, dynamic>{
+  //     'trigger_type': triggerType,
+  //     'event_type': eventType,
+  //     'timestamp': DateTime.now().toUtc().toIso8601String(),
+  //     'app_state': appState,
+  //   };
 
     // Handle location - prioritize separate lat/lng params
     if (latitude != null && longitude != null) {
