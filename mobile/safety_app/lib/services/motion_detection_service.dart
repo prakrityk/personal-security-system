@@ -23,7 +23,7 @@ class MotionDetectionService {
   static final MotionDetectionService instance =
       MotionDetectionService._internal();
 
-  late VoiceMessageService _voiceService;  // ✅ Will be initialized with DioClient
+  late VoiceMessageService _voiceMessageService;  // ✅ Will be initialized with DioClient
 
   StreamSubscription<AccelerometerEvent>? _accelerometerSub;
   StreamSubscription? _bgMotionSub;
@@ -39,7 +39,7 @@ class MotionDetectionService {
 
   /// Initialize with DioClient (call this before using)
   void initialize({required DioClient dioClient}) {
-    _voiceService = VoiceMessageService(dioClient: dioClient);
+    _voiceMessageService = VoiceMessageService(dioClient: dioClient);
   }
 
   /// Start listening to motion events and auto-trigger SOS with voice.
@@ -73,7 +73,7 @@ class MotionDetectionService {
 
       try {
         // ✅ Use VoiceMessageService for auto recording (fixed 20s)
-        await _voiceService.startAutoRecordingAndSendSOS(
+        await _voiceMessageService.startAutoRecordingAndSendSOS(
           triggerType: 'motion',
           eventType: 'possible_fall',
           // appState: 'background',
@@ -131,7 +131,7 @@ class MotionDetectionService {
             // lng = position.longitude;
 
             // ✅ Use VoiceMessageService for auto recording (fixed 20s)
-            await _voiceService.startAutoRecordingAndSendSOS(
+            await _voiceMessageService.startAutoRecordingAndSendSOS(
               triggerType: 'motion',
               eventType: 'possible_fall',
               // appState: 'foreground',
@@ -173,7 +173,7 @@ class MotionDetectionService {
   /// Dispose resources
   void dispose() {
     stop();
-    _voiceService.dispose();
+    _voiceMessageService.dispose();
   }
 }
 
