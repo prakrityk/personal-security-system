@@ -151,6 +151,7 @@ class UserResponse(BaseModel):
     profile_picture: Optional[str] = None  
     roles: List[RoleInfo] = []
     biometric_enabled: bool = False  # 🔐 ADDED: Biometric authentication status
+    is_voice_registered: bool =False
     
     class Config:
         from_attributes = True

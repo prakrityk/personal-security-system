@@ -4,8 +4,9 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:sensors_plus/sensors_plus.dart';
+import 'package:safety_app/core/network/dio_client.dart';
 
-import 'sos_event_service.dart';
+import 'voice_message_service.dart';  // ✅ Use VoiceMessageService instead of SosEventService
 import '../background/motion_background_service.dart';
 
 // ─────────────────────────────────────────────
@@ -127,7 +128,7 @@ class MotionDetectionService {
   static final MotionDetectionService instance =
       MotionDetectionService._internal();
 
-  final SosEventService _sosService = SosEventService();
+  late VoiceMessageService _voiceMessageService;  // ✅ Will be initialized with DioClient
 
   // ── Subscriptions ──
   StreamSubscription<AccelerometerEvent>? _accelSub;

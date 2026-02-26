@@ -4,57 +4,44 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:safety_app/core/storage/secure_storage_service.dart';
 import 'package:safety_app/models/role_info.dart';
 import 'package:safety_app/models/user_model.dart';
-import 'package:safety_app/services/auth_api_service.dart'; // Your service (if still needed)
+import 'package:safety_app/services/auth_api_service.dart';
 
-/// Provider for AuthApiService instance (your friend's - for Firebase)
+
+/// Provider for AuthApiService instance
 final authApiServiceProvider = Provider<AuthApiService>((ref) {
   return AuthApiService();
 });
 
-/// Provider for AuthService instance (yours - if needed for other features)
+/// Provider for AuthService instance
 final authServiceProvider = Provider<AuthApiService>((ref) {
   return AuthApiService();
 });
 
-/// Provider for current user (your friend's)
+/// Provider for current user
 final currentUserProvider = FutureProvider<UserModel?>((ref) async {
   final authApiService = ref.watch(authApiServiceProvider);
   return await authApiService.getCurrentUser();
 });
 
-/// Provider to check if user is logged in (your friend's)
+/// Provider to check if user is logged in
 final isLoggedInProvider = FutureProvider<bool>((ref) async {
   final authApiService = ref.watch(authApiServiceProvider);
   return await authApiService.isLoggedIn();
 });
 
 /// State notifier for user authentication state
-/// ✅ MERGED: Uses AuthApiService for auth, adds profile/role management
 class AuthStateNotifier extends StateNotifier<AsyncValue<UserModel?>> {
-  final AuthApiService _authApiService; // Your friend's service for auth
+  final AuthApiService _authApiService;
   final SecureStorageService _storage = SecureStorageService();
 
   AuthStateNotifier(this._authApiService) : super(const AsyncValue.loading()) {
     _loadUser();
   }
 
-  /// Restores the user session on cold start — the Instagram-style persistent login.
-  ///
-  /// Strategy:
-  ///   1. No token in storage → logged out immediately (fast path).
-  ///   2. Token found → restore user from cached JSON → state = logged in.
-  ///      The router sees a non-null user and does NOT redirect to login.
-  ///   3. Background API refresh → updates state with fresh data silently.
-  ///      If the access token expired, DioClient's interceptor auto-refreshes
-  ///      using the refresh token (this is already wired up in dio_client.dart).
-  ///   4. If the background refresh fails for any reason → we keep the cached
-  ///      user in state. The user stays logged in and can retry naturally.
-  ///      Storage is only wiped when the server explicitly rejects the refresh
-  ///      token (handled inside refreshAccessToken()).
+  /// Load current user from local storage on app start
   Future<void> _loadUser() async {
     state = const AsyncValue.loading();
     try {
-      // Step 1: Check for token
       final token = await _storage.getAccessToken();
       if (token == null || token.isEmpty) {
         debugPrint('⚠️ [AuthProvider] No token — user is logged out');
@@ -63,12 +50,8 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<UserModel?>> {
       }
 
       debugPrint('✅ [AuthProvider] Token found — restoring session');
-
-      // Step 2: Attach token to Dio so all subsequent requests are authenticated
       _authApiService.attachTokenToDio(token);
 
-      // Step 3: Restore user from cached JSON immediately.
-      // This makes the router see a logged-in user without waiting for the API.
       final cachedUser = await _authApiService.getCurrentUser();
       if (cachedUser != null) {
         debugPrint(
@@ -76,15 +59,11 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<UserModel?>> {
         );
         state = AsyncValue.data(cachedUser);
       } else {
-        // Token exists but no cached user JSON — unusual, but handle it.
-        // We'll try the API below; if that also fails, log out.
         debugPrint(
           '⚠️ [AuthProvider] Token found but no cached user — will try API',
         );
       }
 
-      // Step 4: Silent background refresh from API.
-      // Wrapped in its own try/catch so a failure NEVER clears the cached state.
       try {
         final freshUser = await _authApiService.fetchCurrentUser();
         debugPrint(
@@ -96,11 +75,8 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<UserModel?>> {
           '⚠️ [AuthProvider] Background API refresh failed: $apiError',
         );
         if (cachedUser != null) {
-          // We already set state to cachedUser above — do nothing.
-          // The user stays logged in with their cached data.
           debugPrint('ℹ️ [AuthProvider] Keeping cached user in state');
         } else {
-          // No cached user AND API failed — cannot confirm session, log out.
           debugPrint(
             '❌ [AuthProvider] No cached user and API failed — logging out',
           );
@@ -113,133 +89,68 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<UserModel?>> {
     }
   }
 
-  /// Refresh user data from API
-  /// ✅ MERGED: Keeps your friend's error handling, adds your logging
+  /// Refresh user data from backend
   Future<void> refreshUser() async {
     print('🔄 AuthProvider: Starting user refresh...');
-
     try {
       final user = await _authApiService.fetchCurrentUser();
-
       print('✅ AuthProvider: User refreshed - ${user.fullName}');
       print('   Role: ${user.currentRole?.roleName ?? "No role"}');
-
+      print('✅ User refreshed. isVoiceRegistered: ${user.isVoiceRegistered}');
       state = AsyncValue.data(user);
-      print('✅ AuthProvider: State updated successfully');
     } catch (e, stack) {
       print('❌ AuthProvider: Error refreshing user - $e');
       state = AsyncValue.error(e, stack);
     }
   }
 
-  /// Update user data directly (your feature)
-  /// ✅ Useful for immediate UI updates after profile edits
+  /// Update user data directly — for immediate UI updates after profile edits
   void updateUserData(UserModel user) {
     print('✅ AuthProvider: Direct state update - ${user.fullName}');
     state = AsyncValue.data(user);
   }
 
-  /// Logout user (your friend's implementation - handles Firebase + storage)
+  /// Logout user - clears all data and resets state
   Future<void> logout() async {
     print('🔄 AuthStateNotifier: Starting logout...');
-
     try {
-      // Call service logout (handles backend + storage + Firebase)
       await _authApiService.logout();
-      // Reset state to null (no user)
       state = const AsyncValue.data(null);
       print('✅ AuthStateNotifier: Logout successful - User state cleared');
-    } catch (e) {
-      // Log error but ALWAYS reset state
+    } catch (e, stack) {
       print('⚠️ AuthStateNotifier: Logout error: $e');
-      // CRITICAL: Reset state to null even on error
       state = const AsyncValue.data(null);
       print('✅ AuthStateNotifier: State reset despite error');
-      // Don't rethrow - we want logout to always succeed in the UI
     }
   }
 
-  /// ✅ Get access token from SecureStorageService (your feature)
-  /// This matches how your login code saves the token
-  Future<String?> getAccessToken() async {
-    try {
-      debugPrint(
-        '🔍 [AuthProvider] Getting access token from secure storage...',
-      );
+  /// Get current user synchronously
+  UserModel? get currentUser => state.value;
 
-      final token = await _storage.getAccessToken();
+  /// Check if user is logged in
+  bool get isLoggedIn => state.value != null;
 
-      if (token != null && token.isNotEmpty) {
-        debugPrint('✅ [AuthProvider] Found access token');
-        debugPrint('   Token preview: ${token.substring(0, 20)}...');
-        return token;
-      } else {
-        debugPrint('⚠️ [AuthProvider] No access token found in secure storage');
-        return null;
-      }
-    } catch (e) {
-      debugPrint('❌ [AuthProvider] Error getting access token: $e');
-      return null;
-    }
-  }
-
-  /// ✅ Update user profile picture (your feature)
-  void updateProfilePicture(String? newProfilePicture) {
+  /// ✅ FIXED: Now persists to secure storage so the gate doesn't re-appear
+  /// after an app restart once registration is complete.
+  Future<void> updateVoiceRegistrationStatus(bool status) async {
     final currentUser = state.value;
-    if (currentUser == null) {
-      print('⚠️ Cannot update profile picture: No user in state');
-      return;
-    }
+    if (currentUser == null) return;
 
-    final updatedUser = currentUser.copyWith(profilePicture: newProfilePicture);
+    final updatedUser = currentUser.copyWith(isVoiceRegistered: status);
+
+    // ✅ Persist to storage — survives app restarts
+    await _storage.saveUserData(updatedUser.toJson());
+
+    // Update in-memory state — triggers router redirect to Home
     state = AsyncValue.data(updatedUser);
-    print('✅ Auth Provider: Profile picture updated in state');
-  }
 
-  /// ✅ Update entire user object (your feature)
-  void updateUser(UserModel updatedUser) {
-    state = AsyncValue.data(updatedUser);
-    print('✅ Auth Provider: User data updated');
-  }
-
-  /// ✅ Remove profile picture (your feature)
-  void removeProfilePicture() {
-    updateProfilePicture(null);
-    print('✅ Auth Provider: Profile picture removed');
-  }
-
-  /// ✅ Update user roles (your feature)
-  void updateUserRoles(List<RoleInfo> newRoles) {
-    final currentUser = state.value;
-    if (currentUser == null) {
-      print('⚠️ Cannot update roles: No user in state');
-      return;
-    }
-
-    final updatedUser = currentUser.copyWith(
-      roles: newRoles,
-      updatedAt: DateTime.now(),
-    );
-
-    state = AsyncValue.data(updatedUser);
-    print('✅ Auth Provider: User roles updated');
-  }
-
-  /// Get current user synchronously (both versions had this)
-  UserModel? get currentUser {
-    return state.value;
-  }
-
-  /// Check if user is logged in (both versions had this)
-  bool get isLoggedIn {
-    return state.value != null;
+    print('🎤 isVoiceRegistered persisted → $status');
   }
 }
 
 /// Provider for auth state
-/// ✅ MERGED: Uses AuthApiService (your friend's) with extended functionality (yours)
 final authStateProvider =
     StateNotifierProvider<AuthStateNotifier, AsyncValue<UserModel?>>((ref) {
-      final authApiService = ref.watch(authApiServiceProvider);
-      return AuthStateNotifier(authApiService);
+      final authService = ref.watch(authServiceProvider);
+      return AuthStateNotifier(authService);
     });
