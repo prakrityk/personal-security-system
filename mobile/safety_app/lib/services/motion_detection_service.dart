@@ -562,9 +562,7 @@ class MotionDetectionService {
         if (_jerkCount >= 2) {
           _jerkCount = 0;
           _lastJerkTime = null;
-          debugPrint(
-            '✊ Double-jerk manual trigger detected → immediate SOS (no wait)',
-          );
+          debugPrint('✊ Double-jerk manual trigger detected → immediate SOS (no wait)');
           if (!_isCooldownActive(now)) {
             // ✅ Cancel ALL pending timers immediately — no delay for demo/testing
             _postImpactTimer?.cancel();
