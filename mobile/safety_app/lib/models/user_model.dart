@@ -76,7 +76,9 @@ class UserModel {
 
   /// Check if user is a dependent
   bool get isDependent =>
-      roles.any((r) => r.roleName.toLowerCase() == 'dependent');
+      roles.any((r) => r.roleName.toLowerCase() == 'dependent' ||
+        r.roleName.toLowerCase() == 'child' ||
+        r.roleName.toLowerCase() == 'elderly');
 
   /// Get primary role name (kept for backward compatibility)
   String? get primaryRole => roles.isNotEmpty ? roles.first.roleName : null;

@@ -18,6 +18,16 @@ class ApiEndpoints {
   // For emulator testing, use: 'http://10.0.2.2:8000/api'
   // For localhost web testing, use: 'http://localhost:8000/api'
 
+
+ // ============================================================================  
+  // LIVE LOCATION ENDPOINT  
+  // ============================================================================  
+  static const String liveLocation = '/location';
+  // ============================================================================
+// ============================================================================
+// 👀 GUARDIAN LIVE LOCATION ENDPOINT
+// ============================================================================
+  static const String guardianLiveLocations = '/guardians_live_locations';
   // ============================================================================
   // 🔥 FIREBASE AUTHENTICATION ENDPOINTS
   // ============================================================================
@@ -27,7 +37,7 @@ class ApiEndpoints {
   static const String completeFirebaseRegistration =
       '/auth/firebase/complete-registration';
 
-  /// Firebase login — used after password reset when normal login fails
+  /// Firebase login — used after password reset when normal login locationfails
   /// Verifies Firebase token, finds user, syncs password, issues JWTs
   static const String firebaseLogin = '/auth/firebase/login';
 
