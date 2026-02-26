@@ -14,7 +14,7 @@ class LocationPayload(BaseModel):
 
 
 class SOSEventCreate(BaseModel):
-    trigger_type: Literal["manual", "motion"] = Field(..., description="What triggered the SOS")
+    trigger_type: Literal["manual", "motion","voice"] = Field(..., description="What triggered the SOS")
     event_type: str = Field(..., min_length=1, max_length=64, description="Specific type of event")
 
     # Optional client context
@@ -27,4 +27,4 @@ class SOSEventCreateResponse(BaseModel):
     status: Literal["success"] = "success"
     event_id: int
     message: str
-
+    voice_message_url: Optional[str] = Field(None, description="URL of the voice message if uploaded")

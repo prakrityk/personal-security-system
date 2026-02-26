@@ -37,12 +37,19 @@ class NotificationHelper:
         dependent_name: str,
         event_type: str,
         event_id: int,
-        location: Optional[Dict[str, float]] = None
+        location: Optional[Dict[str, float]] = None,
+        voice_message_url: Optional[str] = None
     ) -> None:
         """
         Send SOS emergency alert (highest priority)
         Routes to: sos_alerts channel
         """
+        print(f"\n🔥🔥🔥 NOTIFICATION HELPER: send_sos_alert CALLED")
+        print(f"📋 Tokens count: {len(tokens)}")
+        print(f"📋 First few tokens: {[t[:20] + '...' for t in tokens[:3]]}")
+        print(f"📋 Dependent: {dependent_name}, Event ID: {event_id}")
+        print(f"📋 Voice URL: {voice_message_url}")
+        
         title = "🚨 SOS Alert"
         body = f"{dependent_name} triggered SOS ({event_type})"
         
@@ -58,7 +65,16 @@ class NotificationHelper:
             data["lat"] = str(location.get("lat", 0))
             data["lng"] = str(location.get("lng", 0))
         
+        # Add voice message URL if available (optimized flow)
+        if voice_message_url:
+            data["voice_message_url"] = voice_message_url
+            print(f"✅ Added voice URL to notification data")
+        
+        print(f"📦 Final notification data: {data}")
+        
         firebase_service = get_firebase_service()
+        print(f"🔥 Got Firebase service: {firebase_service}")
+        
         firebase_service.send_sos_notification(
             tokens=tokens,
             title=title,
@@ -77,6 +93,7 @@ class NotificationHelper:
         Send acknowledgment notification
         Routes to: security_updates channel
         """
+        print(f"\n🔥 send_sos_acknowledged to {len(tokens)} tokens")
         title = "✅ SOS Acknowledged"
         body = f"{guardian_name} has acknowledged your SOS alert"
         
@@ -105,6 +122,7 @@ class NotificationHelper:
         Send countdown warning before auto-SOS
         Routes to: security_updates channel
         """
+        print(f"\n🔥 send_countdown_warning: {seconds_remaining}s to {len(tokens)} tokens")
         title = "⏰ Auto-SOS Countdown"
         body = f"Auto-SOS will trigger in {seconds_remaining} seconds. Dismiss if safe."
         
@@ -128,12 +146,17 @@ class NotificationHelper:
         tokens: List[str],
         dependent_name: str,
         event_id: int,
-        detection_type: str = "possible_fall"
+        detection_type: str = "possible_fall",
+        voice_message_url: Optional[str] = None
     ) -> None:
         """
         Send motion detection alert
         Routes to: sos_alerts channel (high priority)
         """
+        print(f"\n🔥🔥🔥 NOTIFICATION HELPER: send_motion_detection_alert CALLED")
+        print(f"📋 Tokens count: {len(tokens)}")
+        print(f"📋 Dependent: {dependent_name}, Event ID: {event_id}")
+        
         title = "🚨 Motion Detection Alert"
         body = f"{dependent_name}: Possible fall detected"
         
@@ -144,6 +167,11 @@ class NotificationHelper:
             "dependent_name": dependent_name,
             "detection_type": detection_type,
         }
+        
+        # Add voice message URL if available (optimized flow)
+        if voice_message_url:
+            data["voice_message_url"] = voice_message_url
+            print(f"✅ Added voice URL to notification data")
         
         firebase_service = get_firebase_service()
         firebase_service.send_sos_notification(
@@ -163,6 +191,7 @@ class NotificationHelper:
         Send tracking service notification (low priority, persistent)
         Routes to: location_tracking channel
         """
+        print(f"\n🔥 send_tracking_notification: {status} to {len(tokens)} tokens")
         title = "📍 Location Tracking"
         body = f"Background tracking is {status}"
         
@@ -190,6 +219,7 @@ class NotificationHelper:
         Send safety status update
         Routes to: security_updates channel
         """
+        print(f"\n🔥 send_safety_status_update to {len(tokens)} tokens")
         title = "🔐 Safety Status"
         body = status_message
         
@@ -218,6 +248,7 @@ class NotificationHelper:
         Send permission reminder
         Routes to: app_system channel
         """
+        print(f"\n🔥 send_permission_reminder: {permission_name} to {len(tokens)} tokens")
         title = "⚙️ Permission Required"
         body = f"Please grant {permission_name} permission for full functionality"
         
@@ -244,6 +275,7 @@ class NotificationHelper:
         Send battery optimization warning
         Routes to: app_system channel
         """
+        print(f"\n🔥 send_battery_warning: {battery_level}% to {len(tokens)} tokens")
         title = "🔋 Battery Optimization"
         body = f"Battery at {battery_level}%. Disable optimization for reliable SOS."
         
@@ -260,50 +292,3 @@ class NotificationHelper:
             data=data
         )
         print(f"📨 Sent battery warning: {battery_level}%")
-
-
-# 🎯 USAGE EXAMPLES:
-
-"""
-# In your SOS endpoint (api/routes/sos.py):
-
-from services.notification_helper import NotificationHelper
-
-# When SOS is triggered:
-NotificationHelper.send_sos_alert(
-    tokens=guardian_tokens,
-    dependent_name="Shastika",
-    event_type="panic_button",
-    event_id=event.id,
-    location={"lat": 27.7172, "lng": 85.3240}
-)
-
-# When guardian acknowledges:
-NotificationHelper.send_sos_acknowledged(
-    tokens=dependent_tokens,
-    guardian_name="Ram Bahadur",
-    event_id=event.id
-)
-
-# Motion detection alert:
-NotificationHelper.send_motion_detection_alert(
-    tokens=guardian_tokens,
-    dependent_name="Shastika",
-    event_id=event.id,
-    detection_type="possible_fall"
-)
-
-# Countdown before auto-SOS:
-NotificationHelper.send_countdown_warning(
-    tokens=dependent_tokens,
-    seconds_remaining=10,
-    event_id=event.id
-)
-
-# Safety status update:
-NotificationHelper.send_safety_status_update(
-    tokens=all_tokens,
-    status_message="All guardians notified successfully",
-    event_id=event.id
-)
-"""
