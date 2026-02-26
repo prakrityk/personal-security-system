@@ -86,28 +86,32 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
   late Animation<double> _fadeAnimation;
 
   bool _acknowledged = false;
-  
+
   // ✅ NEW: Local copy of alert data that can be updated
   late SosAlertData _alertData;
-  
+
   // ✅ NEW: Service for fetching data
   final SosEventService _sosEventService = SosEventService();
-  
+
   // ✅ NEW: Loading state
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    
+
     // Initialize with passed data
     _alertData = widget.alert;
-    
+
     debugPrint('🎤 [SosAlertDetail] ========== SCREEN LOADED ==========');
     debugPrint('🎤 [SosAlertDetail] eventId: ${_alertData.sosEventId}');
-    debugPrint('🎤 [SosAlertDetail] initial dependentName: ${_alertData.dependentName}');
-    debugPrint('🎤 [SosAlertDetail] initial voiceMessageUrl: "${_alertData.voiceMessageUrl}"');
-    
+    debugPrint(
+      '🎤 [SosAlertDetail] initial dependentName: ${_alertData.dependentName}',
+    );
+    debugPrint(
+      '🎤 [SosAlertDetail] initial voiceMessageUrl: "${_alertData.voiceMessageUrl}"',
+    );
+
     // ✅ FETCH the full SOS data from backend
     _fetchSosDetails();
 
@@ -115,7 +119,7 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
-    
+
     _pulseAnimation = Tween<double>(begin: 0.85, end: 1.0).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
@@ -124,15 +128,16 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
       vsync: this,
       duration: const Duration(milliseconds: 600),
     )..forward();
-    
+
     _slideAnimation = Tween<Offset>(
       begin: const Offset(0, 0.08),
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _slideController, curve: Curves.easeOut));
-    
-    _fadeAnimation = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _slideController, curve: Curves.easeOut),
-    );
+
+    _fadeAnimation = Tween<double>(
+      begin: 0,
+      end: 1,
+    ).animate(CurvedAnimation(parent: _slideController, curve: Curves.easeOut));
 
     // Audio listeners
     _audioPlayer.onPlayerStateChanged.listen((state) {
@@ -153,13 +158,13 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
   Future<void> _fetchSosDetails() async {
     try {
       setState(() => _isLoading = true);
-      
+
       final eventId = _alertData.sosEventId;
       debugPrint('📡 Fetching SOS details for event $eventId');
-      
+
       final data = await _sosEventService.getSosEventById(eventId);
       debugPrint('✅ Fetched SOS data: $data');
-      
+
       // Parse trigger type
       SosTriggerType triggerType;
       switch (data['trigger_type']) {
@@ -172,15 +177,15 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
         default:
           triggerType = SosTriggerType.manual;
       }
-      
+
       // Parse latitude/longitude
-      double? latitude = data['latitude'] != null 
-          ? double.tryParse(data['latitude'].toString()) 
+      double? latitude = data['latitude'] != null
+          ? double.tryParse(data['latitude'].toString())
           : null;
-      double? longitude = data['longitude'] != null 
-          ? double.tryParse(data['longitude'].toString()) 
+      double? longitude = data['longitude'] != null
+          ? double.tryParse(data['longitude'].toString())
           : null;
-      
+
       // Parse timestamp
       DateTime triggeredAt = DateTime.now();
       if (data['created_at'] != null) {
@@ -190,7 +195,7 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
           debugPrint('⚠️ Error parsing date: $e');
         }
       }
-      
+
       // ✅ Update local data with fetched values
       setState(() {
         _alertData = _alertData.copyWith(
@@ -203,10 +208,11 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
         );
         _isLoading = false;
       });
-      
+
       debugPrint('🎤 Updated voiceMessageUrl: "${_alertData.voiceMessageUrl}"');
-      debugPrint('🎤 Has voice: ${_alertData.voiceMessageUrl != null && _alertData.voiceMessageUrl!.isNotEmpty}');
-      
+      debugPrint(
+        '🎤 Has voice: ${_alertData.voiceMessageUrl != null && _alertData.voiceMessageUrl!.isNotEmpty}',
+      );
     } catch (e) {
       debugPrint('❌ Error fetching SOS details: $e');
       setState(() => _isLoading = false);
@@ -346,15 +352,21 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
   }
 
   Widget _buildAppBar(
-      BuildContext context, _AppAlertColors colors, bool isDark) {
+    BuildContext context,
+    _AppAlertColors colors,
+    bool isDark,
+  ) {
     return SliverAppBar(
       pinned: true,
       backgroundColor: colors.surface,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       leading: IconButton(
-        icon: Icon(Icons.arrow_back_ios_new_rounded,
-            color: colors.onSurface, size: 20),
+        icon: Icon(
+          Icons.arrow_back_ios_new_rounded,
+          color: colors.onSurface,
+          size: 20,
+        ),
         onPressed: () => Navigator.of(context).pop(),
       ),
       title: Text(
@@ -469,7 +481,7 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
                 bgColor: colors.sosRed.withOpacity(0.1),
                 textColor: colors.sosRed,
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               _metaChip(
                 icon: Icons.access_time_rounded,
                 label: _timeAgo(alert.triggeredAt),
@@ -501,12 +513,12 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 14, color: color),
-          const SizedBox(width: 6),
+          const SizedBox(width: 5),
           Text(
             label,
             style: TextStyle(
               color: textColor,
-              fontSize: 13,
+              fontSize: 12,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -555,9 +567,10 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        _alertData.latitude != null && _alertData.longitude != null
+                        _alertData.latitude != null &&
+                                _alertData.longitude != null
                             ? '📍 ${_alertData.latitude!.toStringAsFixed(4)}, '
-                                '${_alertData.longitude!.toStringAsFixed(4)}'
+                                  '${_alertData.longitude!.toStringAsFixed(4)}'
                             : '📍 Location unavailable',
                         style: TextStyle(
                           color: colors.hint,
@@ -568,7 +581,9 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
                       const SizedBox(height: 6),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 5),
+                          horizontal: 12,
+                          vertical: 5,
+                        ),
                         decoration: BoxDecoration(
                           color: colors.primaryGreen.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(12),
@@ -596,7 +611,8 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
   }
 
   Widget _buildVoiceMessagePlayer(_AppAlertColors colors, bool isDark) {
-    final hasAudio = _alertData.voiceMessageUrl != null &&
+    final hasAudio =
+        _alertData.voiceMessageUrl != null &&
         _alertData.voiceMessageUrl!.isNotEmpty;
     final isPlaying = _playerState == PlayerState.playing;
     final progress = _duration.inMilliseconds > 0
@@ -640,10 +656,12 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
                     SliderTheme(
                       data: SliderThemeData(
                         trackHeight: 3,
-                        thumbShape:
-                            const RoundSliderThumbShape(enabledThumbRadius: 6),
-                        overlayShape:
-                            const RoundSliderOverlayShape(overlayRadius: 14),
+                        thumbShape: const RoundSliderThumbShape(
+                          enabledThumbRadius: 6,
+                        ),
+                        overlayShape: const RoundSliderOverlayShape(
+                          overlayRadius: 14,
+                        ),
                         activeTrackColor: colors.primaryGreen,
                         inactiveTrackColor: colors.divider,
                         thumbColor: colors.primaryGreen,
@@ -664,9 +682,10 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
                         Text(
                           _formatTime(_position),
                           style: TextStyle(
-                              color: colors.hint,
-                              fontSize: 12,
-                              fontFamily: 'monospace'),
+                            color: colors.hint,
+                            fontSize: 12,
+                            fontFamily: 'monospace',
+                          ),
                         ),
                         const Spacer(),
                         GestureDetector(
@@ -680,8 +699,7 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
                               shape: BoxShape.circle,
                               boxShadow: [
                                 BoxShadow(
-                                  color:
-                                      colors.primaryGreen.withOpacity(0.35),
+                                  color: colors.primaryGreen.withOpacity(0.35),
                                   blurRadius: 12,
                                   offset: const Offset(0, 4),
                                 ),
@@ -708,9 +726,10 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
                         Text(
                           _formatTime(_duration),
                           style: TextStyle(
-                              color: colors.hint,
-                              fontSize: 12,
-                              fontFamily: 'monospace'),
+                            color: colors.hint,
+                            fontSize: 12,
+                            fontFamily: 'monospace',
+                          ),
                         ),
                       ],
                     ),
@@ -835,10 +854,46 @@ class _WaveformVisual extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const bars = [
-      0.3, 0.5, 0.8, 0.6, 1.0, 0.7, 0.4, 0.9, 0.5, 0.7,
-      0.3, 0.6, 0.8, 0.4, 1.0, 0.6, 0.5, 0.9, 0.3, 0.7,
-      0.5, 0.8, 0.4, 0.6, 1.0, 0.7, 0.3, 0.5, 0.8, 0.6,
-      0.4, 0.9, 0.5, 0.7, 0.3, 0.6, 0.8, 0.4, 1.0, 0.6,
+      0.3,
+      0.5,
+      0.8,
+      0.6,
+      1.0,
+      0.7,
+      0.4,
+      0.9,
+      0.5,
+      0.7,
+      0.3,
+      0.6,
+      0.8,
+      0.4,
+      1.0,
+      0.6,
+      0.5,
+      0.9,
+      0.3,
+      0.7,
+      0.5,
+      0.8,
+      0.4,
+      0.6,
+      1.0,
+      0.7,
+      0.3,
+      0.5,
+      0.8,
+      0.6,
+      0.4,
+      0.9,
+      0.5,
+      0.7,
+      0.3,
+      0.6,
+      0.8,
+      0.4,
+      1.0,
+      0.6,
     ];
 
     return Row(

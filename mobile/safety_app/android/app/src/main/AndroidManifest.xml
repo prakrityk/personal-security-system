@@ -7,32 +7,44 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-    <!-- ✅ Needed for foreground background service with motion detection -->
+    
+    <!-- ✅ Foreground service permissions -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <!-- FIX: specialUse works on all Android versions without extra runtime permissions.
+         health type requires android.permission.BODY_SENSORS on Android 13+ which
+         causes foreground service start to fail silently on many devices. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
+    
+    <!-- ✅ Required on Android 12+ for SENSOR_DELAY_FASTEST -->
+    <uses-permission android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS"/>
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    
+    <!-- FIX: WAKE_LOCK must be declared — required for PowerManager.PARTIAL_WAKE_LOCK in BackTapService -->
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
 
-    
-    <!-- 🔐 Biometric authentication permissions (NEWLY ADDED) -->
+    <!-- FIX: Boot completed — restarts BackTapService after device reboot -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+
+    <!-- 🔐 Biometric authentication permissions -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
     <uses-permission android:name="android.permission.USE_FINGERPRINT"/>
-    
-    
-    <!-- Camera feature (optional - app works without camera) -->
+
+    <!-- Camera feature (optional) -->
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false"/>
-   <!-- Location permissions for SOS feature -->
+
+    <!-- Location permissions for SOS feature -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
 
-    <!-- Add contacts permission --> 
-    <uses-permission android:name="android.permission.READ_CONTACTS"/> 
+    <!-- Contacts permission -->
+    <uses-permission android:name="android.permission.READ_CONTACTS"/>
 
     <application
         android:label="Alibi"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -45,8 +57,7 @@
             
             <meta-data
               android:name="io.flutter.embedding.android.NormalTheme"
-              android:resource="@style/NormalTheme"
-              />
+              android:resource="@style/NormalTheme"/>
             
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
@@ -54,44 +65,66 @@
             </intent-filter>
         </activity>
 
-        <!-- ⚡ Foreground service -->
-    <!-- <service
-        android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
-        android:exported="false"/> -->
-<!-- 🔑 Google Maps API Key -->
-    <meta-data
-        android:name="com.google.android.geo.API_KEY"
-        android:value="AIzaSyASWW9Lw3Zb--EQqPFXF6lzubtzhCHKz2E"/>
+        <!-- 🚨 Native back-tap detection service -->
+        <!-- FIX: foregroundServiceType="specialUse" — works on all Android versions
+             without requiring BODY_SENSORS permission (unlike "health" type).
+             Add android:meta-data for specialUse to explain use case (Play Store requirement). -->
+        <service
+            android:name=".BackTapService"
+            android:foregroundServiceType="specialUse"
+            android:exported="false"
+            android:stopWithTask="false">
+            <!-- stopWithTask="false" ensures service survives app swipe-to-kill -->
+            <meta-data
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="BackTap SOS detection for personal safety emergency alerts"/>
+        </service>
 
-<!-- 🚨 FCM DEFAULT CHANNEL: Use SOS Alerts as default for critical notifications -->
+        <!-- FIX: Boot receiver — restarts BackTapService after phone reboot -->
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+            </intent-filter>
+        </receiver>
+
+        <!-- 🔑 Google Maps API Key -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyASWW9Lw3Zb--EQqPFXF6lzubtzhCHKz2E"/>
+
+        <!-- 🚨 FCM DEFAULT CHANNEL -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
-            android:value="sos_alerts" />
+            android:value="sos_alerts"/>
 
         <!-- 🔔 FCM DEFAULT NOTIFICATION ICON -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_icon"
-            android:resource="@mipmap/ic_launcher" />
+            android:resource="@mipmap/ic_launcher"/>
 
-        <!-- 🎨 FCM DEFAULT NOTIFICATION COLOR (Red for emergency) -->
+        <!-- 🎨 FCM DEFAULT NOTIFICATION COLOR -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_color"
-            android:resource="@android:color/holo_red_dark" />
+            android:resource="@android:color/holo_red_dark"/>
         
         <meta-data
             android:name="flutterEmbedding"
-            android:value="2" />
+            android:value="2"/>
     </application>
     
     <!-- Android 11+ scoped storage -->
     <queries>
         <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <data android:scheme="https" />
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
         </intent>
         <intent>
-            <action android:name="android.intent.action.PICK" />
-            <data android:mimeType="image/*" />
+            <action android:name="android.intent.action.PICK"/>
+            <data android:mimeType="image/*"/>
         </intent>
     </queries>
 </manifest>

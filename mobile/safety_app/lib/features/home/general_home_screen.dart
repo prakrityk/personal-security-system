@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:safety_app/core/navigation/role_based_navigation_config.dart';
 import 'package:safety_app/core/providers/auth_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:safety_app/models/user_model.dart';
 import 'package:safety_app/features/home/widgets/role_based_bottom_nav_bar.dart';
 import 'package:safety_app/features/home/home_app_bar.dart';
@@ -30,6 +29,11 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
   bool _dependentTrackingStarted = false;
 
   final Map<String, Widget> _screenMap = {
+    'sos': const SosHomeScreen(),
+    'family': const SmartFamilyListScreen(),
+    'safety': const SafetySettingsScreen(),
+    'map': const LiveLocationScreen(),
+  final Map<String, Widget> _screenMap = {
     'sos': SosHomeScreen(),
     'family': SmartFamilyListScreen(),
     'safety': SafetySettingsScreen(),
@@ -51,9 +55,21 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
       setState(() => _isLoadingRole = true);
       try {
         await ref.read(authStateProvider.notifier).refreshUser();
+
+        final updatedUser = ref.read(authStateProvider).value;
+
+        if (updatedUser?.isGuardian == true && !_fcmTokenRegistered) {
+          await _registerGuardianNotifications(updatedUser!);
+        }
       } catch (e) {
         debugPrint("❌ Error refreshing user: $e");
       } finally {
+        if (mounted) {
+          setState(() => _isLoadingRole = false);
+        }
+      }
+    } else if (user?.isGuardian == true && !_fcmTokenRegistered) {
+      await _registerGuardianNotifications(user!);
         if (mounted) setState(() => _isLoadingRole = false);
       }
     }
@@ -130,6 +146,10 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
       );
     }
 
+    final navItems = RoleBasedNavigationConfig.getNavigationItemsForRole(
+      roleName,
+    );
+
     final navItems =
         RoleBasedNavigationConfig.getNavigationItemsForRole(roleName);
     final screens = navItems.map((item) => _screenMap[item.route]!).toList();
@@ -141,6 +161,20 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
     }
 
     return Scaffold(
+      appBar: _currentIndex == 0 ? const HomeAppBar() : null,
+
+      body: IndexedStack(
+        index: _currentIndex < screens.length ? _currentIndex : 0,
+        children: screens,
+      ),
+
+      // ✅ FIXED: Proper bottom navigation placement
+      bottomNavigationBar: SafeArea(
+        child: RoleBasedBottomNavBar(
+          currentIndex: _currentIndex,
+          navigationItems: navItems,
+          onTap: (index) => setState(() => _currentIndex = index),
+        ),
       appBar: _currentIndex == 0 ? const HomeAppBar() : null,
       body: Stack(
         children: [

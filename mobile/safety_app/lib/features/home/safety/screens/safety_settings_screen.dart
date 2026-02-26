@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:safety_app/core/providers/shared_providers.dart';
 import 'package:safety_app/core/theme/app_colors.dart';
 import 'package:safety_app/core/theme/app_text_styles.dart';
+import 'package:safety_app/services/motion_detection_gate.dart';
 import '../widgets/safety_toggle_tile.dart';
 import 'package:safety_app/core/providers/auth_provider.dart';
 import 'package:safety_app/features/voice_activation/screens/voice_registration_screen.dart';
@@ -18,27 +20,57 @@ class SafetySettingsScreen extends ConsumerStatefulWidget {
 class _SafetySettingsScreenState extends ConsumerState<SafetySettingsScreen> {
   bool _liveLocation = false;
   bool _motionDetection = false;
-  bool _recordEvidence = false;
+  //bool _recordEvidence = false;
   bool _isVoiceActivationEnabled = false;
+  bool _isLoadingMotion = true; 
 
   late final SOSListenService sosService;
 
   @override
   void initState() {
     super.initState();
-      sosService = SOSListenService(); // ✅ ADD THIS
+    sosService = SOSListenService();
 
-    // 🔹 Refresh user state on screen load to get the latest isVoiceRegistered
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(authStateProvider.notifier).refreshUser();
+       _loadSavedMotionSettings();
     });
   }
+   Future<void> _loadSavedMotionSettings() async {
+    // SharedPreferences instance is available through the Riverpod provider
+    // that was set up in main.dart — read it directly here.
+    final prefs = ref.read(sharedPreferencesProvider);
 
+    final motionEnabled = prefs.getBool(kMotionDetectionEnabled) ?? false;
+
+    if (mounted) {
+      setState(() {
+        _motionDetection = motionEnabled;
+        _isLoadingMotion = false;
+      });
+    }
+
+    debugPrint(
+      '⚙️  [SafetySettingsScreen] Loaded motion toggle: $motionEnabled',
+    );
+  }
+    // ── Toggle handler ────────────────────────────────────────────────────────
+
+  Future<void> _onMotionToggle(bool value) async {
+    // Optimistic UI update
+    setState(() => _motionDetection = value);
+
+    // Persist & let the gate start/stop the service correctly
+    await MotionDetectionGate.instance.setLocalToggle(value, ref);
+
+    debugPrint(
+      '🔧 [SafetySettingsScreen] Motion detection toggled → $value',
+    );
+  }
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // Watch user async state
     final userAsync = ref.watch(authStateProvider);
     final user = userAsync.value;
     final bool isAlreadyRegistered = user?.isVoiceRegistered ?? false;
@@ -51,7 +83,7 @@ class _SafetySettingsScreenState extends ConsumerState<SafetySettingsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header with icon
+              // Header
               Row(
                 children: [
                   Container(
@@ -105,34 +137,27 @@ class _SafetySettingsScreenState extends ConsumerState<SafetySettingsScreen> {
 
               const SizedBox(height: 16),
 
-             
               // 2. Voice Registration Toggle
               SafetyToggleTile(
-                // ✅ Visuals depend ONLY on DB status
-                icon: isAlreadyRegistered ? Icons.check_circle : Icons.mic_outlined,
+                icon: isAlreadyRegistered
+                    ? Icons.check_circle
+                    : Icons.mic_outlined,
                 title: 'Voice Registration',
                 subtitle: isAlreadyRegistered
                     ? 'Voice is successfully registered'
                     : 'Register your voice to activate SOS hands-free',
-                
-                // ✅ Toggle State depends ONLY on DB status
                 isEnabled: isAlreadyRegistered,
-                
                 onToggle: (value) async {
-                  // ✅ Gatekeeper: If DB says true, BLOCK EVERYTHING
                   if (isAlreadyRegistered) {
-                    
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text("Voice registration is already active."),
                         backgroundColor: Colors.blueGrey,
                       ),
                     );
-                    return; // 🛑 STOP HERE
+                    return;
                   }
 
-
-                  // If not registered, allow navigation
                   if (value == true) {
                     final result = await Navigator.push(
                       context,
@@ -140,86 +165,132 @@ class _SafetySettingsScreenState extends ConsumerState<SafetySettingsScreen> {
                         builder: (_) => const VoiceRegistrationScreen(),
                       ),
                     );
-                    
-                    // If they returned with success (true), refresh the provider
+
                     if (result == true) {
-                         await ref.read(authStateProvider.notifier).updateVoiceRegistrationStatus(true);
+                      await ref
+                          .read(authStateProvider.notifier)
+                          .updateVoiceRegistrationStatus(true);
                     }
                   }
                 },
-              ),              const SizedBox(height: 16),
+              ),
 
-//  voice activtion toggle 
+              const SizedBox(height: 16),
+
+              // Voice Activation Toggle
               SafetyToggleTile(
-                    icon: Icons.mic_outlined,
-                    title: 'Voice Activation',
-                    subtitle: 'Enable voice activation for SOS',
-                    isEnabled: _isVoiceActivationEnabled,
-                    onToggle: (value) async {
-                      final user = ref.read(authStateProvider).value;
+                icon: Icons.mic_outlined,
+                title: 'Voice Activation',
+                subtitle: 'Enable voice activation for SOS',
+                isEnabled: _isVoiceActivationEnabled,
+                onToggle: (value) async {
+                  final user = ref.read(authStateProvider).value;
 
-                      // 1️⃣ Must register voice first
-                      if (user == null || user.isVoiceRegistered != true) {
+                  if (user == null || user.isVoiceRegistered != true) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Please register your voice first."),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                    return;
+                  }
+
+                  setState(() => _isVoiceActivationEnabled = value);
+
+                  final int? userId = int.tryParse(user.id);
+                  if (userId == null) return;
+
+                  if (value == true) {
+                    await sosService.startListening(
+                      userId: userId,
+                      onSOSConfirmed: () {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text("Please register your voice first."),
+                            content: Text("🚨 SOS ACTIVATED!"),
                             backgroundColor: Colors.red,
                           ),
                         );
-                        return;
-                      }
-
-                      setState(() => _isVoiceActivationEnabled = value);
-
-                      final int? userId = int.tryParse(user.id);
-                      if (userId == null) return;
-
-                      if (value == true) {
-                        print("🎤 Starting SOS Listener...");
-
-                        await sosService.startListening(
-                          userId: userId,
-                          onSOSConfirmed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text("🚨 SOS ACTIVATED!"),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          },
-                          onStatusChange: (status) => print("SOS: $status"),
-                        );
-                      } else {
-                        print("🛑 Stopping SOS Listener...");
-                        await sosService.stopListening();
-                      }
-                    },
-                  ),
-
+                      },
+                      onStatusChange: (status) => print("SOS: $status"),
+                    );
+                  } else {
+                    await sosService.stopListening();
+                  }
+                },
+              ),
 
               const SizedBox(height: 16),
 
               // 3. Motion Detection Toggle
-              SafetyToggleTile(
-                icon: Icons.sensors_outlined,
-                title: 'Motion Detection',
-                subtitle: 'Alert on unusual movement patterns',
-                isEnabled: _motionDetection,
-                onToggle: (value) => setState(() => _motionDetection = value),
-              ),
-
-              const SizedBox(height: 16),
+   // ── 4. Motion Detection ──────────────────────────────────────
+              _isLoadingMotion
+                  ? const Center(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: CircularProgressIndicator(
+                          color: AppColors.primaryGreen,
+                        ),
+                      ),
+                    )
+                  : SafetyToggleTile(
+                      icon: Icons.sensors_outlined,
+                      title: 'Motion Detection',
+                      subtitle: 'Alert on unusual movement patterns',
+                      isEnabled: _motionDetection,
+                      onToggle: _onMotionToggle,
+                    ),
+              const SizedBox(height: 12),
 
               // 4. Record Evidence Toggle
-              SafetyToggleTile(
-                icon: Icons.videocam_outlined,
-                title: 'Record Evidence',
-                subtitle: 'Auto-record during emergency',
-                isEnabled: _recordEvidence,
-                onToggle: (value) => setState(() => _recordEvidence = value),
+              // SafetyToggleTile(
+              //   icon: Icons.videocam_outlined,
+              //   title: 'Record Evidence',
+              //   subtitle: 'Auto-record during emergency',
+              //   isEnabled: _recordEvidence,
+              //   onToggle: (value) => setState(() => _recordEvidence = value),
+              // ),
+
+              // ── Back-tap info card ──
+              // Always visible — back-tap is always active regardless of toggle
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryGreen.withOpacity(0.07),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: AppColors.primaryGreen.withOpacity(0.25),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.back_hand_outlined,
+                      size: 18,
+                      color: AppColors.primaryGreen,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Tap the back of your phone 5 times to instantly send an SOS alert — works even when the app is closed.',
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: isDark
+                              ? AppColors.darkHint
+                              : AppColors.lightHint,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
 
-              const SizedBox(height: 100), // Space for bottom nav
+              const SizedBox(height: 100),
             ],
           ),
         ),
@@ -227,10 +298,9 @@ class _SafetySettingsScreenState extends ConsumerState<SafetySettingsScreen> {
     );
   }
 
-
   @override
-void dispose() {
-  sosService.stopListening(); // ✅ prevent background mic
-  super.dispose();
-}
+  void dispose() {
+    sosService.stopListening();
+    super.dispose();
+  }
 }
