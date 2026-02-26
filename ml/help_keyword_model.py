@@ -304,7 +304,7 @@ for label, folder in enumerate(["not_help", "help"]):
         continue
 
     for file in os.listdir(folder_path):
-        if file.endswith(".wav"):
+        if file.endswith((".wav", ".mp3", ".ogg")):
             file_path = os.path.join(folder_path, file)
             features = extract_raw(file_path)
             X.append(features)
