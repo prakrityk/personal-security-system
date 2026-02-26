@@ -368,6 +368,12 @@ class PermissionService {
   Future<Map<String, dynamic>> getPermissionSummary() async {
     await refreshUser();
 
+
+    print("🔍 _currentUser: ${_currentUser?.email}");
+    print("🔍 roles: ${_currentUser?.roles.map((r) => r.roleName).toList()}");
+    print("🔍 isDependent: $isDependent");
+    print("🔍 user_type: ${_getUserTypeString()}");
+
     final isPrimary = await isPrimaryGuardian();
     final isCollaborator = await isCollaboratorGuardian();
 

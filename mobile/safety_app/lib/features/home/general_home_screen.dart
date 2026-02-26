@@ -7,11 +7,13 @@ import 'package:safety_app/models/user_model.dart';
 import 'package:safety_app/features/home/widgets/role_based_bottom_nav_bar.dart';
 import 'package:safety_app/features/home/home_app_bar.dart';
 import 'package:safety_app/services/notification_service.dart';
+import 'package:safety_app/services/dependent_foreground_services.dart';
+import 'package:safety_app/features/voice_activation/services/sos_listen_service.dart';
+
 import 'sos/screens/sos_home_screen.dart';
 import 'map/screens/live_location_screen.dart';
 import 'safety/screens/safety_settings_screen.dart';
 import 'family/screens/smart_family_list_screen.dart';
-import 'package:safety_app/features/voice_activation/services/sos_listen_service.dart';
 
 class GeneralHomeScreen extends ConsumerStatefulWidget {
   const GeneralHomeScreen({super.key});
@@ -23,8 +25,10 @@ class GeneralHomeScreen extends ConsumerStatefulWidget {
 class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
   int _currentIndex = 0;
   final SOSListenService _sosService = SOSListenService();
+
   bool _isLoadingRole = false;
   bool _fcmTokenRegistered = false;
+  bool _dependentTrackingStarted = false;
 
   final Map<String, Widget> _screenMap = {
     'sos': const SosHomeScreen(),
@@ -37,43 +41,61 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkAndLoadRole();
+      _initializeUserState();
     });
   }
 
-  Future<void> _checkAndLoadRole() async {
-    final user = ref.read(authStateProvider).value;
+  // 🔥 Unified initialization logic
+  Future<void> _initializeUserState() async {
+    UserModel? user = ref.read(authStateProvider).value;
 
+    // Refresh role if missing
     if (user != null && (!user.hasRole || user.currentRole == null)) {
       setState(() => _isLoadingRole = true);
 
       try {
         await ref.read(authStateProvider.notifier).refreshUser();
-
-        final updatedUser = ref.read(authStateProvider).value;
-
-        if (updatedUser?.isGuardian == true && !_fcmTokenRegistered) {
-          await _registerGuardianNotifications(updatedUser!);
-        }
       } catch (e) {
-        debugPrint('❌ Error loading role: $e');
+        debugPrint("❌ Error refreshing user: $e");
       } finally {
-        if (mounted) {
-          setState(() => _isLoadingRole = false);
-        }
+        if (mounted) setState(() => _isLoadingRole = false);
       }
-    } else if (user?.isGuardian == true && !_fcmTokenRegistered) {
-      await _registerGuardianNotifications(user!);
+
+      user = ref.read(authStateProvider).value;
+    }
+
+    if (user == null) return;
+
+    // 🚀 Start dependent foreground tracking
+    if (user.isDependent && !_dependentTrackingStarted) {
+      _dependentTrackingStarted = true;
+
+      ref
+          .read(dependentForegroundServiceProvider.notifier)
+          .start()
+          .then((_) => debugPrint("📡 Dependent tracking started"))
+          .catchError(
+            (e) => debugPrint("❌ Error starting dependent tracking: $e"),
+          );
+    }
+
+    // 👮 Register guardian FCM
+    if (user.isGuardian && !_fcmTokenRegistered) {
+      await _registerGuardianNotifications(user);
     }
   }
 
   Future<void> _registerGuardianNotifications(UserModel user) async {
     try {
+      debugPrint('👮 Guardian detected: ${user.fullName}');
       await NotificationService.init();
       final success = await NotificationService.registerDeviceToken();
 
       if (success && mounted) {
         setState(() => _fcmTokenRegistered = true);
+        debugPrint('✅ Guardian FCM token registered');
+      } else {
+        debugPrint('⚠️ Guardian FCM registration failed');
       }
     } catch (e, stack) {
       debugPrint('❌ Error registering guardian notifications: $e');
@@ -84,6 +106,12 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
   @override
   void dispose() {
     _sosService.stopListening();
+
+    if (_dependentTrackingStarted) {
+      ref.read(dependentForegroundServiceProvider.notifier).stop();
+      debugPrint("🛑 Dependent tracking stopped");
+    }
+
     super.dispose();
   }
 
@@ -117,21 +145,18 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
 
     if (_currentIndex >= screens.length) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          setState(() => _currentIndex = 0);
-        }
+        if (mounted) setState(() => _currentIndex = 0);
       });
     }
 
     return Scaffold(
       appBar: _currentIndex == 0 ? const HomeAppBar() : null,
-
       body: IndexedStack(
         index: _currentIndex < screens.length ? _currentIndex : 0,
         children: screens,
       ),
 
-      // ✅ FIXED: Proper bottom navigation placement
+      // ✅ Clean SafeArea Bottom Navigation (no Stack)
       bottomNavigationBar: SafeArea(
         child: RoleBasedBottomNavBar(
           currentIndex: _currentIndex,
