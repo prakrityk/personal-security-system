@@ -34,9 +34,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       statusBarIconBrightness: Brightness.dark,
     ),
   );
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   await NotificationService.setupFlutterNotifications();
   await NotificationService.showNotification(message);
@@ -103,13 +101,13 @@ class _SOSAppState extends ConsumerState<SOSApp> {
   @override
   void initState() {
     super.initState();
-    
+
     // ✅ Initialize DioClient
     _dioClient = DioClient();
-    
+
     // ✅ Initialize MotionDetectionService with DioClient
     MotionDetectionService.instance.initialize(dioClient: _dioClient);
-    
+
     _router = AppRouter.createRouter(ref);
     _initNotificationService();
   }
@@ -144,15 +142,22 @@ class _SOSAppState extends ConsumerState<SOSApp> {
 
     // Extract data for SOS alert
     final type = data['type'];
-    final eventId = data['event_id'] != null ? int.tryParse(data['event_id'].toString()) : null;
+    final eventId = data['event_id'] != null
+        ? int.tryParse(data['event_id'].toString())
+        : null;
     final dependentName = data['dependent_name']?.toString() ?? 'Unknown';
-    final lat = data['lat'] != null ? double.tryParse(data['lat'].toString()) : null;
-    final lng = data['lng'] != null ? double.tryParse(data['lng'].toString()) : null;
+    final lat = data['lat'] != null
+        ? double.tryParse(data['lat'].toString())
+        : null;
+    final lng = data['lng'] != null
+        ? double.tryParse(data['lng'].toString())
+        : null;
     final voiceMessageUrl = data['voice_message_url']?.toString();
     final triggerTypeStr = data['trigger_type']?.toString() ?? 'manual';
 
     // Handle SOS alert navigation with full data
-    if ((type == 'SOS_EVENT' || type == 'MOTION_DETECTION') && eventId != null) {
+    if ((type == 'SOS_EVENT' || type == 'MOTION_DETECTION') &&
+        eventId != null) {
       // Convert trigger type
       SosTriggerType triggerType;
       switch (triggerTypeStr) {
@@ -167,15 +172,18 @@ class _SOSAppState extends ConsumerState<SOSApp> {
       }
 
       // Navigate to detail screen with all available data
-      _router.push('/sos/detail', extra: {
-        'eventId': eventId,
-        'dependentName': dependentName,
-        'triggerType': triggerType,
-        'latitude': lat,
-        'longitude': lng,
-        'voiceMessageUrl': voiceMessageUrl,
-        'triggeredAt': DateTime.now(), // Will be refreshed from API
-      });
+      _router.push(
+        '/sos/detail',
+        extra: {
+          'eventId': eventId,
+          'dependentName': dependentName,
+          'triggerType': triggerType,
+          'latitude': lat,
+          'longitude': lng,
+          'voiceMessageUrl': voiceMessageUrl,
+          'triggeredAt': DateTime.now(), // Will be refreshed from API
+        },
+      );
       return;
     }
 
@@ -208,17 +216,22 @@ class _SOSAppState extends ConsumerState<SOSApp> {
   Widget build(BuildContext context) {
     final themeMode = ref.watch(themeModeProvider);
 
-    ref.listen(authStateProvider, (previous, next) async {
-      final user = next.value;
+    ref.listen(authStateProvider, (previous, next) {
+      // Skip token refreshes / flickers — only react to actual login/logout
+      final wasLoggedIn = previous?.value != null;
+      final isLoggedIn = next.value != null;
+      if (wasLoggedIn == isLoggedIn) return;
+
       final prefs = ref.read(sharedPreferencesProvider);
       final enabled = prefs.getBool('motion_detection_enabled') ?? false;
 
-      if (user != null && enabled) {
-        // ✅ Make sure service is initialized before starting
+      if (isLoggedIn && enabled) {
+        // Start only if not already running
         if (!MotionDetectionService.instance.isRunning) {
           MotionDetectionService.instance.start();
         }
-      } else {
+      } else if (!isLoggedIn) {
+        // Only stop on actual logout — not on every auth state change
         MotionDetectionService.instance.stop();
       }
     });

@@ -4,10 +4,10 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:sensors_plus/sensors_plus.dart';
-import 'package:safety_app/core/network/dio_client.dart';
 
-import 'voice_message_service.dart';  // ✅ Use VoiceMessageService instead of SosEventService
 import '../background/motion_background_service.dart';
+import 'voice_message_service.dart';
+import '../core/network/dio_client.dart';
 
 // ─────────────────────────────────────────────
 //  ENUMS & CONSTANTS
@@ -128,7 +128,7 @@ class MotionDetectionService {
   static final MotionDetectionService instance =
       MotionDetectionService._internal();
 
-  late VoiceMessageService _voiceMessageService;  // ✅ Will be initialized with DioClient
+  VoiceMessageService? _voiceService;
 
   // ── Subscriptions ──
   StreamSubscription<AccelerometerEvent>? _accelSub;
@@ -169,6 +169,19 @@ class MotionDetectionService {
   // ─────────────────────────────────────────────
   //  PUBLIC API
   // ─────────────────────────────────────────────
+
+  /// Call once from main.dart before start()
+  void initialize({required DioClient dioClient}) {
+    _voiceService = VoiceMessageService(dioClient: dioClient);
+    debugPrint('✅ MotionDetectionService: initialized');
+  }
+
+  void dispose() {
+    stop();
+    _voiceService?.dispose();
+    _voiceService = null;
+    debugPrint('🗑️ MotionDetectionService: disposed');
+  }
 
   void start() {
     if (_accelSub != null) return;
@@ -563,7 +576,9 @@ class MotionDetectionService {
         if (_jerkCount >= 2) {
           _jerkCount = 0;
           _lastJerkTime = null;
-          debugPrint('✊ Double-jerk manual trigger detected → immediate SOS (no wait)');
+          debugPrint(
+            '✊ Double-jerk manual trigger detected → immediate SOS (no wait)',
+          );
           if (!_isCooldownActive(now)) {
             // ✅ Cancel ALL pending timers immediately — no delay for demo/testing
             _postImpactTimer?.cancel();
@@ -592,15 +607,26 @@ class MotionDetectionService {
   }
 
   Future<void> _fireSos(String appState, String eventType) async {
+    if (_voiceService == null) {
+      debugPrint(
+        '❌ MotionDetectionService not initialized — call initialize() first',
+      );
+      return;
+    }
     try {
-      await _sosService.createSosEvent(
+      debugPrint('🎙️ Starting auto recording + SOS: $eventType ($appState)');
+      await _voiceService!.startAutoRecordingAndSendSOS(
         triggerType: 'motion',
         eventType: eventType,
-        appState: appState,
+        onComplete: (eventId, voiceUrl) {
+          debugPrint('✅ SOS created! Event ID: $eventId, Voice URL: $voiceUrl');
+        },
+        onError: (error) {
+          debugPrint('❌ Failed to create SOS with voice: $error');
+        },
       );
-      debugPrint('✅ SOS event created: $eventType ($appState)');
     } catch (e, st) {
-      debugPrint('❌ Failed to create SOS event: $e');
+      debugPrint('❌ Failed to fire SOS: $e');
       debugPrint(st.toString());
     }
   }
