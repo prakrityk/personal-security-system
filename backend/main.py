@@ -2,39 +2,37 @@
 FastAPI Application - Personal Security System
 Main entry point with Firebase Admin SDK initialization
 """
+
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 from fastapi.middleware.cors import CORSMiddleware
-from api.routes import auth, pending_dependent
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi import Depends
-from api.routes import guardian
-from api.routes import dependent
-from api.routes import emergency_contact
-from api.routes import guardian_auto_contacts
-from api.routes import device
-from api.routes import sos
-from api.routes import voice
-
-
 from contextlib import asynccontextmanager
-from api.routes import evidence_routes
 
+# Import routers
+from api.routes import (
+    auth,
+    pending_dependent,
+    voice,
+    guardian,
+    dependent,
+    emergency_contact,
+    guardian_auto_contacts,
+    device,
+    sos,
+    location, 
+    guardians_live_locations, # ✅ Include location router
+)
 
 # Import Firebase service
 from services.firebase_service import get_firebase_service
 
-# Import routes (you'll add these)
-# from api.routes import auth, guardian, dependent
 
-
+# ========================================================================
+# Lifespan - initialize Firebase on startup
+# ========================================================================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Lifespan event handler
-    Initialize Firebase Admin SDK on startup
-    """
     print("🚀 Starting Personal Security System API...")
     
     # Initialize Firebase Admin SDK
@@ -42,11 +40,12 @@ async def lifespan(app: FastAPI):
     
     print("✅ Application startup complete!")
     yield
-    
     print("👋 Shutting down...")
 
 
-# Create FastAPI app with lifespan
+# ========================================================================
+# Create FastAPI app
+# ========================================================================
 app = FastAPI(
     title="Personal Security System API",
     description="Backend API for Personal Security Mobile App with Firebase Authentication",
@@ -54,23 +53,28 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Configure CORS
+# ========================================================================
+# CORS Configuration
+# ========================================================================
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify your Flutter app domains
+    allow_origins=["*"],  # ⚠️ In production, restrict this to your app domains
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Create uploads directory if it doesn't exist
+# ========================================================================
+# Static Files
+# ========================================================================
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
-
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
-
 print("✅ Static files mounted at /uploads")
 
+# ========================================================================
+# Root & Health Check
+# ========================================================================
 @app.get("/")
 def root():
     """Root endpoint - API health check"""
@@ -91,20 +95,28 @@ def health_check():
     }
 
 
-# Include routers
-from api.routes import auth,guardian,dependent,pending_dependent
-
+# ========================================================================
+# Include Routers
+# ========================================================================
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(pending_dependent.router, prefix="/api/pending-dependent", tags=["Pending Dependent"])
 app.include_router(voice.router, prefix="/api/voice", tags=["Voice Activation"])
-app.include_router(guardian.router,prefix="/api/guardian",tags=["guardian"])
-app.include_router(dependent.router,prefix="/api/dependent",tags=["dependent"])
-app.include_router(emergency_contact.router, prefix="/api", tags=["emergency"]) 
-app.include_router(guardian_auto_contacts.router, prefix="/api/guardian", tags=["guardian_auto_contacts"])  
-app.include_router(device.router, prefix="/api", tags=["devices"])
-app.include_router(sos.router, prefix="/api", tags=["sos"])
+app.include_router(guardian.router, prefix="/api/guardian", tags=["Guardian"])
+app.include_router(dependent.router, prefix="/api/dependent", tags=["Dependent"])
+app.include_router(emergency_contact.router, prefix="/api", tags=["Emergency Contact"])
+app.include_router(guardian_auto_contacts.router, prefix="/api/guardian", tags=["Guardian Auto Contacts"])
+app.include_router(device.router, prefix="/api", tags=["Devices"])
+app.include_router(sos.router, prefix="/api", tags=["SOS"])
+app.include_router(location.router, prefix="/api", tags=["Location"])  # ✅ Location endpoints
+app.include_router(guardians_live_locations.router, prefix="/api", tags=["Guardian Live Locations"])  # ✅ Guardian live locations
+
+
+# ========================================================================
+# Run Uvicorn server (only if running directly)
+# ========================================================================
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(
         "main:app",
         host="0.0.0.0",

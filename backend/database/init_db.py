@@ -37,6 +37,7 @@ try:
     from models.qr_invitation import QRInvitation  # Depends on pending_dependent
     from models.guardian_dependent import GuardianDependent  # Depends on pending_dependent
     from models.user_voices import UserVoice
+    from models.live_location import LiveLocation  # ✅ NEW: LiveLocation model
 
     from models.evidence import Evidence  #
 
