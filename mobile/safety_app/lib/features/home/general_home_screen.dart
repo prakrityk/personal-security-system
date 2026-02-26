@@ -12,6 +12,8 @@ import 'sos/screens/sos_home_screen.dart';
 import 'map/screens/live_location_screen.dart';
 import 'safety/screens/safety_settings_screen.dart';
 import 'family/screens/smart_family_list_screen.dart';
+import 'package:safety_app/core/network/dio_client.dart';
+
 import 'package:safety_app/features/voice_activation/services/sos_listen_service.dart';
 
 class GeneralHomeScreen extends ConsumerStatefulWidget {
@@ -23,7 +25,7 @@ class GeneralHomeScreen extends ConsumerStatefulWidget {
 
 class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
   int _currentIndex = 0;
-  final SOSListenService _sosService = SOSListenService();
+  late final SOSListenService _sosService;
   bool _isLoadingRole = false;
   bool _fcmTokenRegistered = false;
 
@@ -37,6 +39,8 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
   @override
   void initState() {
     super.initState();
+        _sosService = SOSListenService(dioClient: DioClient());
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAndLoadRole();
       // _initSOSListener();

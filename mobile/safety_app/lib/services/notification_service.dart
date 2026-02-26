@@ -288,6 +288,10 @@ class NotificationService {
   static Future<void> _setupMessageHandlers() async {
     // 1. FOREGROUND: Handle messages when app is open
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      print('🔥🔥🔥 FOREGROUND NOTIFICATION RECEIVED 🔥🔥🔥');
+      print('Title: ${message.notification?.title}');
+      print('Body: ${message.notification?.body}');
+      print('Data: ${message.data}');
       debugPrint('🔔 Foreground notification received');
       debugPrint('   Title: ${message.notification?.title}');
       debugPrint('   Body: ${message.notification?.body}');

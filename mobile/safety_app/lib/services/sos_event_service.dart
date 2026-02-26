@@ -33,21 +33,21 @@ class SosEventService {
   //   };
 
     // Handle location - prioritize separate lat/lng params
-    if (latitude != null && longitude != null) {
-      data['location'] = {'lat': latitude, 'lng': longitude};
-    } else if (location != null) {
-      data['location'] = {'lat': location['lat'], 'lng': location['lng']};
-    }
+  //   if (latitude != null && longitude != null) {
+  //     data['location'] = {'lat': latitude, 'lng': longitude};
+  //   } else if (location != null) {
+  //     data['location'] = {'lat': location['lat'], 'lng': location['lng']};
+  //   }
 
-    final response = await _dioClient.post(ApiEndpoints.createSosEvent, data: data);
+  //   final response = await _dioClient.post(ApiEndpoints.createSosEvent, data: data);
 
-    // Expected: { status: "success", event_id: <int>, message: "..." }
-    if (response.data is Map && response.data['event_id'] != null) {
-      return response.data['event_id'] as int;
-    }
+  //   // Expected: { status: "success", event_id: <int>, message: "..." }
+  //   if (response.data is Map && response.data['event_id'] != null) {
+  //     return response.data['event_id'] as int;
+  //   }
 
-    throw Exception('Unexpected SOS API response');
-  }
+  //   throw Exception('Unexpected SOS API response');
+  // }
 
   /// ✅ NEW: Get SOS event details by ID
   Future<Map<String, dynamic>> getSosEventById(int eventId) async {

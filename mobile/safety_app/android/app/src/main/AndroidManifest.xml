@@ -54,10 +54,7 @@
             </intent-filter>
         </activity>
 
-        <!-- ⚡ Foreground service -->
-    <service
-        android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
-        android:exported="false"/>
+    
 <!-- 🔑 Google Maps API Key -->
     <meta-data
         android:name="com.google.android.geo.API_KEY"

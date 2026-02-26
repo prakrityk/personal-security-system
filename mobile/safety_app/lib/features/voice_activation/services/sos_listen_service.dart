@@ -5,7 +5,9 @@ import 'package:record/record.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:safety_app/services/voice_service.dart';
 import 'package:safety_app/core/utils/wav_header.dart';
-import 'package:safety_app/services/sos_event_service.dart';
+import 'package:safety_app/services/voice_message_service.dart'; 
+import 'package:safety_app/core/network/dio_client.dart';
+
 
 typedef SOSCallback = void Function();
 typedef StatusCallback = void Function(String status);
@@ -13,7 +15,10 @@ typedef StatusCallback = void Function(String status);
 class SOSListenService {
   final AudioRecorder _recorder = AudioRecorder();
   final VoiceService _voiceService = VoiceService();
-  final SosEventService _sosService = SosEventService();
+ final VoiceMessageService _sosService;
+
+  SOSListenService({required DioClient dioClient})
+      : _sosService = VoiceMessageService(dioClient: dioClient);
 
   Interpreter? _interpreter;
   bool _isListening = false;
@@ -161,7 +166,8 @@ class SOSListenService {
         onConfirmed();
 
         try{
-          await _sosService.createSosEvent(
+          await _sosService.createSosWithVoice(
+            filePath: file.path,           
             triggerType:'voice',
             eventType:'voice_activation',
             appState:'foreground',

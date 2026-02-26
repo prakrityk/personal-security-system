@@ -7,14 +7,14 @@ class ApiEndpoints {
   // ============================================================================
 
   // ✅ CURRENT NGROK URL (updated)
-  static const String baseUrl = 'https://isaias-nonfermented-odorously.ngrok-free.dev/api';
+  // static const String baseUrl = 'https://isaias-nonfermented-odorously.ngrok-free.dev/api';
                                 // https://isaias-nonfermented-odorously.ngrok-free.dev
   
   // ⚠️ IMPORTANT: Update this URL whenever you restart ngrok!
   // The URL changes every time you run 'ngrok http 8000'
   
   // Other options (commented out for reference):
-  // static const String baseUrl = 'http://localhost:8000/api';  // For web testing
+  static const String baseUrl = 'http://localhost:8000/api';  // For web testing
   // static const String baseUrl = 'http://10.0.2.2:8000/api';   // For Android emulator
   // static const String baseUrl = 'http://192.168.1.x:8000/api'; // For physical device on same WiFi
 

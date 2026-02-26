@@ -6,6 +6,8 @@ import '../widgets/safety_toggle_tile.dart';
 import 'package:safety_app/core/providers/auth_provider.dart';
 import 'package:safety_app/features/voice_activation/screens/voice_registration_screen.dart';
 import 'package:safety_app/features/voice_activation/services/sos_listen_service.dart';
+import 'package:safety_app/core/network/dio_client.dart';
+
 
 class SafetySettingsScreen extends ConsumerStatefulWidget {
   const SafetySettingsScreen({super.key});
@@ -26,8 +28,8 @@ class _SafetySettingsScreenState extends ConsumerState<SafetySettingsScreen> {
   @override
   void initState() {
     super.initState();
-      sosService = SOSListenService(); // ✅ ADD THIS
-
+    final dioClient = DioClient(); // or get it from Riverpod/provider if you have one
+    sosService = SOSListenService(dioClient: dioClient);
     // 🔹 Refresh user state on screen load to get the latest isVoiceRegistered
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(authStateProvider.notifier).refreshUser();
