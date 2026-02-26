@@ -3,9 +3,11 @@ import 'dart:typed_data';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:safety_app/services/voice_service.dart';
 import 'package:safety_app/core/utils/wav_header.dart';
-import 'package:safety_app/services/sos_event_service.dart';
+import 'package:safety_app/services/voice_message_service.dart';
+import 'package:safety_app/core/network/dio_client.dart';
 
 typedef SOSCallback = void Function();
 typedef StatusCallback = void Function(String status);
@@ -13,13 +15,12 @@ typedef StatusCallback = void Function(String status);
 class SOSListenService {
   final AudioRecorder _recorder = AudioRecorder();
   final VoiceService _voiceService = VoiceService();
-  final SosEventService _sosService = SosEventService();
+  late final VoiceMessageService _voiceMessageService;
 
   Interpreter? _interpreter;
   bool _isListening = false;
   bool _isVerifying = false;
 
-  // Tracks current state to prevent duplicate starts
   bool get isCurrentlyListening => _isListening;
 
   static const int sampleRate = 16000;
@@ -32,6 +33,12 @@ class SOSListenService {
   DateTime? _firstDetectionTime;
   bool _lastFrameWasPositive = false;
 
+  SOSListenService() {
+    _voiceMessageService = VoiceMessageService(
+      dioClient: DioClient(),
+    );
+  }
+
   Future<void> loadModel(String assetPath) async {
     _interpreter ??= await Interpreter.fromAsset(assetPath);
     print("✅ RAW SOS TFLite model loaded");
@@ -39,6 +46,23 @@ class SOSListenService {
 
   Future<bool> hasPermission() async => await _recorder.hasPermission();
 
+  // ─────────────────────────────────────────────────────────────
+  // LOCATION HELPER (same logic as SosHomeScreen)
+  // ─────────────────────────────────────────────────────────────
+  Future<Position?> _getCurrentLocation() async {
+    try {
+      return await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+    } catch (e) {
+      print('❌ Location error: $e');
+      return null;
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // START LISTENING
+  // ─────────────────────────────────────────────────────────────
   Future<void> startListening({
     required int userId,
     required SOSCallback onSOSConfirmed,
@@ -72,23 +96,23 @@ class SOSListenService {
     stream.listen((Uint8List data) {
       if (!_isListening) return;
 
-      // Convert PCM16 → float [-1,1]
       for (int i = 0; i < data.length; i += 2) {
         int sample = data[i] | (data[i + 1] << 8);
         if (sample > 32767) sample -= 65536;
         buffer.add(sample / 32768.0);
       }
 
-      // Process every 1 second with 50% overlap
       while (buffer.length >= sampleRate) {
         final segment = buffer.sublist(0, sampleRate);
         _runModel(segment, userId, onSOSConfirmed, onStatusChange);
-
         buffer.removeRange(0, sampleRate ~/ 2);
       }
     });
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // MODEL INFERENCE
+  // ─────────────────────────────────────────────────────────────
   void _runModel(
     List<double> samples,
     int userId,
@@ -160,7 +184,7 @@ class SOSListenService {
     try {
       final wavBytes = WavHeader.addHeader(audioSamples);
       final tempDir = await getTemporaryDirectory();
-      final file = File('${tempDir.path}/sos_verify.wav');
+      final file = File('${tempDir.path}/voice_sos.wav');
       await file.writeAsBytes(wavBytes);
 
       bool isVerified = await _voiceService.verifyVoiceSos(
@@ -172,16 +196,27 @@ class SOSListenService {
         onStatusChange?.call("SOS Activated!");
         onConfirmed();
 
-        // try{
-        //   await _sosService.createSosEvent(
-        //     triggerType:'voice',
-        //     eventType:'voice_activation',
-        //     appState:'foreground',
-        //   );
-        //   print(" Voice SOS event created successfully");
-        // } catch (e) {
-        //     print(" Failed to create Voice SOS: $e");
-        //   }
+        // 🔴 GET LOCATION AT TRIGGER TIME
+        final position = await _getCurrentLocation();
+
+        try {
+          final result = await _voiceMessageService.createSosWithVoice(
+            filePath: file.path, // Voice file included
+            triggerType: 'voice',
+            eventType: 'voice_activation',
+            latitude: position?.latitude,
+            longitude: position?.longitude,
+            appState: 'foreground',
+          );
+
+          if (result != null && result['event_id'] != null) {
+            print("✅ Voice SOS event created: ${result['event_id']}");
+          } else {
+            throw Exception("Failed to create Voice SOS");
+          }
+        } catch (e) {
+          print("❌ Failed to create Voice SOS: $e");
+        }
       } else {
         onStatusChange?.call("Voice Mismatch - Ignored");
       }
@@ -192,10 +227,17 @@ class SOSListenService {
     }
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // STOP LISTENING
+  // ─────────────────────────────────────────────────────────────
   Future<void> stopListening() async {
     if (!_isListening) return;
     _isListening = false;
     await _recorder.stop();
-    print(" SOS Listener deactivated and Mic released.");
+    print("🛑 SOS Listener stopped.");
+  }
+
+  void dispose() {
+    _voiceMessageService.dispose();
   }
 }
