@@ -6,8 +6,20 @@ import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
 import '../background/motion_background_service.dart';
+import 'native_back_tap_service.dart';
 import 'voice_message_service.dart';
 import '../core/network/dio_client.dart';
+
+// ─────────────────────────────────────────────
+//  DEBUG TOGGLE
+// ─────────────────────────────────────────────
+
+/// Set to false before releasing to production to silence all sensor logs.
+const bool _enableDebug = true;
+
+void _log(String msg) {
+  if (_enableDebug) debugPrint(msg);
+}
 
 // ─────────────────────────────────────────────
 //  ENUMS & CONSTANTS
@@ -23,7 +35,6 @@ class _Score {
   static const int freeFall = 30;
   static const int postInactivity = 40;
   static const int highRotation = 30;
-  static const int doubleJerk = 25;
   static const int sustainedVibration = 15;
   static const int runningCadence = 20;
 
@@ -52,15 +63,14 @@ class _GyroSample {
 // ─────────────────────────────────────────────
 
 class _ModeThresholds {
-  final double freeFallMax; // m/s²
-  final double impactMin; // m/s²
-  final double postInactivityMax; // m/s²
+  final double freeFallMax;
+  final double impactMin;
+  final double postInactivityMax;
   final double runningPeakMin;
   final double runningPeakMax;
   final int runningMinPeaks;
-  final double gyroThreshold; // rad/s
-  final double
-  tableShakeMax; // below this + no gyro = ignore (anti-table-shake)
+  final double gyroThreshold;
+  final double tableShakeMax;
 
   const _ModeThresholds({
     required this.freeFallMax,
@@ -86,8 +96,8 @@ const Map<UserMode, _ModeThresholds> _thresholds = {
     tableShakeMax: 12.0,
   ),
   UserMode.elderly: _ModeThresholds(
-    freeFallMax: 3.0, // slightly more lenient free-fall detection
-    impactMin: 14.0, // lower impact threshold — elderly fall softer
+    freeFallMax: 3.0,
+    impactMin: 14.0,
     postInactivityMax: 2.0,
     runningPeakMin: 7.0,
     runningPeakMax: 13.0,
@@ -115,12 +125,18 @@ const Map<UserMode, _ModeThresholds> _thresholds = {
 ///
 /// Detection pipeline:
 ///   Sensors (Accel + Gyro)
+///     → Stable gravity baseline (10-sample average)
 ///     → Dynamic gravity filtering (high-pass)
 ///     → Sliding window buffer (2 s)
 ///     → Feature extraction (peaks, cadence, inactivity)
 ///     → 3-phase fall state machine
-///     → Risk scoring engine
+///     → Risk scoring engine (median gyro for robustness)
 ///     → Decision layer (SOS / Guardian alert / Ignore)
+///
+/// Manual trigger (back-tap):
+///   Handled entirely by native Kotlin BackTapService.
+///   NativeBackTapService bridges events here via MethodChannel/EventChannel.
+///   On sosTriggerStream → 2s cancellable confirmation → SOS fires.
 ///
 /// Supports three user modes with different sensitivity profiles.
 class MotionDetectionService {
@@ -130,21 +146,28 @@ class MotionDetectionService {
 
   VoiceMessageService? _voiceService;
 
-  // ── Subscriptions ──
+  // ── Sensor subscriptions (fall detection only) ──
   StreamSubscription<AccelerometerEvent>? _accelSub;
   StreamSubscription<GyroscopeEvent>? _gyroSub;
   StreamSubscription? _bgMotionSub;
+
+  // ── Native back-tap subscriptions ──
+  StreamSubscription? _nativeTapCountSub;
+  StreamSubscription? _nativeSosTriggerSub;
 
   // ── State ──
   MotionState _state = MotionState.idle;
   UserMode userMode = UserMode.normal;
   DateTime? _lastTriggerAt;
-  final int _cooldownMs = 60 * 1000;
+  final int _cooldownMs = 40 * 1000;
 
-  // ── Dynamic gravity filter (high-pass) ──
+  // ── Stable gravity baseline (10-sample warm-up) ──
   static const double _alpha = 0.8;
+  static const int _gravityWarmupSamples = 10;
   double _gravX = 0, _gravY = 0, _gravZ = 0;
   bool _gravityInitialized = false;
+  int _gravityWarmupCount = 0;
+  double _gravWarmX = 0, _gravWarmY = 0, _gravWarmZ = 0;
 
   // ── Sliding window buffers (2 s) ──
   static const int _windowMs = 2000;
@@ -157,12 +180,21 @@ class MotionDetectionService {
   Timer? _postImpactTimer;
   Timer? _inactivitySosTimer;
 
-  // ── Double-jerk detection ──
-  DateTime? _lastJerkTime;
-  int _jerkCount = 0;
+  // ── Back-tap confirmation (2s cancel window) ──
+  // Tap detection is in Kotlin. These handle the confirmation
+  // dialog and cooldown on the Flutter/Dart side only.
+  Timer? _tapConfirmationTimer;
+  bool _tapConfirmationPending = false;
+  final _tapConfirmationController = StreamController<bool>.broadcast();
+  Stream<bool> get tapConfirmationStream => _tapConfirmationController.stream;
+
+  // ── Tap count stream (forwarded from native for UI progress indicator) ──
+  final _tapCountController = StreamController<int>.broadcast();
+  Stream<int> get tapCountStream => _tapCountController.stream;
 
   // ── Running cadence ──
   final List<DateTime> _runningPeakTimes = [];
+  bool _runningDetected = false;
 
   bool get isRunning => _accelSub != null;
 
@@ -170,33 +202,36 @@ class MotionDetectionService {
   //  PUBLIC API
   // ─────────────────────────────────────────────
 
-  /// Call once from main.dart before start()
+  /// Call once from main.dart before start().
   void initialize({required DioClient dioClient}) {
     _voiceService = VoiceMessageService(dioClient: dioClient);
-    debugPrint('✅ MotionDetectionService: initialized');
+    _wireNativeBackTap();
+    _log('✅ MotionDetectionService: initialized');
   }
 
   void dispose() {
     stop();
+    _nativeTapCountSub?.cancel();
+    _nativeSosTriggerSub?.cancel();
+    _tapConfirmationController.close();
+    _tapCountController.close();
     _voiceService?.dispose();
     _voiceService = null;
-    debugPrint('🗑️ MotionDetectionService: disposed');
+    _log('🗑️ MotionDetectionService: disposed');
   }
 
   void start() {
     if (_accelSub != null) return;
-
-    debugPrint(
-      '🎯 MotionDetectionService: starting (${userMode.name} mode)...',
-    );
-
+    _log('🎯 MotionDetectionService: starting (${userMode.name} mode)...');
     _initBackgroundService();
     _startGyroscope();
     _startAccelerometer();
+    // NativeBackTapService is started independently in main.dart on login
+    // so back-tap works even when the motion detection toggle is OFF.
   }
 
   void stop() {
-    debugPrint('🛑 MotionDetectionService: stopping...');
+    _log('🛑 MotionDetectionService: stopping...');
     _accelSub?.cancel();
     _accelSub = null;
     _gyroSub?.cancel();
@@ -205,8 +240,95 @@ class MotionDetectionService {
     _bgMotionSub = null;
     _postImpactTimer?.cancel();
     _inactivitySosTimer?.cancel();
+    _tapConfirmationTimer?.cancel();
+    _tapConfirmationPending = false;
     _state = MotionState.idle;
+    _runningDetected = false;
+    _resetGravityWarmup();
+    // NativeBackTapService is stopped independently in main.dart on logout
+    // so removing it here prevents the gate from killing back-tap when the
+    // motion detection toggle is turned OFF.
     unawaited(stopMotionBackgroundService());
+  }
+
+  // ─────────────────────────────────────────────
+  //  NATIVE BACK-TAP BRIDGE
+  // ─────────────────────────────────────────────
+
+  /// Wires NativeBackTapService streams into this service.
+  /// Called once from initialize(). Subscriptions live for the app lifetime.
+  void _wireNativeBackTap() {
+    // Forward tap count to UI (shows "tap 1/5, 2/5..." progress indicator)
+    _nativeTapCountSub = NativeBackTapService.instance.tapCountStream.listen(
+      (count) => _tapCountController.add(count),
+    );
+
+    // SOS trigger from Kotlin → 2s confirmation window → fire SOS
+    _nativeSosTriggerSub = NativeBackTapService.instance.sosTriggerStream
+        .listen((_) {
+          final now = DateTime.now();
+
+          if (_isCooldownActive(now)) {
+            _log('🚫 Native back-tap SOS blocked — cooldown active');
+            return;
+          }
+          if (_tapConfirmationPending) {
+            _log(
+              '🚫 Native back-tap SOS blocked — confirmation already pending',
+            );
+            return;
+          }
+
+          _log(
+            '👆👆👆👆👆 Native back-tap received → 2s confirmation window...',
+          );
+
+          _tapConfirmationPending = true;
+          _tapConfirmationController.add(true); // UI: show cancel snackbar
+
+          _tapConfirmationTimer?.cancel();
+          _tapConfirmationTimer = Timer(const Duration(milliseconds: 2000), () {
+            if (!_tapConfirmationPending) return;
+            _tapConfirmationPending = false;
+            _tapConfirmationController.add(false); // UI: hide cancel snackbar
+
+            if (_isCooldownActive(DateTime.now())) return;
+
+            _log('🚨 Back-tap SOS confirmed → firing');
+            _postImpactTimer?.cancel();
+            _inactivitySosTimer?.cancel();
+            _state = MotionState.idle;
+            _runningDetected = false;
+            _lastTriggerAt = DateTime.now();
+            unawaited(_fireSos('foreground', 'back_tap'));
+          });
+        });
+  }
+
+  /// Cancel a pending back-tap SOS during the 2s confirmation window.
+  /// Wire this to a UI cancel button or snackbar action.
+  void cancelBackTapSos() {
+    if (_tapConfirmationPending) {
+      _tapConfirmationTimer?.cancel();
+      _tapConfirmationPending = false;
+      _tapConfirmationController.add(false);
+      _log('🚫 Back-tap SOS cancelled by user');
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  //  GRAVITY WARM-UP RESET
+  // ─────────────────────────────────────────────
+
+  void _resetGravityWarmup() {
+    _gravityInitialized = false;
+    _gravityWarmupCount = 0;
+    _gravWarmX = 0;
+    _gravWarmY = 0;
+    _gravWarmZ = 0;
+    _gravX = 0;
+    _gravY = 0;
+    _gravZ = 0;
   }
 
   // ─────────────────────────────────────────────
@@ -223,8 +345,25 @@ class MotionDetectionService {
       final now = DateTime.now();
       if (_isCooldownActive(now)) return;
       _lastTriggerAt = now;
-      debugPrint('🚨 [BG] motion received → creating SOS event');
-      await _fireSos('background', 'possible_fall');
+
+      final eventType = (data?['event_type'] as String?) ?? 'possible_fall';
+      _log('🚨 [BG] motion detected ($eventType) → sending SOS (background)');
+
+      try {
+        final result = await _voiceService?.createSosWithVoice(
+          filePath: null,
+          triggerType: 'motion',
+          eventType: eventType,
+          appState: 'background',
+        );
+        if (result != null) {
+          _log('✅ [BG] SOS sent! Event ID: ${result['event_id']}');
+        } else {
+          _log('❌ [BG] SOS creation returned null — check token/network');
+        }
+      } catch (e) {
+        _log('❌ [BG] SOS send failed: $e');
+      }
     });
   }
 
@@ -244,13 +383,13 @@ class MotionDetectionService {
           (s) => now.difference(s.time).inMilliseconds > _windowMs,
         );
       },
-      onError: (e) => debugPrint('❌ Gyro error: $e'),
+      onError: (e) => _log('❌ Gyro error: $e'),
       cancelOnError: false,
     );
   }
 
   // ─────────────────────────────────────────────
-  //  ACCELEROMETER + MAIN PIPELINE
+  //  ACCELEROMETER + FALL DETECTION PIPELINE
   // ─────────────────────────────────────────────
 
   void _startAccelerometer() {
@@ -259,15 +398,29 @@ class MotionDetectionService {
         final now = DateTime.now();
         final t = _thresholds[userMode]!;
 
-        // ── STEP 1: Dynamic gravity filtering (high-pass) ──
+        // ── STEP 1: Stable gravity baseline (warm-up average) ──
         if (!_gravityInitialized) {
-          _gravX = event.x;
-          _gravY = event.y;
-          _gravZ = event.z;
-          _gravityInitialized = true;
+          _gravWarmX += event.x;
+          _gravWarmY += event.y;
+          _gravWarmZ += event.z;
+          _gravityWarmupCount++;
+
+          if (_gravityWarmupCount >= _gravityWarmupSamples) {
+            _gravX = _gravWarmX / _gravityWarmupSamples;
+            _gravY = _gravWarmY / _gravityWarmupSamples;
+            _gravZ = _gravWarmZ / _gravityWarmupSamples;
+            _gravityInitialized = true;
+            _log(
+              '✅ Gravity baseline established: '
+              '(${_gravX.toStringAsFixed(2)}, '
+              '${_gravY.toStringAsFixed(2)}, '
+              '${_gravZ.toStringAsFixed(2)})',
+            );
+          }
           return;
         }
 
+        // ── STEP 2: Dynamic gravity filtering (high-pass) ──
         _gravX = _alpha * _gravX + (1 - _alpha) * event.x;
         _gravY = _alpha * _gravY + (1 - _alpha) * event.y;
         _gravZ = _alpha * _gravZ + (1 - _alpha) * event.z;
@@ -278,29 +431,40 @@ class MotionDetectionService {
 
         final magnitude = sqrt(linX * linX + linY * linY + linZ * linZ);
 
-        // ── STEP 2: Sliding window buffer ──
+        // ── STEP 3: Sliding window buffer ──
         _accelBuffer.add(_Sample(time: now, magnitude: magnitude));
         _accelBuffer.removeWhere(
           (s) => now.difference(s.time).inMilliseconds > _windowMs,
         );
 
-        // ── False-positive guard: table shake / vibration ──
-        // Table shake: high accel but near-zero gyro → ignore
+        // ── STEP 4: False-positive guard (table shake / vibration) ──
         if (_isTableShake(magnitude, t)) return;
 
-        // ── STEP 4: Running detection (cadence) ──
+        // ── STEP 5: Running detection (cadence) ──
         _detectRunning(magnitude, now, t);
 
-        // ── STEP 5+3: State machine for 3-phase fall detection ──
+        // ── STEP 6: 3-phase fall state machine ──
         await _runFallStateMachine(magnitude, now, t);
-
-        // ── STEP: Double-jerk manual trigger ──
-        // NOTE: Runs AFTER state machine so it can cancel pending timers
-        _detectDoubleJerk(magnitude, now, t);
       },
-      onError: (e) => debugPrint('❌ Accel error: $e'),
+      onError: (e) => _log('❌ Accel error: $e'),
       cancelOnError: false,
     );
+  }
+
+  // ─────────────────────────────────────────────
+  //  GYRO HELPERS
+  // ─────────────────────────────────────────────
+
+  double _medianGyro() {
+    if (_gyroBuffer.isEmpty) return 0.0;
+    final sorted = _gyroBuffer.map((g) => g.rotation).toList()..sort();
+    return sorted[sorted.length ~/ 2];
+  }
+
+  double _avgGyro() {
+    if (_gyroBuffer.isEmpty) return 0.0;
+    return _gyroBuffer.fold<double>(0, (s, g) => s + g.rotation) /
+        _gyroBuffer.length;
   }
 
   // ─────────────────────────────────────────────
@@ -308,26 +472,17 @@ class MotionDetectionService {
   // ─────────────────────────────────────────────
 
   bool _isTableShake(double magnitude, _ModeThresholds t) {
-    // If acceleration is moderate (below tableShakeMax) AND gyro is near-zero
-    // for the entire window → device is resting on table, not a person falling.
-    if (magnitude > t.tableShakeMax) {
-      return false; // too large, let fall logic handle
-    }
-
+    if (magnitude > t.tableShakeMax) return false;
     if (_gyroBuffer.isEmpty) return false;
 
-    final avgGyro =
-        _gyroBuffer.fold<double>(0, (s, g) => s + g.rotation) /
-        _gyroBuffer.length;
-
-    // Very low rotation + moderate accel = table vibration (phone buzzing, knocking)
-    if (avgGyro < 0.3 && magnitude < t.tableShakeMax) {
-      debugPrint(
-        '🔇 Table shake suppressed (accel=${magnitude.toStringAsFixed(2)}, gyro=${avgGyro.toStringAsFixed(2)})',
+    final avg = _avgGyro();
+    if (avg < 0.3 && magnitude < t.tableShakeMax) {
+      _log(
+        '🔇 Table shake suppressed '
+        '(accel=${magnitude.toStringAsFixed(2)}, gyro=${avg.toStringAsFixed(2)})',
       );
       return true;
     }
-
     return false;
   }
 
@@ -342,11 +497,10 @@ class MotionDetectionService {
   ) async {
     switch (_state) {
       case MotionState.idle:
-        // Detect phase 1: free fall (low acceleration = weightlessness)
         if (magnitude < t.freeFallMax) {
           _freeFallStart = now;
           _state = MotionState.freeFall;
-          debugPrint(
+          _log(
             '⬇️  Phase 1: FREE FALL detected (mag=${magnitude.toStringAsFixed(2)})',
           );
         }
@@ -354,38 +508,31 @@ class MotionDetectionService {
 
       case MotionState.freeFall:
         final freeFallDuration = now.difference(_freeFallStart!).inMilliseconds;
-
         if (magnitude >= t.impactMin) {
-          // Free fall must last 150–500 ms to be valid
           if (freeFallDuration >= 150 && freeFallDuration <= 500) {
             _impactTime = now;
             _state = MotionState.impact;
-            debugPrint(
+            _log(
               '💥 Phase 2: IMPACT detected (mag=${magnitude.toStringAsFixed(2)}, '
               'fallDuration=${freeFallDuration}ms)',
             );
             await _onImpact(magnitude, t);
           } else {
-            // Duration out of range — reset
             _state = MotionState.idle;
           }
         } else if (freeFallDuration > 600) {
-          // Too long without impact — reset (device was just placed gently)
           _state = MotionState.idle;
-          debugPrint('🔄 Free fall timeout → reset');
+          _log('🔄 Free fall timeout → reset');
         }
         break;
 
       case MotionState.impact:
-        // Handled by _onImpact which transitions to postImpactMonitoring
         break;
 
       case MotionState.postImpactMonitoring:
-        // Continuously feed magnitude into post-impact window (timer already running)
         break;
 
       case MotionState.confirmedFall:
-        // Already handled
         break;
     }
   }
@@ -393,12 +540,13 @@ class MotionDetectionService {
   Future<void> _onImpact(double impactMagnitude, _ModeThresholds t) async {
     _state = MotionState.postImpactMonitoring;
 
-    // Monitor 1.5 s post-impact for inactivity
+    final wasRunning = _runningDetected;
+    _runningDetected = false;
+
     _postImpactTimer?.cancel();
     _postImpactTimer = Timer(const Duration(milliseconds: 800), () async {
       if (_state != MotionState.postImpactMonitoring) return;
 
-      // Compute avg magnitude in last 1.5 s
       final now = DateTime.now();
       final recentSamples = _accelBuffer.where(
         (s) => now.difference(s.time).inMilliseconds <= 1500,
@@ -410,16 +558,19 @@ class MotionDetectionService {
           recentSamples.fold<double>(0, (s, e) => s + e.magnitude) /
           recentSamples.length;
 
-      debugPrint('📊 Post-impact avg: ${avgMag.toStringAsFixed(2)} m/s²');
+      _log('📊 Post-impact avg: ${avgMag.toStringAsFixed(2)} m/s²');
 
       if (avgMag < t.postInactivityMax) {
-        // Phase 3 confirmed → compute risk score
         _state = MotionState.confirmedFall;
-        debugPrint('🛑 Phase 3: POST-IMPACT INACTIVITY confirmed');
-        await _computeAndDecide(impactMagnitude, t, hasPostInactivity: true);
+        _log('🛑 Phase 3: POST-IMPACT INACTIVITY confirmed');
+        await _computeAndDecide(
+          impactMagnitude,
+          t,
+          hasPostInactivity: true,
+          isRunning: wasRunning,
+        );
       } else {
-        // Person moved — possible recovery
-        debugPrint('🚶 Movement after impact — no fall confirmed');
+        _log('🚶 Movement after impact — no fall confirmed');
         _state = MotionState.idle;
       }
     });
@@ -433,7 +584,6 @@ class MotionDetectionService {
     double impactMagnitude,
     _ModeThresholds t, {
     bool hasPostInactivity = false,
-    bool isDoubleJerk = false,
     bool isRunning = false,
   }) async {
     if (_isCooldownActive(DateTime.now())) return;
@@ -441,42 +591,30 @@ class MotionDetectionService {
     int score = 0;
     final List<String> reasons = [];
 
-    // Impact
     score += _Score.impact;
     reasons.add('impact(+${_Score.impact})');
 
-    // Free fall detected (we're in 3-phase, so yes)
     score += _Score.freeFall;
     reasons.add('freeFall(+${_Score.freeFall})');
 
-    // Post-impact inactivity
     if (hasPostInactivity) {
       score += _Score.postInactivity;
       reasons.add('postInactivity(+${_Score.postInactivity})');
     }
 
-    // High rotation (gyro)
-    final maxGyro = _gyroBuffer.isEmpty
-        ? 0.0
-        : _gyroBuffer.fold<double>(0, (m, g) => max(m, g.rotation));
-    if (maxGyro > t.gyroThreshold) {
+    final medianGyroVal = _medianGyro();
+    if (medianGyroVal > t.gyroThreshold) {
       score += _Score.highRotation;
-      reasons.add('highRotation(+${_Score.highRotation})');
+      reasons.add(
+        'highRotation(+${_Score.highRotation}) median=${medianGyroVal.toStringAsFixed(2)}',
+      );
     }
 
-    // Double jerk
-    if (isDoubleJerk) {
-      score += _Score.doubleJerk;
-      reasons.add('doubleJerk(+${_Score.doubleJerk})');
-    }
-
-    // Running cadence (reduces SOS likelihood)
     if (isRunning) {
       score += _Score.runningCadence;
       reasons.add('running(+${_Score.runningCadence})');
     }
 
-    // Sustained vibration check
     final windowAvg = _accelBuffer.isEmpty
         ? 0.0
         : _accelBuffer.fold<double>(0, (s, e) => s + e.magnitude) /
@@ -486,11 +624,10 @@ class MotionDetectionService {
       reasons.add('sustainedVibration(+${_Score.sustainedVibration})');
     }
 
-    debugPrint('🧮 Risk score: $score [${reasons.join(', ')}]');
+    _log('🧮 Risk score: $score [${reasons.join(', ')}]');
 
     if (isRunning && score < _Score.sosThreshold) {
-      // Running alone → guardian alert, not SOS
-      debugPrint('🏃 Running detected → Guardian Alert');
+      _log('🏃 Running detected → Guardian Alert only');
       _lastTriggerAt = DateTime.now();
       await _fireSos('foreground', 'running_detected');
       _state = MotionState.idle;
@@ -499,26 +636,24 @@ class MotionDetectionService {
 
     if (score >= _Score.sosThreshold) {
       _lastTriggerAt = DateTime.now();
-
-      // ✅ Fire IMMEDIATELY on high score — don't wait 10s
+      _log(
+        '🚨 SOS threshold reached ($score) → firing possible_fall immediately',
+      );
       await _fireSos('foreground', 'possible_fall');
-
-      // Then start confirmation timer for escalation
       _startInactivityConfirmationTimer();
     }
   }
 
   // ─────────────────────────────────────────────
-  //  INACTIVITY CONFIRMATION (STEP 8)
+  //  INACTIVITY CONFIRMATION — ESCALATION TIMER
   // ─────────────────────────────────────────────
 
   void _startInactivityConfirmationTimer() {
-    debugPrint('⏳ Starting 10s inactivity confirmation timer...');
+    _log('⏳ Starting 10s inactivity confirmation timer...');
     _inactivitySosTimer?.cancel();
     _inactivitySosTimer = Timer(const Duration(seconds: 10), () async {
       if (_state != MotionState.confirmedFall) return;
 
-      // Check if person has moved in last 10 s
       final now = DateTime.now();
       final recent = _accelBuffer.where(
         (s) => now.difference(s.time).inMilliseconds <= 5000,
@@ -528,12 +663,13 @@ class MotionDetectionService {
           : recent.fold<double>(0, (s, e) => s + e.magnitude) / recent.length;
 
       if (recentAvg < 1.0) {
-        debugPrint('🚨 Inactivity confirmed → AUTO SOS');
+        _log(
+          '🚨 Inactivity confirmed after 10s → escalating to confirmed_fall',
+        );
+        _lastTriggerAt = now;
         await _fireSos('foreground', 'confirmed_fall');
       } else {
-        debugPrint(
-          '🚶 Movement detected in confirmation window — SOS cancelled',
-        );
+        _log('🚶 Movement detected in confirmation window — no escalation');
       }
       _state = MotionState.idle;
     });
@@ -548,52 +684,16 @@ class MotionDetectionService {
       _runningPeakTimes.add(now);
     }
 
-    // Keep only peaks in last 2 s
     _runningPeakTimes.removeWhere(
       (pt) => now.difference(pt).inMilliseconds > 2000,
     );
 
     if (_runningPeakTimes.length >= t.runningMinPeaks) {
-      debugPrint(
-        '🏃 Running cadence detected '
-        '(${_runningPeakTimes.length} peaks in 2s)',
+      _log(
+        '🏃 Running cadence detected (${_runningPeakTimes.length} peaks in 2s)',
       );
       _runningPeakTimes.clear();
-      // Running event is evaluated through risk scoring not direct trigger
-    }
-  }
-
-  // ─────────────────────────────────────────────
-  //  DOUBLE-JERK MANUAL TRIGGER
-  // ─────────────────────────────────────────────
-
-  void _detectDoubleJerk(double magnitude, DateTime now, _ModeThresholds t) {
-    // A jerk is a sharp spike above impact threshold
-    if (magnitude >= t.impactMin) {
-      if (_lastJerkTime != null &&
-          now.difference(_lastJerkTime!).inMilliseconds <= 800) {
-        _jerkCount++;
-        if (_jerkCount >= 2) {
-          _jerkCount = 0;
-          _lastJerkTime = null;
-          debugPrint(
-            '✊ Double-jerk manual trigger detected → immediate SOS (no wait)',
-          );
-          if (!_isCooldownActive(now)) {
-            // ✅ Cancel ALL pending timers immediately — no delay for demo/testing
-            _postImpactTimer?.cancel();
-            _inactivitySosTimer?.cancel();
-            // Reset state machine so it doesn't interfere or double-fire
-            _state = MotionState.idle;
-
-            _lastTriggerAt = now;
-            unawaited(_fireSos('foreground', 'double_jerk'));
-          }
-        }
-      } else {
-        _jerkCount = 1;
-        _lastJerkTime = now;
-      }
+      _runningDetected = true;
     }
   }
 
@@ -606,28 +706,33 @@ class MotionDetectionService {
     return now.difference(_lastTriggerAt!).inMilliseconds < _cooldownMs;
   }
 
+  // ─────────────────────────────────────────────
+  //  FIRE SOS
+  // ─────────────────────────────────────────────
+
   Future<void> _fireSos(String appState, String eventType) async {
     if (_voiceService == null) {
-      debugPrint(
+      _log(
         '❌ MotionDetectionService not initialized — call initialize() first',
       );
       return;
     }
     try {
-      debugPrint('🎙️ Starting auto recording + SOS: $eventType ($appState)');
-      await _voiceService!.startAutoRecordingAndSendSOS(
+      _log('🚨 _fireSos: $eventType ($appState) — sending without voice');
+      final result = await _voiceService!.createSosWithVoice(
+        filePath: null,
         triggerType: 'motion',
         eventType: eventType,
-        onComplete: (eventId, voiceUrl) {
-          debugPrint('✅ SOS created! Event ID: $eventId, Voice URL: $voiceUrl');
-        },
-        onError: (error) {
-          debugPrint('❌ Failed to create SOS with voice: $error');
-        },
+        appState: appState,
       );
+      if (result != null) {
+        _log('✅ SOS created! Event ID: ${result["event_id"]}');
+      } else {
+        _log('❌ SOS creation returned null — check token/network');
+      }
     } catch (e, st) {
-      debugPrint('❌ Failed to fire SOS: $e');
-      debugPrint(st.toString());
+      _log('❌ _fireSos exception: $e');
+      _log(st.toString());
     }
   }
 }

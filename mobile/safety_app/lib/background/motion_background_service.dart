@@ -6,6 +6,16 @@ import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
 // ─────────────────────────────────────────────
+//  DEBUG TOGGLE
+// ─────────────────────────────────────────────
+
+const bool _enableDebug = true;
+
+void _log(String msg) {
+  if (_enableDebug) debugPrint(msg);
+}
+
+// ─────────────────────────────────────────────
 //  DATA CLASSES
 // ─────────────────────────────────────────────
 
@@ -30,8 +40,12 @@ class _BgGyroSample {
 /// [MotionDetectionService] as the single API call point.
 ///
 /// Pipeline:
-///   Dynamic gravity filtering → Sliding window → 3-phase fall state machine
-///   → Risk scoring → invoke 'motion_detected'
+///   Stable gravity baseline (10-sample average)
+///   → Dynamic gravity filtering
+///   → Sliding window
+///   → 3-phase fall state machine
+///   → Risk scoring (median gyro for robustness)
+///   → invoke 'motion_detected' with correct event_type
 @pragma('vm:entry-point')
 Future<void> motionServiceOnStart(ServiceInstance service) async {
   if (service is AndroidServiceInstance) {
@@ -42,38 +56,52 @@ Future<void> motionServiceOnStart(ServiceInstance service) async {
     );
   }
 
-  debugPrint('🎯 Motion background service started (physics engine)');
+  _log('🎯 Motion background service started (physics engine)');
 
   // ── Tunable constants ──
-  const double alpha = 0.8; // gravity filter coefficient
-  const double freeFallMax = 2.5; // m/s² — weightlessness threshold
-  const double impactMin = 18.0; // m/s² — impact spike
-  const double postInactMax = 1.5; // m/s² — post-impact inactivity
-  const double gyroThreshold = 5.0; // rad/s — rotation for fall confirmation
-  const double tableShakeMax = 12.0; // m/s² — below this + low gyro = ignore
-  const int windowMs = 2000; // 2-second sliding window
-  const int cooldownMs = 60 * 1000; // 1 minute between triggers
+  const double alpha = 0.8;
+  const double freeFallMax = 2.5;
+  const double impactMin = 18.0;
+  const double postInactMax = 1.5;
+  const double gyroThreshold = 5.0;
+  const double tableShakeMax = 12.0;
+  const int windowMs = 2000;
+  const int cooldownMs = 60 * 1000;
+
+  // ── IMPROVED: Stable gravity warm-up (10-sample average) ──
+  const int gravityWarmupSamples = 10;
+  int gravityWarmupCount = 0;
+  double gravWarmX = 0, gravWarmY = 0, gravWarmZ = 0;
+  bool gravityInitialized = false;
+  double gravX = 0, gravY = 0, gravZ = 0;
 
   // ── State ──
   DateTime? lastTriggerAt;
-  bool gravityInitialized = false;
-  double gravX = 0, gravY = 0, gravZ = 0;
 
   // Buffers
   final List<_BackgroundSample> accelBuffer = [];
   final List<_BgGyroSample> gyroBuffer = [];
 
-  // 3-phase fall state
-  // 0=idle, 1=freeFall, 2=postImpact
+  // 3-phase fall state: 0=idle, 1=freeFall, 2=postImpact
   int fallPhase = 0;
   DateTime? freeFallStart;
   DateTime? impactTime;
   double lastImpactMag = 0;
 
   // ── Risk score accumulator ──
-  int pendingScore = 0;
   bool freeFallSeen = false;
   bool impactSeen = false;
+
+  // ─────────────────────────────────────────────
+  //  GYRO MEDIAN HELPER
+  // ─────────────────────────────────────────────
+
+  // IMPROVED: Returns median gyro rotation — robust to single spikes.
+  double medianGyro() {
+    if (gyroBuffer.isEmpty) return 0.0;
+    final sorted = gyroBuffer.map((g) => g.rotation).toList()..sort();
+    return sorted[sorted.length ~/ 2];
+  }
 
   // ─────────────────────────────────────────────
   //  GYROSCOPE LISTENER
@@ -90,7 +118,7 @@ Future<void> motionServiceOnStart(ServiceInstance service) async {
         (s) => now.difference(s.time).inMilliseconds > windowMs,
       );
     },
-    onError: (e) => debugPrint('❌ [BG] Gyro error: $e'),
+    onError: (e) => _log('❌ [BG] Gyro error: $e'),
     cancelOnError: false,
   );
 
@@ -102,15 +130,31 @@ Future<void> motionServiceOnStart(ServiceInstance service) async {
     (event) async {
       final now = DateTime.now();
 
-      // ── Dynamic gravity filtering (high-pass) ──
+      // ── IMPROVED: Stable gravity baseline (10-sample warm-up) ──
+      // Accumulate first N samples before activating the filter.
+      // This ensures the gravity vector is stable from the start.
       if (!gravityInitialized) {
-        gravX = event.x;
-        gravY = event.y;
-        gravZ = event.z;
-        gravityInitialized = true;
+        gravWarmX += event.x;
+        gravWarmY += event.y;
+        gravWarmZ += event.z;
+        gravityWarmupCount++;
+
+        if (gravityWarmupCount >= gravityWarmupSamples) {
+          gravX = gravWarmX / gravityWarmupSamples;
+          gravY = gravWarmY / gravityWarmupSamples;
+          gravZ = gravWarmZ / gravityWarmupSamples;
+          gravityInitialized = true;
+          _log(
+            '[BG] ✅ Gravity baseline: '
+            '(${gravX.toStringAsFixed(2)}, '
+            '${gravY.toStringAsFixed(2)}, '
+            '${gravZ.toStringAsFixed(2)})',
+          );
+        }
         return;
       }
 
+      // ── Dynamic gravity filtering (high-pass) ──
       gravX = alpha * gravX + (1 - alpha) * event.x;
       gravY = alpha * gravY + (1 - alpha) * event.y;
       gravZ = alpha * gravZ + (1 - alpha) * event.z;
@@ -132,16 +176,13 @@ Future<void> motionServiceOnStart(ServiceInstance service) async {
         return;
       }
 
-      // ── Table-shake false-positive guard ──
-      // Low-to-moderate accel + near-zero gyro = table vibration → suppress
+      // ── Table-shake false-positive guard (average gyro is fine here) ──
       if (magnitude < tableShakeMax) {
         final avgGyro = gyroBuffer.isEmpty
             ? 0.0
             : gyroBuffer.fold<double>(0, (s, g) => s + g.rotation) /
                   gyroBuffer.length;
-        if (avgGyro < 0.3) {
-          return; // device on flat surface / buzzing on table
-        }
+        if (avgGyro < 0.3) return;
       }
 
       // ─────────────────────────────────────────
@@ -154,7 +195,7 @@ Future<void> motionServiceOnStart(ServiceInstance service) async {
             fallPhase = 1;
             freeFallStart = now;
             freeFallSeen = true;
-            debugPrint(
+            _log(
               '[BG] ⬇️  Phase 1: Free fall (${magnitude.toStringAsFixed(2)})',
             );
           }
@@ -167,11 +208,8 @@ Future<void> motionServiceOnStart(ServiceInstance service) async {
             impactTime = now;
             lastImpactMag = magnitude;
             impactSeen = true;
-            debugPrint(
-              '[BG] 💥 Phase 2: Impact (${magnitude.toStringAsFixed(2)})',
-            );
+            _log('[BG] 💥 Phase 2: Impact (${magnitude.toStringAsFixed(2)})');
           } else if (elapsed > 600) {
-            // No impact after 600 ms — reset
             fallPhase = 0;
             freeFallSeen = false;
           }
@@ -180,7 +218,6 @@ Future<void> motionServiceOnStart(ServiceInstance service) async {
         case 2: // POST-IMPACT — monitor inactivity for 1.5 s
           final postElapsed = now.difference(impactTime!).inMilliseconds;
           if (postElapsed >= 1500) {
-            // Compute average magnitude in post-impact window
             final postSamples = accelBuffer.where(
               (s) => s.time.isAfter(impactTime!),
             );
@@ -189,9 +226,7 @@ Future<void> motionServiceOnStart(ServiceInstance service) async {
                 : postSamples.fold<double>(0, (s, e) => s + e.magnitude) /
                       postSamples.length;
 
-            debugPrint(
-              '[BG] 📊 Post-impact avg: ${avgPost.toStringAsFixed(2)}',
-            );
+            _log('[BG] 📊 Post-impact avg: ${avgPost.toStringAsFixed(2)}');
 
             if (avgPost < postInactMax) {
               // All 3 phases confirmed → score
@@ -200,23 +235,29 @@ Future<void> motionServiceOnStart(ServiceInstance service) async {
               if (freeFallSeen) score += 30;
               score += 40; // post-inactivity
 
-              final maxGyro = gyroBuffer.isEmpty
-                  ? 0.0
-                  : gyroBuffer.fold<double>(0, (m, g) => max(m, g.rotation));
-              if (maxGyro > gyroThreshold) score += 30;
+              // IMPROVED: Use MEDIAN gyro for high-rotation bonus.
+              // Avoids a single spike inflating the score.
+              final medGyro = medianGyro();
+              if (medGyro > gyroThreshold) {
+                score += 30;
+                _log(
+                  '[BG] 📐 High median gyro: ${medGyro.toStringAsFixed(2)} (+30)',
+                );
+              }
 
-              // Sustained vibration
               final windowAvg = accelBuffer.isEmpty
                   ? 0.0
                   : accelBuffer.fold<double>(0, (s, e) => s + e.magnitude) /
                         accelBuffer.length;
               if (windowAvg > 4.0) score += 15;
 
-              debugPrint('[BG] 🧮 Risk score: $score');
+              _log('[BG] 🧮 Risk score: $score');
 
+              // IMPROVED: Correctly forward event_type so foreground service
+              // can pass 'confirmed_fall' vs 'possible_fall' to the backend.
               if (score >= 90) {
                 lastTriggerAt = now;
-                debugPrint('[BG] 🚨 Confirmed fall (score=$score) → invoke');
+                _log('[BG] 🚨 Confirmed fall (score=$score) → invoke');
                 service.invoke('motion_detected', {
                   'trigger_type': 'motion',
                   'event_type': 'confirmed_fall',
@@ -225,7 +266,7 @@ Future<void> motionServiceOnStart(ServiceInstance service) async {
                 });
               } else if (score >= 50) {
                 lastTriggerAt = now;
-                debugPrint('[BG] ⚠️  Possible fall (score=$score) → invoke');
+                _log('[BG] ⚠️  Possible fall (score=$score) → invoke');
                 service.invoke('motion_detected', {
                   'trigger_type': 'motion',
                   'event_type': 'possible_fall',
@@ -245,7 +286,7 @@ Future<void> motionServiceOnStart(ServiceInstance service) async {
       }
     },
     onError: (e, st) {
-      debugPrint('❌ [BG] Sensor error: $e');
+      _log('❌ [BG] Sensor error: $e');
     },
     cancelOnError: false,
   );
@@ -255,7 +296,7 @@ Future<void> motionServiceOnStart(ServiceInstance service) async {
   // ─────────────────────────────────────────────
 
   service.on('stop').listen((_) async {
-    debugPrint('🛑 Motion background service stopping...');
+    _log('🛑 Motion background service stopping...');
     await accelSub.cancel();
     await gyroSub.cancel();
     await service.stopSelf();

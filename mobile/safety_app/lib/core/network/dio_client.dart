@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:dio/dio.dart';
 import 'package:safety_app/core/network/api_endpoints.dart';
 import 'package:safety_app/core/storage/secure_storage_service.dart';
+import 'package:safety_app/services/native_back_tap_service.dart';
 
 class DioClient {
   late final Dio _dio;
@@ -112,6 +113,11 @@ class DioClient {
                 if (newRefreshToken != null) {
                   await _storage.saveRefreshToken(newRefreshToken);
                 }
+
+                // ✅ Keep SharedPreferences in sync so BackTapService can
+                // fire SOS via HTTP even when the Flutter app is killed.
+                // This must happen every time the token rotates.
+                await NativeBackTapService.instance.saveToken(newAccessToken);
 
                 print('✅ Token refreshed successfully');
                 print('🔑 New access token length: ${newAccessToken.length}');

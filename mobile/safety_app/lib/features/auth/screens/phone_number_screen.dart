@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:safety_app/core/widgets/animated_bottom_button.dart';
-import 'package:safety_app/core/widgets/app_text_field.dart';
+import 'package:safety_app/core/widgets/nepal_phone_field.dart';
 import 'package:safety_app/core/widgets/onboarding_progress_indicator.dart';
 import 'package:safety_app/services/firebase/firebase_auth_service.dart';
 import '../../../core/theme/app_colors.dart';
@@ -15,12 +15,13 @@ class PhoneNumberScreen extends StatefulWidget {
 }
 
 class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
+  // Controller now holds ONLY the local digits (e.g. "9812345678")
   final _phoneController = TextEditingController();
   final FirebaseAuthService _firebaseAuthService = FirebaseAuthService();
 
   bool _isLoading = false;
   // ignore: unused_field
-  String? _verificationId; // Store this for OTP screen
+  String? _verificationId;
 
   @override
   void dispose() {
@@ -29,61 +30,46 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
   }
 
   Future<void> _sendOTP() async {
-    String phone = _phoneController.text.trim();
+    final localDigits = _phoneController.text.trim();
 
-    // Validation
-    if (phone.isEmpty) {
+    if (localDigits.isEmpty) {
       _showError("Please enter your phone number");
       return;
     }
 
-    // Add country code if not present
-    if (!phone.startsWith('+')) {
-      // Assuming Nepal, adjust country code as needed
-      phone = '+977$phone';
-    }
-
-    // Validate format
-    if (phone.length < 11 || phone.length > 16) {
-      _showError("Please enter a valid phone number");
+    if (localDigits.length != 10) {
+      _showError("Please enter a valid 10-digit phone number");
       return;
     }
+
+    // Build full number from local digits — +977 is always prefixed
+    final phone = NepalPhoneField.fullNumber(localDigits);
 
     setState(() => _isLoading = true);
 
     try {
-      // 🔥 Send OTP via Firebase
       await _firebaseAuthService.sendPhoneOTP(
         phoneNumber: phone,
 
-        // ✅ OTP sent successfully
         onCodeSent: (String verificationId, int? resendToken) {
           _verificationId = verificationId;
-
           if (!mounted) return;
-
           _showSuccess("OTP sent to $phone");
-
-          // Navigate to OTP verification screen
           context.push(
             '/otp-verification',
             extra: {'phoneNumber': phone, 'verificationId': verificationId},
           );
         },
 
-        // ❌ Verification failed
         onVerificationFailed: (String error) {
           if (!mounted) return;
           _showError(error);
           setState(() => _isLoading = false);
         },
 
-        // 🤖 Auto-verification completed (Android only)
         onVerificationCompleted: (credential) {
           if (!mounted) return;
           _showSuccess("Phone verified automatically!");
-
-          // Navigate directly to email screen
           context.push('/email-verification', extra: {'phoneNumber': phone});
         },
       );
@@ -141,29 +127,14 @@ class _PhoneNumberScreenState extends State<PhoneNumberScreen> {
 
                       const SizedBox(height: 40),
 
-                      AppTextField(
-                        label: "Phone Number",
-                        hint: "+977 98XXXXXXXX",
-                        keyboardType: TextInputType.phone,
+                      // ✅ Replaced AppTextField with NepalPhoneField
+                      NepalPhoneField(
                         controller: _phoneController,
                         enabled: !_isLoading,
                       ),
 
-                      const SizedBox(height: 8),
-
-                      // Helper text
-                      Text(
-                        "Include country code (e.g., +977)",
-                        style: AppTextStyles.caption.copyWith(
-                          color: isDark
-                              ? AppColors.darkHint
-                              : AppColors.lightHint,
-                        ),
-                      ),
-
                       const SizedBox(height: 24),
 
-                      // Info box
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
