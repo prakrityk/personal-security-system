@@ -6,7 +6,6 @@ import 'package:safety_app/models/role_info.dart';
 import 'package:safety_app/models/user_model.dart';
 import 'package:safety_app/services/auth_api_service.dart';
 
-
 /// Provider for AuthApiService instance
 final authApiServiceProvider = Provider<AuthApiService>((ref) {
   return AuthApiService();
@@ -38,7 +37,18 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<UserModel?>> {
     _loadUser();
   }
 
-  /// Load current user from local storage on app start
+  /// Restores the user session on cold start — Instagram-style persistent login.
+  ///
+  /// Strategy:
+  ///   1. No token in storage → logged out immediately (fast path).
+  ///   2. Token found → restore user from cached JSON → state = logged in.
+  ///      The router sees a non-null user and does NOT redirect to login.
+  ///   3. Background API refresh → updates state with fresh data silently.
+  ///      If the access token expired, DioClient's interceptor auto-refreshes
+  ///      using the refresh token (wired up in dio_client.dart).
+  ///   4. If the background refresh fails → keep the cached user in state.
+  ///      Storage is only wiped when the server explicitly rejects the refresh
+  ///      token (handled inside refreshAccessToken()).
   Future<void> _loadUser() async {
     state = const AsyncValue.loading();
     try {
@@ -117,28 +127,83 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<UserModel?>> {
       await _authApiService.logout();
       state = const AsyncValue.data(null);
       print('✅ AuthStateNotifier: Logout successful - User state cleared');
-    } catch (e, stack) {
+    } catch (e) {
       print('⚠️ AuthStateNotifier: Logout error: $e');
       state = const AsyncValue.data(null);
       print('✅ AuthStateNotifier: State reset despite error');
+      // Don't rethrow — logout must always succeed in the UI
     }
   }
 
-  /// Get current user synchronously
-  UserModel? get currentUser => state.value;
+  /// Get access token from SecureStorageService
+  Future<String?> getAccessToken() async {
+    try {
+      debugPrint(
+        '🔍 [AuthProvider] Getting access token from secure storage...',
+      );
+      final token = await _storage.getAccessToken();
+      if (token != null && token.isNotEmpty) {
+        debugPrint('✅ [AuthProvider] Found access token');
+        debugPrint('   Token preview: ${token.substring(0, 20)}...');
+        return token;
+      } else {
+        debugPrint('⚠️ [AuthProvider] No access token found in secure storage');
+        return null;
+      }
+    } catch (e) {
+      debugPrint('❌ [AuthProvider] Error getting access token: $e');
+      return null;
+    }
+  }
 
-  /// Check if user is logged in
-  bool get isLoggedIn => state.value != null;
+  /// Update user profile picture
+  void updateProfilePicture(String? newProfilePicture) {
+    final currentUser = state.value;
+    if (currentUser == null) {
+      print('⚠️ Cannot update profile picture: No user in state');
+      return;
+    }
+    final updatedUser = currentUser.copyWith(profilePicture: newProfilePicture);
+    state = AsyncValue.data(updatedUser);
+    print('✅ Auth Provider: Profile picture updated in state');
+  }
 
-  /// ✅ FIXED: Now persists to secure storage so the gate doesn't re-appear
-  /// after an app restart once registration is complete.
+  /// Update entire user object
+  void updateUser(UserModel updatedUser) {
+    state = AsyncValue.data(updatedUser);
+    print('✅ Auth Provider: User data updated');
+  }
+
+  /// Remove profile picture
+  void removeProfilePicture() {
+    updateProfilePicture(null);
+    print('✅ Auth Provider: Profile picture removed');
+  }
+
+  /// Update user roles
+  void updateUserRoles(List<RoleInfo> newRoles) {
+    final currentUser = state.value;
+    if (currentUser == null) {
+      print('⚠️ Cannot update roles: No user in state');
+      return;
+    }
+    final updatedUser = currentUser.copyWith(
+      roles: newRoles,
+      updatedAt: DateTime.now(),
+    );
+    state = AsyncValue.data(updatedUser);
+    print('✅ Auth Provider: User roles updated');
+  }
+
+  /// ✅ Persists voice registration status to secure storage so the gate
+  /// doesn't re-appear after an app restart once registration is complete.
   Future<void> updateVoiceRegistrationStatus(bool status) async {
     final currentUser = state.value;
     if (currentUser == null) return;
 
     final updatedUser = currentUser.copyWith(isVoiceRegistered: status);
 
-    // ✅ Persist to storage — survives app restarts
+    // Persist to storage — survives app restarts
     await _storage.saveUserData(updatedUser.toJson());
 
     // Update in-memory state — triggers router redirect to Home
@@ -146,6 +211,12 @@ class AuthStateNotifier extends StateNotifier<AsyncValue<UserModel?>> {
 
     print('🎤 isVoiceRegistered persisted → $status');
   }
+
+  /// Get current user synchronously
+  UserModel? get currentUser => state.value;
+
+  /// Check if user is logged in
+  bool get isLoggedIn => state.value != null;
 }
 
 /// Provider for auth state

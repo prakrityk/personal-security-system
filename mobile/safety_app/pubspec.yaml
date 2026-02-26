@@ -48,14 +48,13 @@ dependencies:
   flutter_dotenv: ^6.0.0
   googleapis: ^16.0.0
   record: ^6.2.0
-  audioplayers: ^6.5.1 # ← added from old branch
   camera: ^0.11.3
   googleapis_auth: ^2.0.0
   # permission_handler: ^11.3.1
   audioplayers: ^6.5.1
   tflite_flutter: ^0.11.0
   scidart: ^0.0.2-dev.12
-  flutter_foreground_task: ^4.0.0
+  # flutter_foreground_task: ^4.0.0
 
 
 

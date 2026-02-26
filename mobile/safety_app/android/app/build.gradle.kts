@@ -53,4 +53,10 @@ flutter {
 dependencies {
     // Core library desugaring
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+
+    // OkHttp — for direct HTTP SOS call when app is killed
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    // Kotlin Coroutines — for background HTTP call in BackTapService
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 }

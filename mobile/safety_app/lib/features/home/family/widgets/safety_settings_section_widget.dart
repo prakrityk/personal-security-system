@@ -1,33 +1,38 @@
 // lib/features/home/family/widgets/safety_settings_section_widget.dart
+//
+// Guardian view of a dependent's safety settings.
+// When the primary guardian toggles motion detection the API is updated as
+// before.  Additionally, if the current device IS the dependent (i.e. the
+// user is running the app in dependent role on their own phone), we call
+// MotionDetectionGate.refreshRemoteSetting() so the sensor stops/starts
+// immediately without requiring an app restart.
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:safety_app/core/theme/app_colors.dart';
 import 'package:safety_app/core/theme/app_text_styles.dart';
 import 'package:safety_app/models/dependent_model.dart';
 import 'package:safety_app/services/dependent_safety_service.dart';
+import 'package:safety_app/services/motion_detection_gate.dart';
 
-class SafetySettingsSectionWidget extends StatefulWidget {
+class SafetySettingsSectionWidget extends ConsumerStatefulWidget {
   final DependentModel dependent;
 
-  const SafetySettingsSectionWidget({
-    super.key,
-    required this.dependent,
-  });
+  const SafetySettingsSectionWidget({super.key, required this.dependent});
 
   @override
-  State<SafetySettingsSectionWidget> createState() =>
+  ConsumerState<SafetySettingsSectionWidget> createState() =>
       _SafetySettingsSectionWidgetState();
 }
 
 class _SafetySettingsSectionWidgetState
-    extends State<SafetySettingsSectionWidget> {
+    extends ConsumerState<SafetySettingsSectionWidget> {
   final DependentSafetyService _safetyService = DependentSafetyService();
 
-  // Safety settings states
-  bool _liveLocationTracking = true;
+  bool _liveLocationTracking = false;
   bool _audioRecording = false;
-  bool _motionDetection = true;
+  bool _motionDetection = false;
   bool _autoRecording = false;
   bool _isLoading = true;
 
@@ -39,15 +44,14 @@ class _SafetySettingsSectionWidgetState
 
   Future<void> _loadSafetySettings() async {
     try {
-      print(
-        '📡 Loading safety settings for dependent ${widget.dependent.dependentId}',
+      debugPrint(
+        '📡 Loading safety settings for dependent '
+        '${widget.dependent.dependentId}',
       );
       final settings = await _safetyService.getDependentSafetySettings(
         widget.dependent.dependentId,
       );
-
       if (!mounted) return;
-
       setState(() {
         _liveLocationTracking = settings.liveLocation;
         _audioRecording = settings.audioRecording;
@@ -55,16 +59,14 @@ class _SafetySettingsSectionWidgetState
         _autoRecording = settings.autoRecording;
         _isLoading = false;
       });
-
-      print(
+      debugPrint(
         '✅ Safety settings loaded: '
         'location=$_liveLocationTracking, '
         'audio=$_audioRecording, '
-        'motion=$_motionDetection, '
-        'auto_recording=$_autoRecording',
+        'motion=$_motionDetection',
       );
     } catch (e) {
-      print('❌ Failed to load safety settings: $e');
+      debugPrint('❌ Failed to load safety settings: $e');
       if (!mounted) return;
       setState(() => _isLoading = false);
       _showErrorSnackbar('Failed to load safety settings');
@@ -78,23 +80,16 @@ class _SafetySettingsSectionWidgetState
     }
 
     try {
-      print('🔄 Updating $setting to $value');
+      debugPrint('🔄 Updating $setting to $value');
 
-      Map<String, dynamic> updates = {};
-      switch (setting) {
-        case 'location':
-          updates['live_location'] = value;
-          break;
-        case 'audio':
-          updates['audio_recording'] = value;
-          break;
-        case 'motion':
-          updates['motion_detection'] = value;
-          break;
-        case 'auto_recording':
-          updates['auto_recording'] = value;
-          break;
-      }
+      // Build the patch payload
+      final Map<String, dynamic> updates = switch (setting) {
+        'location' => {'live_location': value},
+        'audio' => {'audio_recording': value},
+        'motion' => {'motion_detection': value},
+        'auto_recording' => {'auto_recording': value},
+        _ => {},
+      };
 
       await _safetyService.updateDependentSafetySettings(
         dependentId: widget.dependent.dependentId,
@@ -103,6 +98,7 @@ class _SafetySettingsSectionWidgetState
 
       if (!mounted) return;
 
+      // Update local UI state
       setState(() {
         switch (setting) {
           case 'location':
@@ -120,20 +116,23 @@ class _SafetySettingsSectionWidgetState
         }
       });
 
+      // Re-evaluate the gate outside setState so ref is in scope.
+      // This ensures the dependent device reacts immediately if they are
+      // also running the app at the same time.
+      if (setting == 'motion') {
+        MotionDetectionGate.instance.refreshRemoteSetting(ref);
+      }
+
       _showSuccessSnackbar('Safety setting updated successfully');
-      print('✅ $setting setting updated to $value');
+      debugPrint('✅ $setting setting updated to $value');
     } catch (e) {
-      print('❌ Failed to update $setting setting: $e');
+      debugPrint('❌ Failed to update $setting setting: $e');
       if (!mounted) return;
       _showErrorSnackbar('Failed to update safety setting');
     }
   }
 
   void _viewAllSafetySettings() {
-    print(
-      '🔍 Navigating to safety settings - isPrimary: ${widget.dependent.isPrimaryGuardian}',
-    );
-
     context.push(
       '/dependent-safety-settings',
       extra: {
@@ -185,6 +184,7 @@ class _SafetySettingsSectionWidgetState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Header row ─────────────────────────────────────────────────
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -246,6 +246,8 @@ class _SafetySettingsSectionWidgetState
             ],
           ),
           const SizedBox(height: 20),
+
+          // ── Content ────────────────────────────────────────────────────
           if (_isLoading)
             const Center(
               child: Padding(
@@ -259,7 +261,7 @@ class _SafetySettingsSectionWidgetState
               title: 'Live Location Tracking',
               subtitle: 'Real-time location monitoring',
               value: _liveLocationTracking,
-              onChanged: (value) => _toggleSafetySetting('location', value),
+              onChanged: (v) => _toggleSafetySetting('location', v),
               isDark: isDark,
             ),
             const SizedBox(height: 16),
@@ -268,7 +270,7 @@ class _SafetySettingsSectionWidgetState
               title: 'Audio Recording',
               subtitle: 'Record audio during SOS',
               value: _audioRecording,
-              onChanged: (value) => _toggleSafetySetting('audio', value),
+              onChanged: (v) => _toggleSafetySetting('audio', v),
               isDark: isDark,
             ),
             const SizedBox(height: 16),
@@ -277,16 +279,7 @@ class _SafetySettingsSectionWidgetState
               title: 'Motion Detection',
               subtitle: 'Alert on unusual movement',
               value: _motionDetection,
-              onChanged: (value) => _toggleSafetySetting('motion', value),
-              isDark: isDark,
-            ),
-            const SizedBox(height: 16),
-            _buildSafetyToggle(
-              icon: Icons.videocam,
-              title: 'Auto Recording',
-              subtitle: 'Automatically record during SOS',
-              value: _autoRecording,
-              onChanged: (value) => _toggleSafetySetting('auto_recording', value),
+              onChanged: (v) => _toggleSafetySetting('motion', v),
               isDark: isDark,
             ),
             const SizedBox(height: 20),
@@ -339,8 +332,8 @@ class _SafetySettingsSectionWidgetState
               color: value
                   ? AppColors.primaryGreen.withOpacity(0.1)
                   : (isDark
-                      ? AppColors.darkSurface.withOpacity(0.3)
-                      : AppColors.lightSurface.withOpacity(0.5)),
+                        ? AppColors.darkSurface.withOpacity(0.3)
+                        : AppColors.lightSurface.withOpacity(0.5)),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
