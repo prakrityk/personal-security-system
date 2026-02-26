@@ -8,11 +8,12 @@ import 'package:safety_app/features/home/widgets/role_based_bottom_nav_bar.dart'
 import 'package:safety_app/features/home/home_app_bar.dart';
 import 'package:safety_app/services/notification_service.dart';
 import 'package:safety_app/services/dependent_foreground_services.dart';
+import 'package:safety_app/features/voice_activation/services/sos_listen_service.dart';
+
 import 'sos/screens/sos_home_screen.dart';
 import 'map/screens/live_location_screen.dart';
 import 'safety/screens/safety_settings_screen.dart';
 import 'family/screens/smart_family_list_screen.dart';
-import 'package:safety_app/features/voice_activation/services/sos_listen_service.dart';
 
 class GeneralHomeScreen extends ConsumerStatefulWidget {
   const GeneralHomeScreen({super.key});
@@ -24,6 +25,7 @@ class GeneralHomeScreen extends ConsumerStatefulWidget {
 class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
   int _currentIndex = 0;
   final SOSListenService _sosService = SOSListenService();
+
   bool _isLoadingRole = false;
   bool _fcmTokenRegistered = false;
   bool _dependentTrackingStarted = false;
@@ -33,67 +35,53 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
     'family': const SmartFamilyListScreen(),
     'safety': const SafetySettingsScreen(),
     'map': const LiveLocationScreen(),
-  final Map<String, Widget> _screenMap = {
-    'sos': SosHomeScreen(),
-    'family': SmartFamilyListScreen(),
-    'safety': SafetySettingsScreen(),
-    'map': LiveLocationScreen(),
   };
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkAndLoadRole();
+      _initializeUserState();
     });
   }
 
-  Future<void> _checkAndLoadRole() async {
-    final user = ref.read(authStateProvider).value;
+  // 🔥 Unified initialization logic
+  Future<void> _initializeUserState() async {
+    UserModel? user = ref.read(authStateProvider).value;
 
+    // Refresh role if missing
     if (user != null && (!user.hasRole || user.currentRole == null)) {
       setState(() => _isLoadingRole = true);
+
       try {
         await ref.read(authStateProvider.notifier).refreshUser();
-
-        final updatedUser = ref.read(authStateProvider).value;
-
-        if (updatedUser?.isGuardian == true && !_fcmTokenRegistered) {
-          await _registerGuardianNotifications(updatedUser!);
-        }
       } catch (e) {
         debugPrint("❌ Error refreshing user: $e");
       } finally {
-        if (mounted) {
-          setState(() => _isLoadingRole = false);
-        }
-      }
-    } else if (user?.isGuardian == true && !_fcmTokenRegistered) {
-      await _registerGuardianNotifications(user!);
         if (mounted) setState(() => _isLoadingRole = false);
       }
+
+      user = ref.read(authStateProvider).value;
     }
 
-    final updatedUser = ref.read(authStateProvider).value;
-    if (updatedUser == null) return;
+    if (user == null) return;
 
-    debugPrint("🔍 updatedUser.isDependent: ${updatedUser.isDependent}");
-    debugPrint("🔍 updatedUser.currentRole: ${updatedUser.currentRole?.roleName}");
-    debugPrint("🔍 _dependentTrackingStarted: $_dependentTrackingStarted");
-
-    // Start dependent foreground service automatically
-    if (updatedUser.isDependent && !_dependentTrackingStarted) {
+    // 🚀 Start dependent foreground tracking
+    if (user.isDependent && !_dependentTrackingStarted) {
       _dependentTrackingStarted = true;
-      ref.read(dependentForegroundServiceProvider.notifier)
-          .start() 
+
+      ref
+          .read(dependentForegroundServiceProvider.notifier)
+          .start()
           .then((_) => debugPrint("📡 Dependent tracking started"))
           .catchError(
-              (e) => debugPrint("❌ Error starting dependent tracking: $e"));
+            (e) => debugPrint("❌ Error starting dependent tracking: $e"),
+          );
     }
 
-    // Register guardian FCM
-    if (updatedUser.isGuardian && !_fcmTokenRegistered) {
-      await _registerGuardianNotifications(updatedUser);
+    // 👮 Register guardian FCM
+    if (user.isGuardian && !_fcmTokenRegistered) {
+      await _registerGuardianNotifications(user);
     }
   }
 
@@ -102,9 +90,10 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
       debugPrint('👮 Guardian detected: ${user.fullName}');
       await NotificationService.init();
       final success = await NotificationService.registerDeviceToken();
+
       if (success && mounted) {
         setState(() => _fcmTokenRegistered = true);
-        debugPrint('✅ Guardian FCM token registered successfully');
+        debugPrint('✅ Guardian FCM token registered');
       } else {
         debugPrint('⚠️ Guardian FCM registration failed');
       }
@@ -117,10 +106,12 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
   @override
   void dispose() {
     _sosService.stopListening();
+
     if (_dependentTrackingStarted) {
       ref.read(dependentForegroundServiceProvider.notifier).stop();
       debugPrint("🛑 Dependent tracking stopped");
     }
+
     super.dispose();
   }
 
@@ -150,8 +141,6 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
       roleName,
     );
 
-    final navItems =
-        RoleBasedNavigationConfig.getNavigationItemsForRole(roleName);
     final screens = navItems.map((item) => _screenMap[item.route]!).toList();
 
     if (_currentIndex >= screens.length) {
@@ -162,37 +151,18 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
 
     return Scaffold(
       appBar: _currentIndex == 0 ? const HomeAppBar() : null,
-
       body: IndexedStack(
         index: _currentIndex < screens.length ? _currentIndex : 0,
         children: screens,
       ),
 
-      // ✅ FIXED: Proper bottom navigation placement
+      // ✅ Clean SafeArea Bottom Navigation (no Stack)
       bottomNavigationBar: SafeArea(
         child: RoleBasedBottomNavBar(
           currentIndex: _currentIndex,
           navigationItems: navItems,
           onTap: (index) => setState(() => _currentIndex = index),
         ),
-      appBar: _currentIndex == 0 ? const HomeAppBar() : null,
-      body: Stack(
-        children: [
-          IndexedStack(
-            index: _currentIndex < screens.length ? _currentIndex : 0,
-            children: screens,
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: RoleBasedBottomNavBar(
-              currentIndex: _currentIndex,
-              navigationItems: navItems,
-              onTap: (index) => setState(() => _currentIndex = index),
-            ),
-          ),
-        ],
       ),
     );
   }
