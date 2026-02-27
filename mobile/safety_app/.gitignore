@@ -214,3 +214,8 @@ firebase-debug.*.log*
 *.temp
 *.old
 *.orig
+
+# In your .gitignore
+uploads/
+**/uploads/voices/
+*.wav
