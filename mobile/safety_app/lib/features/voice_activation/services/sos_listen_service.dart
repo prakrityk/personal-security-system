@@ -235,6 +235,7 @@ class SOSListenService {
     if (!_isListening) return;
     _isListening = false;
     await _recorder.stop();
+    
     print("🛑 SOS Listener stopped.");
   }
 
