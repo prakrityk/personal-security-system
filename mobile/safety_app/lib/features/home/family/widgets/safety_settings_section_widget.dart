@@ -1,15 +1,15 @@
 // lib/features/home/family/widgets/safety_settings_section_widget.dart
 //
 // Guardian view of a dependent's safety settings.
-// When the primary guardian toggles motion detection the API is updated as
-// before.  Additionally, if the current device IS the dependent (i.e. the
-// user is running the app in dependent role on their own phone), we call
-// MotionDetectionGate.refreshRemoteSetting() so the sensor stops/starts
-// immediately without requiring an app restart.
+// When the primary guardian toggles motion detection the API is updated.
+// refreshRemoteSetting() is called so the sensor on the dependent's device
+// stops/starts on next evaluate() without requiring an app restart.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:safety_app/core/providers/auth_provider.dart';
+import 'package:safety_app/core/providers/shared_providers.dart';
 import 'package:safety_app/core/theme/app_colors.dart';
 import 'package:safety_app/core/theme/app_text_styles.dart';
 import 'package:safety_app/models/dependent_model.dart';
@@ -116,11 +116,21 @@ class _SafetySettingsSectionWidgetState
         }
       });
 
-      // Re-evaluate the gate outside setState so ref is in scope.
-      // This ensures the dependent device reacts immediately if they are
-      // also running the app at the same time.
+      // After updating the DB, tell the gate to re-fetch the remote setting.
+      // The gate runs on the GUARDIAN's device here — it calls
+      // _fetchAndCacheRemoteSetting() which hits getMySafetySettings().
+      // On the dependent's device, evaluate() will pick up the new value
+      // next time it is called (app resume / next login).
       if (setting == 'motion') {
-        MotionDetectionGate.instance.refreshRemoteSetting(ref);
+        final prefs = ref.read(sharedPreferencesProvider);
+        final user = ref.read(authStateProvider).value;
+        final gateUser = user != null
+            ? GateUser(user.roles?.map((r) => r.roleName).toList() ?? [])
+            : null;
+        await MotionDetectionGate.instance.refreshRemoteSetting(
+          prefs,
+          gateUser,
+        );
       }
 
       _showSuccessSnackbar('Safety setting updated successfully');

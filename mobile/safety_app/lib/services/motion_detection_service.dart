@@ -336,7 +336,9 @@ class MotionDetectionService {
   // ─────────────────────────────────────────────
 
   void _initBackgroundService() {
-    unawaited(initMotionBackgroundService());
+    // initMotionBackgroundService() is already called once in main.dart
+    // before runApp — calling it again here would reconfigure the service
+    // mid-run. Only start it here.
     unawaited(startMotionBackgroundService());
 
     _bgMotionSub = FlutterBackgroundService().on('motion_detected').listen((
