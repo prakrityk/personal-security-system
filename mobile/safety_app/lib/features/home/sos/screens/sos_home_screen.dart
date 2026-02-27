@@ -71,7 +71,6 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
     setState(() => _isLoadingSettings = true);
 
     try {
-      // ✅ FIXED: authStateProvider matches general_home_screen.dart usage
       final user = ref.read(authStateProvider).value;
 
       if (user == null) {
@@ -280,9 +279,11 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
   }
 
   // ── Long press: release → send SOS with recorded audio ──────────────────
+  // ✅ FIX: Removed `if (!_voiceMessageService.isRecording) return` guard here.
+  // stopRecording() has its own internal guard. The external guard was causing
+  // the release to be silently skipped if the user released before _isRecording
+  // was set (i.e. before recorder.start() finished awaiting).
   void _onLongPressEnd() {
-    if (!_voiceMessageService.isRecording) return;
-
     _voiceMessageService.stopRecording(
       onComplete: (filePath) => _finishRecordingAndSendSOS(filePath),
       onError: (error) {
@@ -570,7 +571,6 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final permissionAsync = ref.watch(permissionSummaryProvider);
-    // ✅ FIXED: authStateProvider matches general_home_screen.dart
     final user = ref.watch(authStateProvider).value;
 
     return Padding(
@@ -684,8 +684,7 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color:
-                                      Colors.black.withOpacity(isDark ? 0.3 : 0.05),
+                                  color: Colors.black.withOpacity(isDark ? 0.3 : 0.05),
                                   blurRadius: 20,
                                   offset: const Offset(0, 4),
                                 ),
@@ -962,7 +961,6 @@ class _CountdownDialogState extends State<_CountdownDialog> {
 
 // ─── Providers ────────────────────────────────────────────────────────────────
 
-// ✅ dioClientProvider declared locally (same pattern as original backup)
 final dioClientProvider = Provider<DioClient>((ref) {
   return DioClient();
 });
