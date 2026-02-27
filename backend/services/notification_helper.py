@@ -158,7 +158,7 @@ class NotificationHelper:
         print(f"📋 Dependent: {dependent_name}, Event ID: {event_id}")
         
         title = "🚨 Motion Detection Alert"
-        body = f"{dependent_name}: Possible fall detected"
+        body = f"{dependent_name}: Motion Help detected"
         
         data = {
             "type": NotificationChannelType.MOTION_DETECTION,

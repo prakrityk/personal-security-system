@@ -5,11 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:safety_app/core/navigation/role_based_navigation_config.dart';
 import 'package:safety_app/core/providers/auth_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:safety_app/models/user_model.dart';
 import 'package:safety_app/features/home/widgets/role_based_bottom_nav_bar.dart';
 import 'package:safety_app/features/home/home_app_bar.dart';
 import 'package:safety_app/services/notification_service.dart';
+import 'package:safety_app/services/dependent_foreground_services.dart';
+import 'package:safety_app/features/voice_activation/services/sos_listen_service.dart';
+
 import 'sos/screens/sos_home_screen.dart';
 import 'map/screens/live_location_screen.dart';
 import 'safety/screens/safety_settings_screen.dart';
@@ -26,11 +28,12 @@ class GeneralHomeScreen extends ConsumerStatefulWidget {
 
 class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
   int _currentIndex = 0;
-  SOSListenService? _sosService;
+  final SOSListenService _sosService = SOSListenService();
+
   bool _isLoadingRole = false;
   bool _fcmTokenRegistered = false;
+  bool _dependentTrackingStarted = false;
 
-  // ✅ FIXED: const constructors so IndexedStack preserves widget state
   final Map<String, Widget> _screenMap = {
     'sos': const SosHomeScreen(),
     'family': const SmartFamilyListScreen(),
@@ -41,15 +44,17 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
   @override
   void initState() {
     super.initState();
-    _sosService = SOSListenService();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeUserState();
+    });
   }
 
-  /// ===========================
-  /// ROLE + FCM HANDLING
-  /// ===========================
+  // 🔥 Unified initialization logic
+  Future<void> _initializeUserState() async {
+    UserModel? user = ref.read(authStateProvider).value;
 
-  Future<void> _checkAndLoadRole(UserModel user) async {
-    if (!user.hasRole || user.currentRole == null) {
+    // Refresh role if missing
+    if (user != null && (!user.hasRole || user.currentRole == null)) {
       setState(() => _isLoadingRole = true);
 
       try {
@@ -60,19 +65,41 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
           await _registerGuardianNotifications(updatedUser!);
         }
       } catch (e) {
-        debugPrint('❌ Error loading role: $e');
+        debugPrint("❌ Error refreshing user: $e");
       } finally {
         if (mounted) setState(() => _isLoadingRole = false);
       }
-    } else if (user.isGuardian && !_fcmTokenRegistered) {
+
+      user = ref.read(authStateProvider).value;
+    }
+
+    if (user == null) return;
+
+    // 🚀 Start dependent foreground tracking
+    if (user.isDependent && !_dependentTrackingStarted) {
+      _dependentTrackingStarted = true;
+
+      ref
+          .read(dependentForegroundServiceProvider.notifier)
+          .start()
+          .then((_) => debugPrint("📡 Dependent tracking started"))
+          .catchError(
+            (e) => debugPrint("❌ Error starting dependent tracking: $e"),
+          );
+    }
+
+    // 👮 Register guardian FCM
+    if (user.isGuardian && !_fcmTokenRegistered) {
       await _registerGuardianNotifications(user);
     }
   }
 
   Future<void> _registerGuardianNotifications(UserModel user) async {
     try {
+      debugPrint('👮 Guardian detected: ${user.fullName}');
       await NotificationService.init();
       final success = await NotificationService.registerDeviceToken();
+
       if (success && mounted) {
         setState(() => _fcmTokenRegistered = true);
       }
@@ -207,28 +234,24 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
     if (_currentIndex >= screens.length) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) setState(() => _currentIndex = 0);
+        if (mounted) setState(() => _currentIndex = 0);
       });
     }
 
     return Scaffold(
       appBar: _currentIndex == 0 ? const HomeAppBar() : null,
-      body: Stack(
-        children: [
-          IndexedStack(
-            index: _currentIndex < screens.length ? _currentIndex : 0,
-            children: screens,
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: RoleBasedBottomNavBar(
-              currentIndex: _currentIndex,
-              navigationItems: navItems,
-              onTap: (index) => setState(() => _currentIndex = index),
-            ),
-          ),
-        ],
+      body: IndexedStack(
+        index: _currentIndex < screens.length ? _currentIndex : 0,
+        children: screens,
+      ),
+
+      // ✅ Clean SafeArea Bottom Navigation (no Stack)
+      bottomNavigationBar: SafeArea(
+        child: RoleBasedBottomNavBar(
+          currentIndex: _currentIndex,
+          navigationItems: navItems,
+          onTap: (index) => setState(() => _currentIndex = index),
+        ),
       ),
     );
   }
