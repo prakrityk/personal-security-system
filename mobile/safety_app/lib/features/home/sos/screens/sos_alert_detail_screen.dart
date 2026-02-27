@@ -18,6 +18,8 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../services/sos_event_service.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/foundation.dart';
 
 // ─── Data model ──────────────────────────────────────────────────────────────
 
@@ -657,38 +659,50 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
               child: Stack(
                 children: [
                   // Map or fallback placeholder
-                  hasAny
-                      ? GoogleMap(
-                          initialCameraPosition: CameraPosition(
-                            target: LatLng(
-                              _sosLat ?? _liveLat!,
-                              _sosLng ?? _liveLng!,
-                            ),
-                            zoom: 15,
+                  if (hasAny)
+                    SizedBox(
+                      height: 220,
+                      child: GoogleMap(
+                        initialCameraPosition: CameraPosition(
+                          target: LatLng(
+                            _sosLat ?? _liveLat!,
+                            _sosLng ?? _liveLng!,
                           ),
-                          onMapCreated: (controller) {
-                            _mapController = controller;
-                            if (isDark) controller.setMapStyle(_darkMapStyle);
-                          },
-                          markers: _buildMarkers(),
-                          zoomControlsEnabled: false,
-                          myLocationButtonEnabled: false,
-                          mapToolbarEnabled: false,
-                          compassEnabled: false,
-                        )
-                      : Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.location_off_rounded,
-                                  color: colors.hint, size: 32),
-                              const SizedBox(height: 8),
-                              Text('Location unavailable',
-                                  style: TextStyle(
-                                      color: colors.hint, fontSize: 13)),
-                            ],
-                          ),
+                          zoom: 17,
                         ),
+                        onMapCreated: (controller) {
+                          _mapController = controller;
+                          if (isDark) controller.setMapStyle(_darkMapStyle);
+                        },
+                        markers: _buildMarkers(),
+                        zoomControlsEnabled: false,
+                        myLocationButtonEnabled: false,
+                        mapToolbarEnabled: false,
+                        compassEnabled: false,
+                        mapType: MapType.normal,
+                        // FIX 1: claim touch events immediately so scroll view
+                        // only activates when the finger starts outside the map
+                        gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+                          Factory<EagerGestureRecognizer>(
+                            () => EagerGestureRecognizer(),
+                          ),
+                        },
+                      ),
+                    )
+                  else
+                    Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.location_off_rounded,
+                              color: colors.hint, size: 32),
+                          const SizedBox(height: 8),
+                          Text('Location unavailable',
+                              style: TextStyle(
+                                  color: colors.hint, fontSize: 13)),
+                        ],
+                      ),
+                    ),
 
                   // "Open in Maps" overlay badge
                   if (hasAny)
@@ -1031,8 +1045,7 @@ const String _darkMapStyle = '''
   {"featureType": "road.highway", "elementType": "geometry", "stylers": [{"color": "#3e4340"}]},
   {"featureType": "water", "elementType": "geometry", "stylers": [{"color": "#121614"}]},
   {"featureType": "water", "elementType": "labels.text.fill", "stylers": [{"color": "#3e4340"}]},
-  {"featureType": "poi", "stylers": [{"visibility": "off"}]},
-  {"featureType": "transit", "stylers": [{"visibility": "off"}]}
+{"featureType": "poi", "elementType": "labels", "stylers": [{"visibility": "on"}]},  {"featureType": "transit", "stylers": [{"visibility": "off"}]}
 ]
 ''';
 
