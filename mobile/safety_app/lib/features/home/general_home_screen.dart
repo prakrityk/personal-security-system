@@ -11,12 +11,11 @@ import 'package:safety_app/features/home/home_app_bar.dart';
 import 'package:safety_app/services/notification_service.dart';
 import 'package:safety_app/services/dependent_foreground_services.dart';
 import 'package:safety_app/features/voice_activation/services/sos_listen_service.dart';
-
+import 'package:permission_handler/permission_handler.dart';
 import 'sos/screens/sos_home_screen.dart';
 import 'map/screens/live_location_screen.dart';
 import 'safety/screens/safety_settings_screen.dart';
 import 'family/screens/smart_family_list_screen.dart';
-import 'package:safety_app/features/voice_activation/services/sos_listen_service.dart';
 import 'package:safety_app/services/dependent_safety_service.dart';
 
 class GeneralHomeScreen extends ConsumerStatefulWidget {
@@ -52,6 +51,15 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
   // 🔥 Unified initialization logic
   Future<void> _initializeUserState() async {
     UserModel? user = ref.read(authStateProvider).value;
+
+print('🔍 USER: ${user?.fullName}');
+  print('🔍 HAS ROLE: ${user?.hasRole}');
+  print('🔍 CURRENT ROLE: ${user?.currentRole?.roleName}');
+  print('🔍 IS GUARDIAN: ${user?.isGuardian}');
+  print('🔍 IS CHILD: ${user?.isChild}');
+  print('🔍 IS ELDERLY: ${user?.isElderly}');
+  print('🔍 IS VOICE REGISTERED: ${user?.isVoiceRegistered}');
+
 
     // Refresh role if missing
     if (user != null && (!user.hasRole || user.currentRole == null)) {
@@ -92,6 +100,7 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
     if (user.isGuardian && !_fcmTokenRegistered) {
       await _registerGuardianNotifications(user);
     }
+    _startListeningIfEligible(user);
   }
 
   Future<void> _registerGuardianNotifications(UserModel user) async {
@@ -113,10 +122,10 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
   /// ===========================
 
   void _startListeningIfEligible(UserModel user) {
-    if (_sosService == null) return;
+    // if (_sosService == null) return;
 
     if (user.isGuardian) {
-      if (user.isVoiceRegistered && !_sosService!.isCurrentlyListening) {
+      if (user.isVoiceRegistered && !_sosService.isCurrentlyListening) {
         _startSOSListening(user);
       }
     } else if (user.isChild || user.isElderly) {
@@ -125,7 +134,7 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
   }
 
   Future<void> _startSOSListening(UserModel user) async {
-    if (_sosService == null) return;
+    // if (_sosService == null) return;
 
     final int? userId = int.tryParse(user.id);
     if (userId == null) return;
@@ -136,7 +145,7 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
       if (!status.isGranted) return;
     }
 
-    await _sosService!.startListening(
+    await _sosService.startListening(
       userId: userId,
       onSOSConfirmed: () {
         if (!mounted) return;
@@ -152,7 +161,7 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
   }
 
   Future<void> _checkDependentAudioSettingAndStart(UserModel user) async {
-    if (_sosService == null) return;
+    // if (_sosService == null) return;
 
     try {
       final safetyService = DependentSafetyService();
@@ -168,7 +177,7 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
           if (!status.isGranted) return;
         }
 
-        await _sosService!.startListening(
+        await _sosService.startListening(
           userId: dependentId,
           onSOSConfirmed: () {
             if (!mounted) return;
@@ -183,7 +192,7 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
         );
       } else {
         if (_sosService!.isCurrentlyListening) {
-          await _sosService!.stopListening();
+          await _sosService.stopListening();
         }
       }
     } catch (e) {
@@ -195,7 +204,7 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
   void dispose() {
     // ✅ FIXED: SOSListenService only has stopListening(), not dispose()
     // Calling dispose() would throw NoSuchMethodError at runtime
-    _sosService?.stopListening();
+    _sosService.stopListening();
     super.dispose();
   }
 
@@ -215,7 +224,7 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
       (previous, next) {
         final updatedUser = next.value;
         if (updatedUser != null) {
-          _checkAndLoadRole(updatedUser);
+          _initializeUserState();
           _startListeningIfEligible(updatedUser);
         }
       },
@@ -233,7 +242,6 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
 
     if (_currentIndex >= screens.length) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) setState(() => _currentIndex = 0);
         if (mounted) setState(() => _currentIndex = 0);
       });
     }

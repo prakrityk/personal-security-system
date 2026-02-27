@@ -12,3 +12,9 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+
+
+# In your .gitignore
+uploads/
+**/uploads/voices/
+*.wav

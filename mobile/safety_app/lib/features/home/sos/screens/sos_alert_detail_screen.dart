@@ -1,13 +1,25 @@
 // lib/features/home/sos/screens/sos_alert_detail_screen.dart
 //
 // Guardian's view when they tap an SOS notification.
-// Shows: alert metadata, static location (from SOS event), voice message player.
+// Shows: alert metadata, SOS trigger location + live location on map, voice message player.
+//
+// Map behaviour:
+//   - Red marker  → where SOS was triggered (sos_events lat/lng, static)
+//   - Blue marker → dependent's current position (live_locations, polled every 5s)
+//   - Tap map     → opens Google Maps app / browser for navigation
+//
+// pubspec.yaml dependencies needed:
+//   google_maps_flutter: ^2.9.0
+//   url_launcher: ^6.3.0
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
-import '../../../../services/sos_event_service.dart'; // ADD THIS
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../../../services/sos_event_service.dart';
 
-// ─── Data model passed into this screen ──────────────────────────────────────
+// ─── Data model ──────────────────────────────────────────────────────────────
 
 enum SosTriggerType { manual, motion, voice }
 
@@ -16,10 +28,11 @@ class SosAlertData {
   final String dependentAvatarUrl;
   final DateTime triggeredAt;
   final SosTriggerType triggerType;
-  final double? latitude;
+  final double? latitude;       // SOS trigger location (sos_events)
   final double? longitude;
   final String? voiceMessageUrl;
   final int sosEventId;
+  final int? dependentUserId;   // needed to query live_locations
 
   const SosAlertData({
     required this.dependentName,
@@ -30,9 +43,9 @@ class SosAlertData {
     this.latitude,
     this.longitude,
     this.voiceMessageUrl,
+    this.dependentUserId,
   });
 
-  // ✅ NEW: Create a copy with updated fields
   SosAlertData copyWith({
     String? dependentName,
     String? dependentAvatarUrl,
@@ -42,6 +55,7 @@ class SosAlertData {
     double? longitude,
     String? voiceMessageUrl,
     int? sosEventId,
+    int? dependentUserId,
   }) {
     return SosAlertData(
       dependentName: dependentName ?? this.dependentName,
@@ -52,6 +66,7 @@ class SosAlertData {
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
       voiceMessageUrl: voiceMessageUrl ?? this.voiceMessageUrl,
+      dependentUserId: dependentUserId ?? this.dependentUserId,
     );
   }
 }
@@ -69,50 +84,48 @@ class SosAlertDetailScreen extends StatefulWidget {
 
 class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
     with TickerProviderStateMixin {
-  // Audio
+  // ── Audio ──────────────────────────────────────────────────────────────────
   final AudioPlayer _audioPlayer = AudioPlayer();
   PlayerState _playerState = PlayerState.stopped;
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
   bool _audioLoading = false;
 
-  // Pulse animation for the alert header
+  // ── Animations ─────────────────────────────────────────────────────────────
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
-
-  // Slide-in animation
   late AnimationController _slideController;
   late Animation<Offset> _slideAnimation;
   late Animation<double> _fadeAnimation;
 
+  // ── State ──────────────────────────────────────────────────────────────────
   bool _acknowledged = false;
-
-  // ✅ NEW: Local copy of alert data that can be updated
   late SosAlertData _alertData;
-
-  // ✅ NEW: Service for fetching data
-  final SosEventService _sosEventService = SosEventService();
-
-  // ✅ NEW: Loading state
   bool _isLoading = true;
 
+  // ── Map ────────────────────────────────────────────────────────────────────
+  GoogleMapController? _mapController;
+
+  // SOS trigger location (static, from sos_events) — red marker
+  double? _sosLat;
+  double? _sosLng;
+
+  // Live current location (from live_locations) — blue marker, polled every 5s
+  double? _liveLat;
+  double? _liveLng;
+  DateTime? _liveUpdatedAt;
+  Timer? _liveLocationTimer;
+
+  // ── Service ────────────────────────────────────────────────────────────────
+  final SosEventService _sosEventService = SosEventService();
+
+  // ─────────────────────────────────────────────────────────────────────────
   @override
   void initState() {
     super.initState();
-
-    // Initialize with passed data
     _alertData = widget.alert;
 
-    debugPrint('🎤 [SosAlertDetail] ========== SCREEN LOADED ==========');
-    debugPrint('🎤 [SosAlertDetail] eventId: ${_alertData.sosEventId}');
-    debugPrint(
-      '🎤 [SosAlertDetail] initial dependentName: ${_alertData.dependentName}',
-    );
-    debugPrint(
-      '🎤 [SosAlertDetail] initial voiceMessageUrl: "${_alertData.voiceMessageUrl}"',
-    );
-
-    // ✅ FETCH the full SOS data from backend
+    debugPrint('🚨 [SosAlertDetail] loaded — eventId: ${_alertData.sosEventId}');
     _fetchSosDetails();
 
     _pulseController = AnimationController(
@@ -134,14 +147,12 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _slideController, curve: Curves.easeOut));
 
-    _fadeAnimation = Tween<double>(
-      begin: 0,
-      end: 1,
-    ).animate(CurvedAnimation(parent: _slideController, curve: Curves.easeOut));
+    _fadeAnimation = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(parent: _slideController, curve: Curves.easeOut),
+    );
 
-    // Audio listeners
-    _audioPlayer.onPlayerStateChanged.listen((state) {
-      if (mounted) setState(() => _playerState = state);
+    _audioPlayer.onPlayerStateChanged.listen((s) {
+      if (mounted) setState(() => _playerState = s);
     });
     _audioPlayer.onDurationChanged.listen((d) {
       if (mounted) setState(() => _duration = d);
@@ -154,69 +165,143 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
     });
   }
 
-  // ✅ NEW: Fetch SOS details from backend
+  // ─── Fetch SOS event (sos_events table) ───────────────────────────────────
   Future<void> _fetchSosDetails() async {
     try {
       setState(() => _isLoading = true);
 
-      final eventId = _alertData.sosEventId;
-      debugPrint('📡 Fetching SOS details for event $eventId');
+      final data = await _sosEventService.getSosEventById(_alertData.sosEventId);
+      debugPrint('✅ SOS event: $data');
 
-      final data = await _sosEventService.getSosEventById(eventId);
-      debugPrint('✅ Fetched SOS data: $data');
-
-      // Parse trigger type
       SosTriggerType triggerType;
       switch (data['trigger_type']) {
-        case 'motion':
-          triggerType = SosTriggerType.motion;
-          break;
-        case 'voice':
-          triggerType = SosTriggerType.voice;
-          break;
-        default:
-          triggerType = SosTriggerType.manual;
+        case 'motion': triggerType = SosTriggerType.motion; break;
+        case 'voice':  triggerType = SosTriggerType.voice;  break;
+        default:       triggerType = SosTriggerType.manual;
       }
 
-      // Parse latitude/longitude
-      double? latitude = data['latitude'] != null
-          ? double.tryParse(data['latitude'].toString())
-          : null;
-      double? longitude = data['longitude'] != null
-          ? double.tryParse(data['longitude'].toString())
-          : null;
+      final lat = data['latitude'] != null
+          ? double.tryParse(data['latitude'].toString()) : null;
+      final lng = data['longitude'] != null
+          ? double.tryParse(data['longitude'].toString()) : null;
 
-      // Parse timestamp
       DateTime triggeredAt = DateTime.now();
       if (data['created_at'] != null) {
-        try {
-          triggeredAt = DateTime.parse(data['created_at']);
-        } catch (e) {
-          debugPrint('⚠️ Error parsing date: $e');
-        }
+        try { triggeredAt = DateTime.parse(data['created_at']); } catch (_) {}
       }
 
-      // ✅ Update local data with fetched values
+      final dependentUserId = data['dependent_user_id'] != null
+          ? int.tryParse(data['dependent_user_id'].toString()) : null;
+
       setState(() {
+        _sosLat = lat;
+        _sosLng = lng;
         _alertData = _alertData.copyWith(
           dependentName: data['dependent_name'] ?? _alertData.dependentName,
           triggerType: triggerType,
-          latitude: latitude,
-          longitude: longitude,
+          latitude: lat,
+          longitude: lng,
           voiceMessageUrl: data['voice_message_url'],
           triggeredAt: triggeredAt,
+          dependentUserId: dependentUserId,
         );
         _isLoading = false;
       });
 
-      debugPrint('🎤 Updated voiceMessageUrl: "${_alertData.voiceMessageUrl}"');
-      debugPrint(
-        '🎤 Has voice: ${_alertData.voiceMessageUrl != null && _alertData.voiceMessageUrl!.isNotEmpty}',
-      );
+      if (lat != null && lng != null && _mapController != null) {
+        _mapController!.animateCamera(CameraUpdate.newLatLng(LatLng(lat, lng)));
+      }
+
+      // Start polling live_locations every 5 seconds
+      if (dependentUserId != null) {
+        _startLiveLocationPolling(dependentUserId);
+      }
     } catch (e) {
       debugPrint('❌ Error fetching SOS details: $e');
       setState(() => _isLoading = false);
     }
+  }
+
+  // ─── Poll live_locations table ─────────────────────────────────────────────
+  void _startLiveLocationPolling(int userId) {
+    _fetchLiveLocation(userId);
+    _liveLocationTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => _fetchLiveLocation(userId),
+    );
+  }
+
+  Future<void> _fetchLiveLocation(int userId) async {
+    try {
+      // Requires backend endpoint: GET /live-locations/:userId
+      // SQL: SELECT * FROM live_locations WHERE user_id = $1
+      final data = await _sosEventService.getLiveLocation(userId);
+
+      final lat = data['latitude'] != null
+          ? double.tryParse(data['latitude'].toString()) : null;
+      final lng = data['longitude'] != null
+          ? double.tryParse(data['longitude'].toString()) : null;
+      DateTime? updatedAt;
+      if (data['updated_at'] != null) {
+        try { updatedAt = DateTime.parse(data['updated_at'].toString()); } catch (_) {}
+      }
+
+      if (lat != null && lng != null && mounted) {
+        setState(() {
+          _liveLat = lat;
+          _liveLng = lng;
+          _liveUpdatedAt = updatedAt;
+        });
+      }
+    } catch (e) {
+      debugPrint('⚠️ Live location fetch failed: $e');
+    }
+  }
+
+  // ─── Open Google Maps app ──────────────────────────────────────────────────
+  Future<void> _openInGoogleMaps(double lat, double lng) async {
+    final nativeUri = Uri.parse('google.navigation:q=$lat,$lng');
+    final webUri = Uri.parse(
+      'https://www.google.com/maps/search/?api=1&query=$lat,$lng',
+    );
+    if (await canLaunchUrl(nativeUri)) {
+      await launchUrl(nativeUri);
+    } else {
+      await launchUrl(webUri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  // ─── Build map markers ─────────────────────────────────────────────────────
+  Set<Marker> _buildMarkers() {
+    final markers = <Marker>{};
+
+    if (_sosLat != null && _sosLng != null) {
+      markers.add(Marker(
+        markerId: const MarkerId('sos_trigger'),
+        position: LatLng(_sosLat!, _sosLng!),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        infoWindow: InfoWindow(
+          title: '🚨 SOS triggered here',
+          snippet: 'Alert sent ${_timeAgo(_alertData.triggeredAt)}',
+        ),
+      ));
+    }
+
+    if (_liveLat != null && _liveLng != null) {
+      markers.add(Marker(
+        markerId: const MarkerId('live_location'),
+        position: LatLng(_liveLat!, _liveLng!),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+        infoWindow: InfoWindow(
+          title: '📍 Last seen here',
+          snippet: _liveUpdatedAt != null
+              ? 'Updated ${_timeAgo(_liveUpdatedAt!)}'
+              : _alertData.dependentName,
+        ),
+      ));
+    }
+
+    return markers;
   }
 
   @override
@@ -224,6 +309,8 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
     _pulseController.dispose();
     _slideController.dispose();
     _audioPlayer.dispose();
+    _mapController?.dispose();
+    _liveLocationTimer?.cancel();
     super.dispose();
   }
 
@@ -261,8 +348,7 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
   }
 
   Future<void> _seekTo(double value) async {
-    final target = Duration(milliseconds: value.toInt());
-    await _audioPlayer.seek(target);
+    await _audioPlayer.seek(Duration(milliseconds: value.toInt()));
   }
 
   void _acknowledge() {
@@ -280,38 +366,33 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
 
   String _triggerLabel(SosTriggerType t) {
     switch (t) {
-      case SosTriggerType.manual:
-        return 'Manual SOS';
-      case SosTriggerType.motion:
-        return 'Motion Detected';
-      case SosTriggerType.voice:
-        return 'Voice Activated';
+      case SosTriggerType.manual: return 'Manual SOS';
+      case SosTriggerType.motion: return 'Motion Detected';
+      case SosTriggerType.voice:  return 'Voice Activated';
     }
   }
 
   IconData _triggerIcon(SosTriggerType t) {
     switch (t) {
-      case SosTriggerType.manual:
-        return Icons.pan_tool_alt_rounded;
-      case SosTriggerType.motion:
-        return Icons.sensors_rounded;
-      case SosTriggerType.voice:
-        return Icons.mic_rounded;
+      case SosTriggerType.manual: return Icons.pan_tool_alt_rounded;
+      case SosTriggerType.motion: return Icons.sensors_rounded;
+      case SosTriggerType.voice:  return Icons.mic_rounded;
     }
   }
 
   String _timeAgo(DateTime dt) {
     final diff = DateTime.now().difference(dt);
-    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inSeconds < 60) return '${diff.inSeconds}s ago';
     if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inHours < 24)   return '${diff.inHours}h ago';
     return '${diff.inDays}d ago';
   }
 
+  // ─── Build ─────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = _AppAlertColors(isDark);
 
     return Scaffold(
@@ -324,7 +405,7 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
                 position: _slideAnimation,
                 child: CustomScrollView(
                   slivers: [
-                    _buildAppBar(context, colors, isDark),
+                    _buildAppBar(context, colors),
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -336,7 +417,7 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
                             const SizedBox(height: 24),
                             _buildLocationSlot(colors, isDark),
                             const SizedBox(height: 24),
-                            _buildVoiceMessagePlayer(colors, isDark),
+                            _buildVoiceMessagePlayer(colors),
                             const SizedBox(height: 32),
                             _buildAcknowledgeButton(colors),
                             const SizedBox(height: 40),
@@ -351,22 +432,15 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
     );
   }
 
-  Widget _buildAppBar(
-    BuildContext context,
-    _AppAlertColors colors,
-    bool isDark,
-  ) {
+  Widget _buildAppBar(BuildContext context, _AppAlertColors colors) {
     return SliverAppBar(
       pinned: true,
       backgroundColor: colors.surface,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       leading: IconButton(
-        icon: Icon(
-          Icons.arrow_back_ios_new_rounded,
-          color: colors.onSurface,
-          size: 20,
-        ),
+        icon: Icon(Icons.arrow_back_ios_new_rounded,
+            color: colors.onSurface, size: 20),
         onPressed: () => Navigator.of(context).pop(),
       ),
       title: Text(
@@ -386,8 +460,7 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
   }
 
   Widget _buildAlertHeader(_AppAlertColors colors, bool isDark) {
-    final alert = _alertData; // Use local copy
-
+    final alert = _alertData;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -459,10 +532,9 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
                     Text(
                       'needs your help',
                       style: TextStyle(
-                        color: colors.sosRed,
-                        fontWeight: FontWeight.w500,
-                        fontSize: 14,
-                      ),
+                          color: colors.sosRed,
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14),
                     ),
                   ],
                 ),
@@ -505,114 +577,235 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
   }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(20),
-      ),
+      decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(20)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 14, color: color),
           const SizedBox(width: 5),
-          Text(
-            label,
-            style: TextStyle(
-              color: textColor,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+          Text(label,
+              style: TextStyle(
+                  color: textColor, fontSize: 12, fontWeight: FontWeight.w600)),
         ],
       ),
     );
   }
 
+  // ─── Location slot ─────────────────────────────────────────────────────────
+
   Widget _buildLocationSlot(_AppAlertColors colors, bool isDark) {
+    final hasSos  = _sosLat != null && _sosLng != null;
+    final hasLive = _liveLat != null && _liveLng != null;
+    final hasAny  = hasSos || hasLive;
+
+    // Navigation target: prefer live (most current), fall back to SOS trigger
+    final navLat = _liveLat ?? _sosLat;
+    final navLng = _liveLng ?? _sosLng;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionLabel('Live Location', Icons.location_on_rounded, colors),
-        const SizedBox(height: 12),
-        Container(
-          height: 220,
-          width: double.infinity,
-          decoration: BoxDecoration(
-            color: colors.surface,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: colors.divider),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: Stack(
-              children: [
-                CustomPaint(
-                  size: const Size(double.infinity, 220),
-                  painter: _GridPainter(color: colors.gridColor),
+        // ── Section header row ──────────────────────────────────────────────
+        Row(
+          children: [
+            _sectionLabel('Live Location', Icons.location_on_rounded, colors),
+            const Spacer(),
+            if (hasLive && _liveUpdatedAt != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: colors.primaryGreen.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(20),
                 ),
-                Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: colors.primaryGreen.withOpacity(0.12),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.location_on_rounded,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration:
+                          BoxDecoration(color: colors.success, shape: BoxShape.circle),
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      'Updated ${_timeAgo(_liveUpdatedAt!)}',
+                      style: TextStyle(
                           color: colors.primaryGreen,
-                          size: 32,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        _alertData.latitude != null &&
-                                _alertData.longitude != null
-                            ? '📍 ${_alertData.latitude!.toStringAsFixed(4)}, '
-                                  '${_alertData.longitude!.toStringAsFixed(4)}'
-                            : '📍 Location unavailable',
-                        style: TextStyle(
-                          color: colors.hint,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: colors.primaryGreen.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          _alertData.latitude != null
-                              ? '📍 Static location at SOS time'
-                              : '📍 Map widget goes here',
-                          style: TextStyle(
-                            color: colors.primaryGreen,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
+
+        // ── Map tile (tap → Google Maps) ────────────────────────────────────
+        GestureDetector(
+          onTap: hasAny ? () => _openInGoogleMaps(navLat!, navLng!) : null,
+          child: Container(
+            height: 220,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: colors.surface,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: colors.divider),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: Stack(
+                children: [
+                  // Map or fallback placeholder
+                  hasAny
+                      ? GoogleMap(
+                          initialCameraPosition: CameraPosition(
+                            target: LatLng(
+                              _sosLat ?? _liveLat!,
+                              _sosLng ?? _liveLng!,
+                            ),
+                            zoom: 15,
+                          ),
+                          onMapCreated: (controller) {
+                            _mapController = controller;
+                            if (isDark) controller.setMapStyle(_darkMapStyle);
+                          },
+                          markers: _buildMarkers(),
+                          zoomControlsEnabled: false,
+                          myLocationButtonEnabled: false,
+                          mapToolbarEnabled: false,
+                          compassEnabled: false,
+                        )
+                      : Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.location_off_rounded,
+                                  color: colors.hint, size: 32),
+                              const SizedBox(height: 8),
+                              Text('Location unavailable',
+                                  style: TextStyle(
+                                      color: colors.hint, fontSize: 13)),
+                            ],
                           ),
                         ),
+
+                  // "Open in Maps" overlay badge
+                  if (hasAny)
+                    Positioned(
+                      bottom: 10,
+                      right: 10,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.55),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(Icons.open_in_new_rounded,
+                                color: Colors.white, size: 12),
+                            SizedBox(width: 5),
+                            Text(
+                              'Open in Maps',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
                       ),
-                    ],
-                  ),
-                ),
-              ],
+                    ),
+                ],
+              ),
             ),
           ),
+        ),
+
+        // ── Descriptive legend ──────────────────────────────────────────────
+        if (hasSos || hasLive) ...[
+          const SizedBox(height: 12),
+          if (hasSos)
+            _locationLegendRow(
+              color: colors.sosRed,
+              icon: Icons.crisis_alert_rounded,
+              title: 'Where the SOS was triggered',
+              subtitle: 'Alert sent ${_timeAgo(_alertData.triggeredAt)} · static location',
+              colors: colors,
+            ),
+          if (hasSos && hasLive) const SizedBox(height: 8),
+          if (hasLive)
+            _locationLegendRow(
+              color: const Color(0xFF1565C0),
+              icon: Icons.person_pin_circle_rounded,
+              title: 'Where they were last seen',
+              subtitle: _liveUpdatedAt != null
+                  ? 'Updated ${_timeAgo(_liveUpdatedAt!)} · updates every 5s'
+                  : 'Fetching current position…',
+              colors: colors,
+            ),
+          if (navLat != null && navLng != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              '${navLat.toStringAsFixed(5)}, ${navLng.toStringAsFixed(5)}',
+              style: TextStyle(
+                  color: colors.hint, fontSize: 10, fontFamily: 'monospace'),
+            ),
+          ],
+        ],
+      ],
+    );
+  }
+
+  Widget _locationLegendRow({
+    required Color color,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required _AppAlertColors colors,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          margin: const EdgeInsets.only(top: 2),
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.12),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: color, size: 14),
+        ),
+        const SizedBox(width: 10),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                color: colors.onBackground,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: TextStyle(color: colors.hint, fontSize: 11),
+            ),
+          ],
         ),
       ],
     );
   }
 
-  Widget _buildVoiceMessagePlayer(_AppAlertColors colors, bool isDark) {
-    final hasAudio =
-        _alertData.voiceMessageUrl != null &&
+  // ─── Voice message player ──────────────────────────────────────────────────
+
+  Widget _buildVoiceMessagePlayer(_AppAlertColors colors) {
+    final hasAudio = _alertData.voiceMessageUrl != null &&
         _alertData.voiceMessageUrl!.isNotEmpty;
     final isPlaying = _playerState == PlayerState.playing;
     final progress = _duration.inMilliseconds > 0
@@ -636,10 +829,8 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
                   children: [
                     Icon(Icons.mic_off_rounded, color: colors.hint, size: 22),
                     const SizedBox(width: 12),
-                    Text(
-                      'No voice message attached',
-                      style: TextStyle(color: colors.hint, fontSize: 14),
-                    ),
+                    Text('No voice message attached',
+                        style: TextStyle(color: colors.hint, fontSize: 14)),
                   ],
                 )
               : Column(
@@ -657,11 +848,9 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
                       data: SliderThemeData(
                         trackHeight: 3,
                         thumbShape: const RoundSliderThumbShape(
-                          enabledThumbRadius: 6,
-                        ),
+                            enabledThumbRadius: 6),
                         overlayShape: const RoundSliderOverlayShape(
-                          overlayRadius: 14,
-                        ),
+                            overlayRadius: 14),
                         activeTrackColor: colors.primaryGreen,
                         inactiveTrackColor: colors.divider,
                         thumbColor: colors.primaryGreen,
@@ -679,14 +868,11 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
                     ),
                     Row(
                       children: [
-                        Text(
-                          _formatTime(_position),
-                          style: TextStyle(
-                            color: colors.hint,
-                            fontSize: 12,
-                            fontFamily: 'monospace',
-                          ),
-                        ),
+                        Text(_formatTime(_position),
+                            style: TextStyle(
+                                color: colors.hint,
+                                fontSize: 12,
+                                fontFamily: 'monospace')),
                         const Spacer(),
                         GestureDetector(
                           onTap: _togglePlayback,
@@ -709,9 +895,7 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
                                 ? const Padding(
                                     padding: EdgeInsets.all(14),
                                     child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
+                                        strokeWidth: 2, color: Colors.white),
                                   )
                                 : Icon(
                                     isPlaying
@@ -723,14 +907,11 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
                           ),
                         ),
                         const Spacer(),
-                        Text(
-                          _formatTime(_duration),
-                          style: TextStyle(
-                            color: colors.hint,
-                            fontSize: 12,
-                            fontFamily: 'monospace',
-                          ),
-                        ),
+                        Text(_formatTime(_duration),
+                            style: TextStyle(
+                                color: colors.hint,
+                                fontSize: 12,
+                                fontFamily: 'monospace')),
                       ],
                     ),
                   ],
@@ -739,6 +920,8 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
       ],
     );
   }
+
+  // ─── Acknowledge button ────────────────────────────────────────────────────
 
   Widget _buildAcknowledgeButton(_AppAlertColors colors) {
     return SizedBox(
@@ -812,7 +995,7 @@ class _SosAlertDetailScreenState extends State<SosAlertDetailScreen>
   }
 }
 
-// ─── Color helper ─────────────────────────────────────────────────────
+// ─── Color helper ─────────────────────────────────────────────────────────────
 
 class _AppAlertColors {
   final bool isDark;
@@ -831,14 +1014,29 @@ class _AppAlertColors {
   Color get hint => const Color(0xFF9E9E9E);
   Color get chipBg =>
       isDark ? const Color(0xFF2A2E2C) : const Color(0xFFF0F0F0);
-  Color get gridColor =>
-      isDark ? const Color(0xFF2A2E2C) : const Color(0xFFEEEEEE);
   Color get sosRed => const Color(0xFFA74337);
   Color get primaryGreen => const Color(0xFF2F5249);
   Color get success => const Color(0xFF4CAF50);
 }
 
-// ─── Waveform visual widget ───────────────────────────────────────────────────
+// ─── Dark map style ────────────────────────────────────────────────────────────
+
+const String _darkMapStyle = '''
+[
+  {"elementType": "geometry", "stylers": [{"color": "#1e2623"}]},
+  {"elementType": "labels.text.fill", "stylers": [{"color": "#9e9e9e"}]},
+  {"elementType": "labels.text.stroke", "stylers": [{"color": "#1e2623"}]},
+  {"featureType": "road", "elementType": "geometry", "stylers": [{"color": "#2a2e2c"}]},
+  {"featureType": "road", "elementType": "geometry.stroke", "stylers": [{"color": "#212121"}]},
+  {"featureType": "road.highway", "elementType": "geometry", "stylers": [{"color": "#3e4340"}]},
+  {"featureType": "water", "elementType": "geometry", "stylers": [{"color": "#121614"}]},
+  {"featureType": "water", "elementType": "labels.text.fill", "stylers": [{"color": "#3e4340"}]},
+  {"featureType": "poi", "stylers": [{"visibility": "off"}]},
+  {"featureType": "transit", "stylers": [{"visibility": "off"}]}
+]
+''';
+
+// ─── Waveform visual ──────────────────────────────────────────────────────────
 
 class _WaveformVisual extends StatelessWidget {
   final double progress;
@@ -854,54 +1052,17 @@ class _WaveformVisual extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const bars = [
-      0.3,
-      0.5,
-      0.8,
-      0.6,
-      1.0,
-      0.7,
-      0.4,
-      0.9,
-      0.5,
-      0.7,
-      0.3,
-      0.6,
-      0.8,
-      0.4,
-      1.0,
-      0.6,
-      0.5,
-      0.9,
-      0.3,
-      0.7,
-      0.5,
-      0.8,
-      0.4,
-      0.6,
-      1.0,
-      0.7,
-      0.3,
-      0.5,
-      0.8,
-      0.6,
-      0.4,
-      0.9,
-      0.5,
-      0.7,
-      0.3,
-      0.6,
-      0.8,
-      0.4,
-      1.0,
-      0.6,
+      0.3, 0.5, 0.8, 0.6, 1.0, 0.7, 0.4, 0.9, 0.5, 0.7,
+      0.3, 0.6, 0.8, 0.4, 1.0, 0.6, 0.5, 0.9, 0.3, 0.7,
+      0.5, 0.8, 0.4, 0.6, 1.0, 0.7, 0.3, 0.5, 0.8, 0.6,
+      0.4, 0.9, 0.5, 0.7, 0.3, 0.6, 0.8, 0.4, 1.0, 0.6,
     ];
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: List.generate(bars.length, (i) {
-        final fraction = i / bars.length;
-        final isActive = fraction <= progress;
+        final isActive = (i / bars.length) <= progress;
         return AnimatedContainer(
           duration: const Duration(milliseconds: 100),
           width: 4,
@@ -914,28 +1075,4 @@ class _WaveformVisual extends StatelessWidget {
       }),
     );
   }
-}
-
-// ─── Grid painter ────────────────────────────────────────────────────
-
-class _GridPainter extends CustomPainter {
-  final Color color;
-  _GridPainter({required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = 1;
-    const spacing = 30.0;
-    for (double x = 0; x < size.width; x += spacing) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
-    }
-    for (double y = 0; y < size.height; y += spacing) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_GridPainter old) => old.color != color;
 }

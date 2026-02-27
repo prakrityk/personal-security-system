@@ -13,6 +13,13 @@ typedef SOSCallback = void Function();
 typedef StatusCallback = void Function(String status);
 
 class SOSListenService {
+  // Singleton — ensures only one instance ever exists
+  static final SOSListenService _instance = SOSListenService._internal();
+  factory SOSListenService() => _instance;
+  SOSListenService._internal() {
+    _voiceMessageService = VoiceMessageService(dioClient: DioClient());
+  }
+
   final AudioRecorder _recorder = AudioRecorder();
   final VoiceService _voiceService = VoiceService();
   late final VoiceMessageService _voiceMessageService;
@@ -33,12 +40,6 @@ class SOSListenService {
   DateTime? _firstDetectionTime;
   bool _lastFrameWasPositive = false;
 
-  SOSListenService() {
-    _voiceMessageService = VoiceMessageService(
-      dioClient: DioClient(),
-    );
-  }
-
   Future<void> loadModel(String assetPath) async {
     _interpreter ??= await Interpreter.fromAsset(assetPath);
     print("✅ RAW SOS TFLite model loaded");
@@ -47,7 +48,7 @@ class SOSListenService {
   Future<bool> hasPermission() async => await _recorder.hasPermission();
 
   // ─────────────────────────────────────────────────────────────
-  // LOCATION HELPER (same logic as SosHomeScreen)
+  // LOCATION HELPER
   // ─────────────────────────────────────────────────────────────
   Future<Position?> _getCurrentLocation() async {
     try {
@@ -135,7 +136,6 @@ class SOSListenService {
 
     if (helpScore > 0.8) {
       if (!_lastFrameWasPositive) {
-        // reset if outside detection window
         if (_firstDetectionTime == null ||
             now.difference(_firstDetectionTime!).inSeconds >
                 detectionWindowSeconds) {
@@ -146,7 +146,6 @@ class SOSListenService {
         }
         _lastFrameWasPositive = true;
 
-        // Print which help frame detected
         if (_positiveFrames == 1) {
           print(" First HELP detected!");
         } else if (_positiveFrames == 2) {
@@ -172,6 +171,9 @@ class SOSListenService {
     }
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // VOICE VERIFICATION
+  // ─────────────────────────────────────────────────────────────
   Future<void> _verifyVoiceInternal(
     List<double> audioSamples,
     int userId,
@@ -196,12 +198,11 @@ class SOSListenService {
         onStatusChange?.call("SOS Activated!");
         onConfirmed();
 
-        // 🔴 GET LOCATION AT TRIGGER TIME
         final position = await _getCurrentLocation();
 
         try {
           final result = await _voiceMessageService.createSosWithVoice(
-            filePath: file.path, // Voice file included
+            filePath: file.path,
             triggerType: 'voice',
             eventType: 'voice_activation',
             latitude: position?.latitude,

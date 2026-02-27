@@ -166,3 +166,8 @@ coverage.xml
 *.lock
 *.tmp
 *.temp
+
+# In your .gitignore
+uploads/
+**/uploads/voices/
+*.wav

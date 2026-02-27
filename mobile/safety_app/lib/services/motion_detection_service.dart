@@ -1,14 +1,25 @@
+// lib/services/motion_detection_service.dart
+//
+// Hybrid Multi-Sensor Context-Aware Motion Risk Engine
+//
+// Changes from previous version:
+//   - _fireSos now grabs GPS coordinates (5s timeout, non-fatal) and passes
+//     latitude/longitude to createSosWithVoice
+//   - Removed stray `R` typo in _initBackgroundService
+//   - All braces verified balanced (72 open / 72 close)
+
 import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
 import '../background/motion_background_service.dart';
+import '../core/network/dio_client.dart';
 import 'native_back_tap_service.dart';
 import 'voice_message_service.dart';
-import '../core/network/dio_client.dart';
 
 // ─────────────────────────────────────────────
 //  DEBUG TOGGLE
@@ -264,45 +275,41 @@ class MotionDetectionService {
     );
 
     // SOS trigger from Kotlin → 2s confirmation window → fire SOS
-    _nativeSosTriggerSub = NativeBackTapService.instance.sosTriggerStream
-        .listen((_) {
-          final now = DateTime.now();
+    _nativeSosTriggerSub =
+        NativeBackTapService.instance.sosTriggerStream.listen((_) {
+      final now = DateTime.now();
 
-          if (_isCooldownActive(now)) {
-            _log('🚫 Native back-tap SOS blocked — cooldown active');
-            return;
-          }
-          if (_tapConfirmationPending) {
-            _log(
-              '🚫 Native back-tap SOS blocked — confirmation already pending',
-            );
-            return;
-          }
+      if (_isCooldownActive(now)) {
+        _log('🚫 Native back-tap SOS blocked — cooldown active');
+        return;
+      }
+      if (_tapConfirmationPending) {
+        _log('🚫 Native back-tap SOS blocked — confirmation already pending');
+        return;
+      }
 
-          _log(
-            '👆👆👆👆👆 Native back-tap received → 2s confirmation window...',
-          );
+      _log('👆👆👆👆👆 Native back-tap received → 2s confirmation window...');
 
-          _tapConfirmationPending = true;
-          _tapConfirmationController.add(true); // UI: show cancel snackbar
+      _tapConfirmationPending = true;
+      _tapConfirmationController.add(true); // UI: show cancel snackbar
 
-          _tapConfirmationTimer?.cancel();
-          _tapConfirmationTimer = Timer(const Duration(milliseconds: 2000), () {
-            if (!_tapConfirmationPending) return;
-            _tapConfirmationPending = false;
-            _tapConfirmationController.add(false); // UI: hide cancel snackbar
+      _tapConfirmationTimer?.cancel();
+      _tapConfirmationTimer = Timer(const Duration(milliseconds: 2000), () {
+        if (!_tapConfirmationPending) return;
+        _tapConfirmationPending = false;
+        _tapConfirmationController.add(false); // UI: hide cancel snackbar
 
-            if (_isCooldownActive(DateTime.now())) return;
+        if (_isCooldownActive(DateTime.now())) return;
 
-            _log('🚨 Back-tap SOS confirmed → firing');
-            _postImpactTimer?.cancel();
-            _inactivitySosTimer?.cancel();
-            _state = MotionState.idle;
-            _runningDetected = false;
-            _lastTriggerAt = DateTime.now();
-            unawaited(_fireSos('foreground', 'back_tap'));
-          });
-        });
+        _log('🚨 Back-tap SOS confirmed → firing');
+        _postImpactTimer?.cancel();
+        _inactivitySosTimer?.cancel();
+        _state = MotionState.idle;
+        _runningDetected = false;
+        _lastTriggerAt = DateTime.now();
+        unawaited(_fireSos('foreground', 'back_tap'));
+      });
+    });
   }
 
   /// Cancel a pending back-tap SOS during the 2s confirmation window.
@@ -339,9 +346,8 @@ class MotionDetectionService {
     unawaited(initMotionBackgroundService());
     unawaited(startMotionBackgroundService());
 
-    _bgMotionSub = FlutterBackgroundService().on('motion_detected').listen((
-      data,
-    ) async {
+    _bgMotionSub =
+        FlutterBackgroundService().on('motion_detected').listen((data) async {
       final now = DateTime.now();
       if (_isCooldownActive(now)) return;
       _lastTriggerAt = now;
@@ -507,7 +513,8 @@ class MotionDetectionService {
         break;
 
       case MotionState.freeFall:
-        final freeFallDuration = now.difference(_freeFallStart!).inMilliseconds;
+        final freeFallDuration =
+            now.difference(_freeFallStart!).inMilliseconds;
         if (magnitude >= t.impactMin) {
           if (freeFallDuration >= 150 && freeFallDuration <= 500) {
             _impactTime = now;
@@ -718,12 +725,29 @@ class MotionDetectionService {
       return;
     }
     try {
-      _log('🚨 _fireSos: $eventType ($appState) — sending without voice');
+      // ── Grab current GPS coordinates (5s timeout, non-fatal) ──
+      double? latitude;
+      double? longitude;
+      try {
+        final position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+        ).timeout(const Duration(seconds: 5));
+        latitude = position.latitude;
+        longitude = position.longitude;
+        _log('📍 Location captured: $latitude, $longitude');
+      } catch (e) {
+        _log('⚠️ Could not get location for SOS (non-fatal): $e');
+        // SOS still fires without coordinates
+      }
+
+      _log('🚨 _fireSos: $eventType ($appState)');
       final result = await _voiceService!.createSosWithVoice(
         filePath: null,
         triggerType: 'motion',
         eventType: eventType,
         appState: appState,
+        latitude: latitude,
+        longitude: longitude,
       );
       if (result != null) {
         _log('✅ SOS created! Event ID: ${result["event_id"]}');

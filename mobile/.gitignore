@@ -183,3 +183,8 @@ Desktop.ini
 *.temp
 *.old
 *.swp
+
+# In your .gitignore
+uploads/
+**/uploads/voices/
+*.wav

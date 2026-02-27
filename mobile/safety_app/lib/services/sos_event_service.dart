@@ -52,4 +52,25 @@ class SosEventService {
       rethrow;
     }
   }
+
+  /// ✅ NEW: Get live location of a dependent by their user ID
+  /// Queries live_locations table via GET /live-locations/:userId
+  /// Called by SosAlertDetailScreen every 5 seconds to update the blue marker
+  Future<Map<String, dynamic>> getLiveLocation(int userId) async {
+    try {
+      print('📍 Fetching live location for user ID: $userId');
+
+      final response = await _dioClient.get('/live-locations/$userId');
+
+      if (response.data != null) {
+        print('✅ Live location fetched: ${response.data}');
+        return response.data as Map<String, dynamic>;
+      } else {
+        throw Exception('No live location data received');
+      }
+    } catch (e) {
+      print('❌ Error fetching live location: $e');
+      rethrow;
+    }
+  }
 }
