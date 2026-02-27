@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+// ✅ ADD this import at the top of theme_provider.dart:
+import 'package:safety_app/core/providers/shared_providers.dart';
 
 /// Theme mode notifier with persistence
 class ThemeModeNotifier extends StateNotifier<ThemeMode> {
@@ -45,10 +47,10 @@ class ThemeModeNotifier extends StateNotifier<ThemeMode> {
   bool get isSystemMode => state == ThemeMode.system;
 }
 
-/// Provider for SharedPreferences instance
-final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
-  throw UnimplementedError('SharedPreferences must be overridden in main.dart');
-});
+// /// Provider for SharedPreferences instance
+// final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
+//   throw UnimplementedError('SharedPreferences must be overridden in main.dart');
+// });
 
 /// Provider for theme mode
 final themeModeProvider = StateNotifierProvider<ThemeModeNotifier, ThemeMode>((

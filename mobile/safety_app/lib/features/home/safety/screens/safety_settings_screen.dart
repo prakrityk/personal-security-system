@@ -20,9 +20,7 @@ class SafetySettingsScreen extends ConsumerStatefulWidget {
 class _SafetySettingsScreenState extends ConsumerState<SafetySettingsScreen> {
   bool _liveLocation = false;
   bool _motionDetection = false;
-  //bool _recordEvidence = false;
   bool _isVoiceActivationEnabled = false;
-  bool _isLoadingMotion = true; 
 
   late final SOSListenService sosService;
 
@@ -31,42 +29,25 @@ class _SafetySettingsScreenState extends ConsumerState<SafetySettingsScreen> {
     super.initState();
     sosService = SOSListenService();
 
+    // Load saved motion setting immediately — prefs are already initialized
+    final prefs = ref.read(sharedPreferencesProvider);
+    _motionDetection = prefs.getBool(kMotionDetectionEnabled) ?? false;
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(authStateProvider.notifier).refreshUser();
-       _loadSavedMotionSettings();
     });
   }
-   Future<void> _loadSavedMotionSettings() async {
-    // SharedPreferences instance is available through the Riverpod provider
-    // that was set up in main.dart — read it directly here.
-    final prefs = ref.read(sharedPreferencesProvider);
-
-    final motionEnabled = prefs.getBool(kMotionDetectionEnabled) ?? false;
-
-    if (mounted) {
-      setState(() {
-        _motionDetection = motionEnabled;
-        _isLoadingMotion = false;
-      });
-    }
-
-    debugPrint(
-      '⚙️  [SafetySettingsScreen] Loaded motion toggle: $motionEnabled',
-    );
-  }
-    // ── Toggle handler ────────────────────────────────────────────────────────
 
   Future<void> _onMotionToggle(bool value) async {
-    // Optimistic UI update
     setState(() => _motionDetection = value);
-
-    // Persist & let the gate start/stop the service correctly
-    await MotionDetectionGate.instance.setLocalToggle(value, ref);
-
-    debugPrint(
-      '🔧 [SafetySettingsScreen] Motion detection toggled → $value',
-    );
+    final prefs = ref.read(sharedPreferencesProvider);
+    final user = ref.read(authStateProvider).value;
+    final gateUser = user != null
+        ? GateUser(user.roles?.map((r) => r.roleName).toList() ?? [])
+        : null;
+    await MotionDetectionGate.instance.setLocalToggle(value, prefs, gateUser);
   }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -92,7 +73,7 @@ class _SafetySettingsScreenState extends ConsumerState<SafetySettingsScreen> {
                       color: AppColors.primaryGreen.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Icon(
+                    child: const Icon(
                       Icons.shield,
                       color: AppColors.primaryGreen,
                       size: 28,
@@ -126,7 +107,7 @@ class _SafetySettingsScreenState extends ConsumerState<SafetySettingsScreen> {
               ),
               const SizedBox(height: 24),
 
-              // 1. Live Location Toggle
+              // 1. Live Location
               SafetyToggleTile(
                 icon: Icons.location_on_outlined,
                 title: 'Live Location',
@@ -134,10 +115,9 @@ class _SafetySettingsScreenState extends ConsumerState<SafetySettingsScreen> {
                 isEnabled: _liveLocation,
                 onToggle: (value) => setState(() => _liveLocation = value),
               ),
-
               const SizedBox(height: 16),
 
-              // 2. Voice Registration Toggle
+              // 2. Voice Registration
               SafetyToggleTile(
                 icon: isAlreadyRegistered
                     ? Icons.check_circle
@@ -174,10 +154,9 @@ class _SafetySettingsScreenState extends ConsumerState<SafetySettingsScreen> {
                   }
                 },
               ),
-
               const SizedBox(height: 16),
 
-              // Voice Activation Toggle
+              // 3. Voice Activation
               SafetyToggleTile(
                 icon: Icons.mic_outlined,
                 title: 'Voice Activation',
@@ -201,7 +180,7 @@ class _SafetySettingsScreenState extends ConsumerState<SafetySettingsScreen> {
                   final int? userId = int.tryParse(user.id);
                   if (userId == null) return;
 
-                  if (value == true) {
+                  if (value) {
                     await sosService.startListening(
                       userId: userId,
                       onSOSConfirmed: () {
@@ -212,47 +191,26 @@ class _SafetySettingsScreenState extends ConsumerState<SafetySettingsScreen> {
                           ),
                         );
                       },
-                      onStatusChange: (status) => print("SOS: $status"),
+                      onStatusChange: (status) => debugPrint("SOS: $status"),
                     );
                   } else {
                     await sosService.stopListening();
                   }
                 },
               ),
-
               const SizedBox(height: 16),
 
-              // 3. Motion Detection Toggle
-   // ── 4. Motion Detection ──────────────────────────────────────
-              _isLoadingMotion
-                  ? const Center(
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 12),
-                        child: CircularProgressIndicator(
-                          color: AppColors.primaryGreen,
-                        ),
-                      ),
-                    )
-                  : SafetyToggleTile(
-                      icon: Icons.sensors_outlined,
-                      title: 'Motion Detection',
-                      subtitle: 'Alert on unusual movement patterns',
-                      isEnabled: _motionDetection,
-                      onToggle: _onMotionToggle,
-                    ),
+              // 4. Motion Detection
+              SafetyToggleTile(
+                icon: Icons.sensors_outlined,
+                title: 'Motion Detection',
+                subtitle: 'Alert on unusual movement patterns',
+                isEnabled: _motionDetection,
+                onToggle: _onMotionToggle,
+              ),
               const SizedBox(height: 12),
 
-              // 4. Record Evidence Toggle
-              // SafetyToggleTile(
-              //   icon: Icons.videocam_outlined,
-              //   title: 'Record Evidence',
-              //   subtitle: 'Auto-record during emergency',
-              //   isEnabled: _recordEvidence,
-              //   onToggle: (value) => setState(() => _recordEvidence = value),
-              // ),
-
-              // ── Back-tap info card ──
-              // Always visible — back-tap is always active regardless of toggle
+              // Back-tap info card
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 14,
@@ -269,7 +227,7 @@ class _SafetySettingsScreenState extends ConsumerState<SafetySettingsScreen> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.back_hand_outlined,
                       size: 18,
                       color: AppColors.primaryGreen,
