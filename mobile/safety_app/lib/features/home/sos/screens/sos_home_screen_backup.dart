@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lottie/lottie.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:permission_handler/permission_handler.dart'; // ✅ ADDED
 import 'package:safety_app/core/theme/app_colors.dart';
 import 'package:safety_app/core/theme/app_text_styles.dart';
 import 'package:safety_app/core/providers/personal_emergency_contact_provider.dart';
@@ -15,10 +15,10 @@ import 'package:safety_app/services/voice_message_service.dart';
 import '../widgets/sos_button.dart';
 import 'package:safety_app/services/device_permission_service.dart';
 import 'package:safety_app/core/network/dio_client.dart';
-import 'package:safety_app/core/providers/auth_provider.dart';
-import 'package:safety_app/models/user_model.dart';
 import 'package:safety_app/features/voice_activation/services/sos_listen_service.dart';
 import 'package:safety_app/services/dependent_safety_service.dart';
+import 'package:safety_app/core/providers/auth_provider.dart'; // ✅ ADDED
+import 'package:safety_app/models/user_model.dart'; // ✅ ADDED
 
 class SosHomeScreen extends ConsumerStatefulWidget {
   const SosHomeScreen({super.key});
@@ -43,17 +43,19 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
   @override
   void initState() {
     super.initState();
-
+    
     print('🎯 [SOS Home] Initializing SOS Home Screen');
-
+    
     _voiceMessageService = VoiceMessageService(
       dioClient: ref.read(dioClientProvider),
     );
     _sosListenService = SOSListenService();
-
+    
     WidgetsBinding.instance.addPostFrameCallback((_) {
       print('📞 [SOS Home] Loading personal contacts');
       ref.read(personalContactsNotifierProvider.notifier).loadMyContacts();
+      
+      // Check if continuous listening should be enabled
       _checkAndStartContinuousListening();
     });
   }
@@ -69,22 +71,23 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
   // ── Check and start continuous listening based on user role and settings ──
   Future<void> _checkAndStartContinuousListening() async {
     setState(() => _isLoadingSettings = true);
-
+    
     try {
-      // ✅ FIXED: authStateProvider matches general_home_screen.dart usage
-      final user = ref.read(authStateProvider).value;
-
+      final user = ref.read(authProvider).user;
+      
       if (user == null) {
         print('❌ [SOS Home] No user found, cannot start continuous listening');
         setState(() => _isLoadingSettings = false);
         return;
       }
-
+      
       print('👤 [SOS Home] Current user: ${user.fullName}');
+      print('👤 [SOS Home] User roles: ${user.roleNames}');
       print('👤 [SOS Home] Is guardian: ${user.isGuardian}');
       print('👤 [SOS Home] Is child: ${user.isChild}');
       print('👤 [SOS Home] Is elderly: ${user.isElderly}');
-
+      
+      // For guardians: start if voice is registered
       if (user.isGuardian) {
         if (user.isVoiceRegistered) {
           print('🎤 [SOS Home] Guardian with voice registered - starting continuous listening');
@@ -92,10 +95,13 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
         } else {
           print('ℹ️ [SOS Home] Guardian voice not registered - continuous listening disabled');
         }
-      } else if (user.isChild || user.isElderly) {
+      }
+      // For child/elderly: check dependent safety settings
+      else if (user.isChild || user.isElderly) {
         print('🔍 [SOS Home] Checking dependent safety settings for ${user.id}');
         await _checkDependentSettingsAndStart(user);
-      } else {
+      }
+      else {
         print('ℹ️ [SOS Home] User role not eligible for continuous listening');
       }
     } catch (e) {
@@ -109,18 +115,31 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
   Future<void> _checkDependentSettingsAndStart(UserModel user) async {
     try {
       final safetyService = DependentSafetyService();
-
-      print('📡 [SOS Home] Fetching my safety settings as dependent');
-      final settings = await safetyService.getMySafetySettings();
-
-      print('📊 [SOS Home] Safety settings - audio_recording: ${settings.audioRecording}');
-
+      final int dependentId = int.tryParse(user.id) ?? 0;
+      
+      if (dependentId == 0) {
+        print('❌ [SOS Home] Invalid dependent ID: ${user.id}');
+        return;
+      }
+      
+      print('📡 [SOS Home] Fetching safety settings for dependent $dependentId');
+      final settings = await safetyService.getDependentSafetySettings(dependentId);
+      
+      print('📊 [SOS Home] Safety settings received:');
+      print('   - audio_recording: ${settings.audioRecording}');
+      print('   - live_location: ${settings.liveLocation}');
+      print('   - motion_detection: ${settings.motionDetection}');
+      print('   - auto_recording: ${settings.autoRecording}');
+      
       if (settings.audioRecording) {
-        print('🎤 [SOS Home] Audio recording ENABLED - starting continuous listening');
+        print('🎤 [SOS Home] Audio recording is ENABLED - starting continuous listening');
         await _startContinuousListening(user);
       } else {
-        print('🔇 [SOS Home] Audio recording DISABLED');
+        print('🔇 [SOS Home] Audio recording is DISABLED - continuous listening off');
+        
+        // Stop if it was previously running
         if (_isContinuousListeningActive) {
+          print('🛑 [SOS Home] Stopping previously active listening');
           await _stopContinuousListening();
         }
       }
@@ -131,14 +150,30 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
 
   // ── Start continuous listening ──
   Future<void> _startContinuousListening(UserModel user) async {
-    if (_sosListenService == null) return;
-    if (_isContinuousListeningActive) return;
-
+    if (_sosListenService == null) {
+      print('❌ [SOS Home] SOS Listen Service not initialized');
+      return;
+    }
+    
+    if (_isContinuousListeningActive) {
+      print('ℹ️ [SOS Home] Continuous listening already active');
+      return;
+    }
+    
     try {
+      print('🎤 [SOS Home] Starting continuous listening for user ${user.id}');
+      
+      // Check microphone permission
       var status = await Permission.microphone.status;
+      print('📱 [SOS Home] Microphone permission status: $status');
+      
       if (!status.isGranted) {
+        print('🔐 [SOS Home] Requesting microphone permission');
         status = await Permission.microphone.request();
+        print('📱 [SOS Home] Microphone permission after request: $status');
+        
         if (!status.isGranted) {
+          print('❌ [SOS Home] Microphone permission denied');
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
@@ -151,32 +186,63 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
           return;
         }
       }
-
+      
       final int? userId = int.tryParse(user.id);
-      if (userId == null) return;
-
+      if (userId == null) {
+        print('❌ [SOS Home] Invalid user ID: ${user.id}');
+        return;
+      }
+      
+      print('🎯 [SOS Home] Initializing SOS listen service with userId: $userId');
+      
       await _sosListenService!.startListening(
         userId: userId,
         onSOSConfirmed: () {
-          print('🚨 [SOS Home] SOS CONFIRMED FROM VOICE DETECTION!');
-          if (mounted) _handleVoiceActivatedSOS();
+          print('🚨🚨🚨 [SOS Home] SOS CONFIRMED FROM VOICE DETECTION! 🚨🚨🚨');
+          if (mounted) {
+            _handleVoiceActivatedSOS();
+          }
         },
         onStatusChange: (status) {
           print('📢 [SOS Listen] Status: $status');
         },
       );
-
-      setState(() => _isContinuousListeningActive = true);
-      print('✅ [SOS Home] Continuous listening started');
-
+      
+      setState(() {
+        _isContinuousListeningActive = true;
+      });
+      
+      print('✅ [SOS Home] Continuous listening started successfully');
+      print('🎤 [SOS Home] App is now listening for "help" keywords');
+      
+      // Show subtle indicator that listening is active
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Row(
+            content: Row(
               children: [
-                Icon(Icons.mic, color: Colors.white, size: 16),
-                SizedBox(width: 8),
-                Text('SOS voice monitoring active'),
+                Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.green,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.green.withOpacity(0.5),
+                        blurRadius: 4,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'SOS voice monitoring active',
+                    style: TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
               ],
             ),
             backgroundColor: Colors.green.shade700,
@@ -187,18 +253,29 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
           ),
         );
       }
+      
     } catch (e) {
       print('❌ [SOS Home] Failed to start continuous listening: $e');
-      setState(() => _isContinuousListeningActive = false);
+      setState(() {
+        _isContinuousListeningActive = false;
+      });
     }
   }
 
   // ── Stop continuous listening ──
   Future<void> _stopContinuousListening() async {
-    if (_sosListenService == null || !_isContinuousListeningActive) return;
+    if (_sosListenService == null || !_isContinuousListeningActive) {
+      print('ℹ️ [SOS Home] No active listening to stop');
+      return;
+    }
+    
     try {
+      print('🛑 [SOS Home] Stopping continuous listening');
       await _sosListenService!.stopListening();
-      setState(() => _isContinuousListeningActive = false);
+      setState(() {
+        _isContinuousListeningActive = false;
+      });
+      print('✅ [SOS Home] Continuous listening stopped');
     } catch (e) {
       print('❌ [SOS Home] Error stopping continuous listening: $e');
     }
@@ -206,13 +283,26 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
 
   // ── Handle voice-activated SOS ──
   void _handleVoiceActivatedSOS() {
+    print('🚨 [SOS Home] Processing voice-activated SOS');
+    
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Row(
+        content: Row(
           children: [
-            Icon(Icons.warning_amber, color: Colors.white),
-            SizedBox(width: 12),
-            Expanded(
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.auto_awesome,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
               child: Text(
                 '🚨 Voice keyword detected! SOS activated!',
                 style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
@@ -232,40 +322,55 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
   // ── Get current location helper ──────────────────────────────────────────
   Future<Position?> _getCurrentLocation() async {
     try {
-      return await Geolocator.getCurrentPosition(
+      print('📍 [SOS Home] Getting current location');
+      final position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
+      print('📍 [SOS Home] Location obtained: ${position.latitude}, ${position.longitude}');
+      return position;
     } catch (e) {
-      print('❌ Location error: $e');
+      print('❌ [SOS Home] Location error: $e');
       return null;
     }
   }
 
   // ── Long press: start recording ──────────────────────────────────────────
   void _onLongPressStart() {
+    print('👆 [SOS Home] Long press started');
+    
     final contactsState = ref.read(personalContactsNotifierProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     if (contactsState.contacts.isEmpty) {
+      print('⚠️ [SOS Home] No emergency contacts found');
       _showNoContactsDialog(context, isDark);
       return;
     }
 
+    print('🎙️ [SOS Home] Starting voice message recording');
     setState(() {
       _showRecordingOverlay = true;
       _recordingSeconds = 0;
     });
 
+    // Tick every second to show progress
     _recordingTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-      if (!mounted) { t.cancel(); return; }
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
       setState(() => _recordingSeconds++);
+      print('⏱️ [SOS Home] Recording: ${_recordingSeconds}s');
     });
 
     _voiceMessageService.startManualRecording(
-      onComplete: (filePath) => _finishRecordingAndSendSOS(filePath),
+      onComplete: (filePath) {
+        print('✅ [SOS Home] Recording completed at: $filePath');
+        _finishRecordingAndSendSOS(filePath);
+      },
       onError: (error) {
+        print('❌ [SOS Home] Recording error: $error');
         _stopRecordingOverlay();
-        print('❌ [VoiceMessage] $error');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(error),
@@ -281,25 +386,39 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
 
   // ── Long press: release → send SOS with recorded audio ──────────────────
   void _onLongPressEnd() {
-    if (!_voiceMessageService.isRecording) return;
+    print('👆 [SOS Home] Long press ended');
+    
+    if (!_voiceMessageService.isRecording) {
+      print('ℹ️ [SOS Home] No active recording to stop');
+      return;
+    }
 
+    print('⏹️ [SOS Home] Stopping recording');
     _voiceMessageService.stopRecording(
-      onComplete: (filePath) => _finishRecordingAndSendSOS(filePath),
+      onComplete: (filePath) {
+        print('✅ [SOS Home] Recording stopped, file: $filePath');
+        _finishRecordingAndSendSOS(filePath);
+      },
       onError: (error) {
+        print('❌ [SOS Home] Error stopping recording: $error');
         _stopRecordingOverlay();
-        print('❌ [VoiceMessage] $error');
       },
     );
   }
 
-  // ── After recording: send SOS with voice ────────────────────────────────
+  // ── After recording: send SOS with voice using unified endpoint ───────────
   Future<void> _finishRecordingAndSendSOS(String filePath) async {
+    print('📤 [SOS Home] Finishing recording and sending SOS');
     _stopRecordingOverlay();
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     try {
       final position = await _getCurrentLocation();
-
+      
+      print('🚨 [SOS Home] Creating SOS with voice message');
+      print('   - File: $filePath');
+      print('   - Location: ${position != null ? "${position.latitude}, ${position.longitude}" : "Not available"}');
+      
       final result = await _voiceMessageService.createSosWithVoice(
         filePath: filePath,
         triggerType: 'manual',
@@ -310,25 +429,32 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
       );
 
       if (result != null && result['event_id'] != null) {
+        print('✅ [SOS Home] SOS event created successfully!');
+        print('   - Event ID: ${result['event_id']}');
+        print('   - Voice URL: ${result['voice_url']}');
+        
         if (!mounted) return;
         _showSOSActivatedConfirmation(context, isDark, withVoice: true);
       } else {
         throw Exception('Failed to create SOS with voice');
       }
     } catch (e) {
-      print('❌ [SOS] Failed: $e');
+      print('❌ [SOS Home] Failed to send SOS: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Failed to send SOS. Please try again.'),
+        SnackBar(
+          content: const Text('Failed to send SOS. Please try again.'),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.all(16),
         ),
       );
     }
   }
 
   void _stopRecordingOverlay() {
+    print('🛑 [SOS Home] Stopping recording overlay');
     _recordingTimer?.cancel();
     _recordingTimer = null;
     if (mounted) {
@@ -339,16 +465,20 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
     }
   }
 
-  // ── Tap: confirm → countdown → send (no voice) ──────────────────────────
+  // ── Tap: existing confirm → countdown → send (no voice) ─────────────────
   void _activateSOS(BuildContext context, WidgetRef ref) {
+    print('🆘 [SOS Home] Activate SOS button tapped');
+    
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final contactsState = ref.read(personalContactsNotifierProvider);
 
     if (contactsState.contacts.isEmpty) {
+      print('⚠️ [SOS Home] No emergency contacts, showing dialog');
       _showNoContactsDialog(context, isDark);
       return;
     }
 
+    print('📋 [SOS Home] Showing confirmation dialog');
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -361,7 +491,11 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
                 color: AppColors.sosRed.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(Icons.warning_amber, color: AppColors.sosRed, size: 24),
+              child: const Icon(
+                Icons.warning_amber,
+                color: AppColors.sosRed,
+                size: 24,
+              ),
             ),
             const SizedBox(width: 12),
             const Expanded(child: Text('Confirm SOS Alert')),
@@ -381,7 +515,7 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
               decoration: BoxDecoration(
                 color: Colors.blue.withOpacity(0.08),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.blue.withOpacity(0.2)),
+                border: Border.all(color: Colors.blue.withOpacity(0.2), width: 1),
               ),
               child: Row(
                 children: [
@@ -389,7 +523,7 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Tip: Hold the SOS button to record a voice message.',
+                      'Tip: Hold the SOS button to record a voice message with your alert.',
                       style: AppTextStyles.caption.copyWith(color: Colors.blue.shade700),
                     ),
                   ),
@@ -402,7 +536,7 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
               decoration: BoxDecoration(
                 color: Colors.orange.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                border: Border.all(color: Colors.orange.withOpacity(0.3), width: 1),
               ),
               child: Row(
                 children: [
@@ -421,11 +555,15 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () {
+              print('❌ [SOS Home] SOS cancelled by user');
+              Navigator.pop(context);
+            },
             child: const Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () {
+              print('✅ [SOS Home] SOS confirmed by user');
               Navigator.pop(context);
               _showCountdownAndSend(context, isDark);
             },
@@ -442,6 +580,7 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
   }
 
   void _showCountdownAndSend(BuildContext context, bool isDark) {
+    print('⏱️ [SOS Home] Showing countdown dialog');
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -449,16 +588,24 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
         return _CountdownDialog(
           countdownSeconds: _countdownSeconds,
           isDark: isDark,
-          onComplete: () => _sendSosEventNoVoice(context, isDark),
+          onComplete: () {
+            print('⏱️ [SOS Home] Countdown complete, sending SOS');
+            _sendSosEventNoVoice(context, isDark);
+          },
         );
       },
     );
   }
 
   Future<void> _sendSosEventNoVoice(BuildContext context, bool isDark) async {
+    print('📤 [SOS Home] Sending SOS without voice');
+    
     try {
       final position = await _getCurrentLocation();
-
+      
+      print('🚨 [SOS Home] Creating SOS event (no voice)');
+      print('   - Location: ${position != null ? "${position.latitude}, ${position.longitude}" : "Not available"}');
+      
       final result = await _voiceMessageService.createSosWithVoice(
         filePath: null,
         triggerType: 'manual',
@@ -469,26 +616,28 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
       );
 
       if (result != null && result['event_id'] != null) {
+        print('✅ [SOS Home] SOS event created: ${result['event_id']}');
         if (!mounted) return;
         _showSOSActivatedConfirmation(context, isDark, withVoice: false);
       } else {
         throw Exception('Failed to create SOS');
       }
     } catch (e) {
-      print('❌ [SOS] Failed: $e');
+      print('❌ [SOS Home] Failed to send SOS: $e');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Failed to send SOS. Please try again.'),
+        SnackBar(
+          content: const Text('Failed to send SOS. Please try again.'),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.all(16),
         ),
       );
     }
   }
 
   // ── UI helpers ───────────────────────────────────────────────────────────
-
   void _showNoContactsDialog(BuildContext context, bool isDark) {
     showDialog(
       context: context,
@@ -528,6 +677,8 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
 
   void _showSOSActivatedConfirmation(BuildContext context, bool isDark,
       {required bool withVoice}) {
+    print('✅ [SOS Home] Showing SOS confirmation (withVoice: $withVoice)');
+    
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -564,14 +715,11 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
     );
   }
 
-  // ── Build ────────────────────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final permissionAsync = ref.watch(permissionSummaryProvider);
-    // ✅ FIXED: authStateProvider matches general_home_screen.dart
-    final user = ref.watch(authStateProvider).value;
+    final user = ref.watch(authProvider).user;
 
     return Padding(
       padding: const EdgeInsets.all(2.0),
@@ -584,16 +732,16 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
                 end: Alignment.bottomCenter,
                 colors: [
                   isDark ? AppColors.darkBackground : AppColors.lightBackground,
-                  isDark
-                      ? AppColors.darkBackground.withOpacity(0.8)
-                      : AppColors.lightBackground.withOpacity(0.9),
+                  isDark ? AppColors.darkBackground.withOpacity(0.8) : AppColors.lightBackground.withOpacity(0.9),
                 ],
               ),
             ),
             child: RefreshIndicator(
               onRefresh: () async {
+                print('🔄 [SOS Home] Refreshing data');
                 ref.read(personalContactsNotifierProvider.notifier).loadMyContacts();
                 ref.invalidate(permissionSummaryProvider);
+                await _checkAndStartContinuousListening();
               },
               color: isDark ? AppColors.darkAccentGreen1 : AppColors.primaryGreen,
               child: SingleChildScrollView(
@@ -602,36 +750,57 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     const SizedBox(height: 20),
-
-                    // ── Voice monitoring status badge ──
+                    
                     if (_isContinuousListeningActive)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: Colors.green.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: Colors.green.withOpacity(0.3)),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.mic, color: Colors.green, size: 14),
-                              SizedBox(width: 6),
-                              Text(
-                                'Voice monitoring active',
-                                style: TextStyle(
-                                  color: Colors.green,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                ),
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(30),
+                          border: Border.all(color: Colors.green.withOpacity(0.3)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 10,
+                              height: 10,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.green,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.green.withOpacity(0.5),
+                                    blurRadius: 4,
+                                    spreadRadius: 1,
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
+                            ),
+                            const SizedBox(width: 8),
+                            const Text(
+                              '🎤 SOS voice monitoring active',
+                              style: TextStyle(
+                                color: Colors.green,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-
+                    
+                    if (_isLoadingSettings)
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 8),
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                    
                     Center(
                       child: Padding(
                         padding: const EdgeInsets.all(1.0),
@@ -666,26 +835,20 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 20),
                       child: permissionAsync.when(
                         data: (permissions) {
-                          final canEdit =
-                              permissions['can_edit_own_contacts'] as bool? ?? false;
-                          final isDependent =
-                              permissions['user_type'].toString().contains('Dependent');
+                          final canEdit = permissions['can_edit_own_contacts'] as bool? ?? false;
+                          final isDependent = permissions['user_type'].toString().contains('Dependent');
                           return Container(
                             padding: const EdgeInsets.all(20),
                             decoration: BoxDecoration(
-                              color: isDark
-                                  ? AppColors.darkSurface.withOpacity(0.7)
-                                  : AppColors.lightSurface,
+                              color: isDark ? AppColors.darkSurface.withOpacity(0.7) : AppColors.lightSurface,
                               borderRadius: BorderRadius.circular(24),
                               border: Border.all(
-                                color: isDark
-                                    ? AppColors.darkDivider.withOpacity(0.5)
-                                    : AppColors.lightDivider,
+                                color: isDark ? AppColors.darkDivider.withOpacity(0.5) : AppColors.lightDivider,
+                                width: 1,
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color:
-                                      Colors.black.withOpacity(isDark ? 0.3 : 0.05),
+                                  color: Colors.black.withOpacity(isDark ? 0.3 : 0.05),
                                   blurRadius: 20,
                                   offset: const Offset(0, 4),
                                 ),
@@ -701,14 +864,11 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
                           child: Padding(
                             padding: const EdgeInsets.all(40),
                             child: CircularProgressIndicator(
-                              color: isDark
-                                  ? AppColors.darkAccentGreen1
-                                  : AppColors.primaryGreen,
+                              color: isDark ? AppColors.darkAccentGreen1 : AppColors.primaryGreen,
                             ),
                           ),
                         ),
-                        error: (error, stack) =>
-                            _buildErrorState(context, isDark, error.toString(), ref),
+                        error: (error, stack) => _buildErrorState(context, isDark, error.toString(), ref),
                       ),
                     ),
                     const SizedBox(height: 100),
@@ -718,7 +878,6 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
             ),
           ),
 
-          // ── Recording overlay ────────────────────────────────────────────
           if (_showRecordingOverlay)
             Positioned.fill(
               child: _RecordingOverlay(
@@ -732,15 +891,14 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
     );
   }
 
-  Widget _buildErrorState(
-      BuildContext context, bool isDark, String error, WidgetRef ref) {
+  Widget _buildErrorState(BuildContext context, bool isDark, String error, WidgetRef ref) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: Colors.red.withOpacity(0.05),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.red.withOpacity(0.2)),
+        border: Border.all(color: Colors.red.withOpacity(0.2), width: 1),
       ),
       child: Column(
         children: [
@@ -753,8 +911,7 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
             child: const Icon(Icons.error_outline, color: Colors.red, size: 48),
           ),
           const SizedBox(height: 16),
-          Text('Failed to Load Permissions',
-              style: AppTextStyles.h4, textAlign: TextAlign.center),
+          Text('Failed to Load Permissions', style: AppTextStyles.h4, textAlign: TextAlign.center),
           const SizedBox(height: 8),
           Text(
             error,
@@ -771,10 +928,8 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
             icon: const Icon(Icons.refresh),
             label: const Text('Retry'),
             style: ElevatedButton.styleFrom(
-              backgroundColor:
-                  isDark ? AppColors.darkAccentGreen1 : AppColors.primaryGreen,
-              foregroundColor:
-                  isDark ? AppColors.darkBackground : Colors.white,
+              backgroundColor: isDark ? AppColors.darkAccentGreen1 : AppColors.primaryGreen,
+              foregroundColor: isDark ? AppColors.darkBackground : Colors.white,
             ),
           ),
         ],
@@ -783,8 +938,7 @@ class _SosHomeScreenState extends ConsumerState<SosHomeScreen> {
   }
 }
 
-// ─── Recording Overlay ────────────────────────────────────────────────────────
-
+// ─── Recording overlay ────────────────────────────────────────────────────────
 class _RecordingOverlay extends StatelessWidget {
   final int secondsElapsed;
   final int maxSeconds;
@@ -828,7 +982,11 @@ class _RecordingOverlay extends StatelessWidget {
                   shape: BoxShape.circle,
                   color: AppColors.sosRed.withOpacity(0.1),
                 ),
-                child: const Icon(Icons.mic_rounded, color: AppColors.sosRed, size: 36),
+                child: const Icon(
+                  Icons.mic_rounded,
+                  color: AppColors.sosRed,
+                  size: 36,
+                ),
               ),
               const SizedBox(height: 20),
               Text(
@@ -841,7 +999,7 @@ class _RecordingOverlay extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Release to send SOS',
                 style: TextStyle(
                   color: AppColors.sosRed,
@@ -855,16 +1013,17 @@ class _RecordingOverlay extends StatelessWidget {
                 child: LinearProgressIndicator(
                   value: progress,
                   minHeight: 6,
-                  backgroundColor:
-                      isDark ? const Color(0xFF3E4340) : const Color(0xFFE0E0E0),
-                  valueColor:
-                      const AlwaysStoppedAnimation<Color>(AppColors.sosRed),
+                  backgroundColor: isDark ? const Color(0xFF3E4340) : const Color(0xFFE0E0E0),
+                  valueColor: const AlwaysStoppedAnimation<Color>(AppColors.sosRed),
                 ),
               ),
               const SizedBox(height: 12),
               Text(
                 remaining > 0 ? 'Auto-sends in ${remaining}s' : 'Sending...',
-                style: const TextStyle(color: Color(0xFF9E9E9E), fontSize: 13),
+                style: TextStyle(
+                  color: isDark ? const Color(0xFF9E9E9E) : const Color(0xFF9E9E9E),
+                  fontSize: 13,
+                ),
               ),
             ],
           ),
@@ -874,8 +1033,7 @@ class _RecordingOverlay extends StatelessWidget {
   }
 }
 
-// ─── Countdown Dialog ─────────────────────────────────────────────────────────
-
+// ─── Countdown dialog ───────────────────────────────────────────────
 class _CountdownDialog extends StatefulWidget {
   final int countdownSeconds;
   final bool isDark;
@@ -899,8 +1057,15 @@ class _CountdownDialogState extends State<_CountdownDialog> {
   void initState() {
     super.initState();
     _remaining = widget.countdownSeconds;
+    _startCountdown();
+  }
+
+  void _startCountdown() {
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) { timer.cancel(); return; }
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
       setState(() => _remaining--);
       if (_remaining <= 0) {
         timer.cancel();
@@ -927,8 +1092,7 @@ class _CountdownDialogState extends State<_CountdownDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('SOS will be sent in $_remaining seconds.',
-              style: AppTextStyles.bodyMedium),
+          Text('SOS will be sent in $_remaining seconds.', style: AppTextStyles.bodyMedium),
           const SizedBox(height: 12),
           const Text('Tap "Cancel" if you are safe.', style: AppTextStyles.caption),
         ],
@@ -938,20 +1102,16 @@ class _CountdownDialogState extends State<_CountdownDialog> {
           onPressed: () {
             _timer?.cancel();
             Navigator.of(context).pop();
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Text('SOS cancelled'),
-                  backgroundColor: widget.isDark
-                      ? AppColors.darkSurface
-                      : AppColors.lightSurface,
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                  margin: const EdgeInsets.all(16),
-                ),
-              );
-            }
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text('SOS cancelled'),
+                backgroundColor: widget.isDark ? AppColors.darkSurface : AppColors.lightSurface,
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                margin: const EdgeInsets.all(16),
+              ),
+            );
           },
           child: const Text('Cancel'),
         ),
@@ -960,9 +1120,7 @@ class _CountdownDialogState extends State<_CountdownDialog> {
   }
 }
 
-// ─── Providers ────────────────────────────────────────────────────────────────
-
-// ✅ dioClientProvider declared locally (same pattern as original backup)
+// Provider at the bottom
 final dioClientProvider = Provider<DioClient>((ref) {
   return DioClient();
 });

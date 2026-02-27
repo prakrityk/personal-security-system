@@ -1,3 +1,5 @@
+// lib/features/home/general_home_screen.dart
+
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,6 +15,7 @@ import 'map/screens/live_location_screen.dart';
 import 'safety/screens/safety_settings_screen.dart';
 import 'family/screens/smart_family_list_screen.dart';
 import 'package:safety_app/features/voice_activation/services/sos_listen_service.dart';
+import 'package:safety_app/services/dependent_safety_service.dart';
 
 class GeneralHomeScreen extends ConsumerStatefulWidget {
   const GeneralHomeScreen({super.key});
@@ -23,38 +26,35 @@ class GeneralHomeScreen extends ConsumerStatefulWidget {
 
 class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
   int _currentIndex = 0;
-  final SOSListenService _sosService = SOSListenService();
+  SOSListenService? _sosService;
   bool _isLoadingRole = false;
   bool _fcmTokenRegistered = false;
 
-  final Map<String, Widget> _screenMap =  { //const{}
-    'sos': SosHomeScreen(),
-    'family': SmartFamilyListScreen(),
-    'safety': SafetySettingsScreen(),
-    'map': LiveLocationScreen(),
+  // ✅ FIXED: const constructors so IndexedStack preserves widget state
+  final Map<String, Widget> _screenMap = {
+    'sos': const SosHomeScreen(),
+    'family': const SmartFamilyListScreen(),
+    'safety': const SafetySettingsScreen(),
+    'map': const LiveLocationScreen(),
   };
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkAndLoadRole();
-      // _initSOSListener();
-    });
+    _sosService = SOSListenService();
   }
 
-  Future<void> _checkAndLoadRole() async {
-    final user = ref.read(authStateProvider).value;
+  /// ===========================
+  /// ROLE + FCM HANDLING
+  /// ===========================
 
-    // If user exists but has no role, fetch the user data from backend
-    if (user != null && (!user.hasRole || user.currentRole == null)) {
+  Future<void> _checkAndLoadRole(UserModel user) async {
+    if (!user.hasRole || user.currentRole == null) {
       setState(() => _isLoadingRole = true);
 
       try {
-        // Fetch fresh user data with role
         await ref.read(authStateProvider.notifier).refreshUser();
 
-        // ✅ After role is loaded, register FCM token for guardians
         final updatedUser = ref.read(authStateProvider).value;
         if (updatedUser?.isGuardian == true && !_fcmTokenRegistered) {
           await _registerGuardianNotifications(updatedUser!);
@@ -62,107 +62,119 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
       } catch (e) {
         debugPrint('❌ Error loading role: $e');
       } finally {
-        if (mounted) {
-          setState(() => _isLoadingRole = false);
-        }
+        if (mounted) setState(() => _isLoadingRole = false);
       }
-    } else if (user?.isGuardian == true && !_fcmTokenRegistered) {
-      // User already has role, just register FCM token
-      await _registerGuardianNotifications(user!);
+    } else if (user.isGuardian && !_fcmTokenRegistered) {
+      await _registerGuardianNotifications(user);
     }
   }
 
-  /// ✅ IMPROVED: Register FCM token for guardian users
-  /// Uses the improved NotificationService which handles everything internally
   Future<void> _registerGuardianNotifications(UserModel user) async {
     try {
-      debugPrint('👮 Guardian detected: ${user.fullName}');
-      debugPrint('📱 Initializing notification service...');
-
-      // 1️⃣ Initialize notifications (permission + handlers)
       await NotificationService.init();
-
-      // 2️⃣ Register FCM token with backend (NEW VERSION)
       final success = await NotificationService.registerDeviceToken();
-
-      if (success) {
+      if (success && mounted) {
         setState(() => _fcmTokenRegistered = true);
-        debugPrint('✅ Guardian FCM token registered successfully');
-        debugPrint('🎉 Guardian is now ready to receive SOS notifications!');
-      } else {
-        debugPrint(
-          '⚠️ Failed to register FCM token — will retry on next login',
-        );
       }
-    } catch (e, stack) {
-      debugPrint('❌ Error registering guardian notifications: $e');
-      debugPrint(stack.toString());
+    } catch (e) {
+      debugPrint('❌ Error registering FCM: $e');
     }
   }
 
+  /// ===========================
+  /// SOS LISTENING
+  /// ===========================
 
-  /// ✅ Initialize SOS listener if user is logged in and voice is registered
-  // void _initSOSListener() {
-  //   WidgetsBinding.instance.addPostFrameCallback((_) {
-  //     final user = ref.read(authStateProvider).value;
-  //     _startListeningIfEligible(user);
-  //   });
-  // }
+  void _startListeningIfEligible(UserModel user) {
+    if (_sosService == null) return;
 
-  // /// ✅ Start listener only if user exists, voice registered, and not already listening
-  // void _startListeningIfEligible(UserModel? user) {
-  //   if (user != null &&
-  //       user.isVoiceRegistered &&
-  //       !_sosService.isCurrentlyListening) {
-  //     _startSOSListening(user);
-  //   } else if (user != null && !user.isVoiceRegistered) {
-  //     print("ℹ️ Voice not registered → SOS not started");
-  //   }
-  // }
+    if (user.isGuardian) {
+      if (user.isVoiceRegistered && !_sosService!.isCurrentlyListening) {
+        _startSOSListening(user);
+      }
+    } else if (user.isChild || user.isElderly) {
+      _checkDependentAudioSettingAndStart(user);
+    }
+  }
 
-  // Future<void> _startSOSListening(UserModel user) async {
-  //   final int? userId = int.tryParse(user.id);
-  //   if (userId == null) return;
+  Future<void> _startSOSListening(UserModel user) async {
+    if (_sosService == null) return;
 
-  //   // ✅ Ask microphone permission
-  //   var status = await Permission.microphone.status;
-  //   if (!status.isGranted) {
-  //     status = await Permission.microphone.request();
-  //     if (!status.isGranted) {
-  //       print("⚠️ Mic permission denied");
-  //       if (mounted) {
-  //         ScaffoldMessenger.of(context).showSnackBar(
-  //           const SnackBar(content: Text("Microphone needed for SOS")),
-  //         );
-  //       }
-  //       return;
-  //     }
-  //   }
+    final int? userId = int.tryParse(user.id);
+    if (userId == null) return;
 
-  //   await Future.delayed(const Duration(milliseconds: 500));
+    var status = await Permission.microphone.status;
+    if (!status.isGranted) {
+      status = await Permission.microphone.request();
+      if (!status.isGranted) return;
+    }
 
-  //   print("👤 SOS Listener started for user: $userId");
+    await _sosService!.startListening(
+      userId: userId,
+      onSOSConfirmed: () {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🚨 SOS ACTIVATED!'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      },
+      onStatusChange: (_) {},
+    );
+  }
 
-  //   await _sosService.startListening(
-  //     userId: userId,
-  //     onSOSConfirmed: () {
-  //       if (!mounted) return;
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         const SnackBar(
-  //           content: Text(" SOS ACTIVATED!"),
-  //           backgroundColor: Colors.red,
-  //         ),
-  //       );
-  //     },
-  //     onStatusChange: (status) => print(" SOS Status: $status"),
-  //   );
-  // }
+  Future<void> _checkDependentAudioSettingAndStart(UserModel user) async {
+    if (_sosService == null) return;
+
+    try {
+      final safetyService = DependentSafetyService();
+      final int dependentId = int.tryParse(user.id) ?? 0;
+      if (dependentId == 0) return;
+
+      final settings = await safetyService.getDependentSafetySettings(dependentId);
+
+      if (settings.audioRecording) {
+        var status = await Permission.microphone.status;
+        if (!status.isGranted) {
+          status = await Permission.microphone.request();
+          if (!status.isGranted) return;
+        }
+
+        await _sosService!.startListening(
+          userId: dependentId,
+          onSOSConfirmed: () {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('🚨 SOS ACTIVATED!'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          },
+          onStatusChange: (_) {},
+        );
+      } else {
+        if (_sosService!.isCurrentlyListening) {
+          await _sosService!.stopListening();
+        }
+      }
+    } catch (e) {
+      debugPrint('❌ Dependent setting error: $e');
+    }
+  }
 
   @override
   void dispose() {
-    _sosService.stopListening();
+    // ✅ FIXED: SOSListenService only has stopListening(), not dispose()
+    // Calling dispose() would throw NoSuchMethodError at runtime
+    _sosService?.stopListening();
     super.dispose();
   }
+
+  /// ===========================
+  /// BUILD
+  /// ===========================
 
   @override
   Widget build(BuildContext context) {
@@ -170,63 +182,42 @@ class _GeneralHomeScreenState extends ConsumerState<GeneralHomeScreen> {
     final user = userState.value;
     final roleName = user?.currentRole?.roleName;
 
-    // Show loading if we're actively fetching the role
+    // ✅ CORRECT: ref.listen must be inside build(), not didChangeDependencies()
+    ref.listen<AsyncValue<UserModel?>>(
+      authStateProvider,
+      (previous, next) {
+        final updatedUser = next.value;
+        if (updatedUser != null) {
+          _checkAndLoadRole(updatedUser);
+          _startListeningIfEligible(updatedUser);
+        }
+      },
+    );
+
     if (_isLoadingRole ||
         (user != null && (!user.hasRole || user.currentRole == null))) {
       return const Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text('Setting up your account...'),
-            ],
-          ),
-        ),
+        body: Center(child: CircularProgressIndicator()),
       );
     }
 
-    // Get navigation items based on user role
-    final navItems = RoleBasedNavigationConfig.getNavigationItemsForRole(
-      roleName,
-    );
-
-    // Build screens list based on allowed navigation items
+    final navItems = RoleBasedNavigationConfig.getNavigationItemsForRole(roleName);
     final screens = navItems.map((item) => _screenMap[item.route]!).toList();
 
-    // Ensure current index is within bounds
     if (_currentIndex >= screens.length) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          setState(() => _currentIndex = 0);
-        }
+        if (mounted) setState(() => _currentIndex = 0);
       });
     }
 
-    // ✅ React to login changes dynamically
-  //   ref.listen<AsyncValue<UserModel?>>(authStateProvider, (previous, next) {
-  //   final user = next.value;
-  //   if (user != null &&
-  //       user.isVoiceRegistered &&
-  //       !_sosService.isCurrentlyListening) {
-  //     _startSOSListening(user);
-  //   }
-  // });
-
     return Scaffold(
-      appBar: _currentIndex == 0
-          ? const HomeAppBar()
-          : null,
+      appBar: _currentIndex == 0 ? const HomeAppBar() : null,
       body: Stack(
         children: [
-          // Main Content
           IndexedStack(
             index: _currentIndex < screens.length ? _currentIndex : 0,
             children: screens,
           ),
-
-          // Floating Bottom Navigation (Role-based)
           Positioned(
             left: 0,
             right: 0,

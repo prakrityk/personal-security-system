@@ -209,6 +209,7 @@ class VoiceMessageService {
               contentType: MediaType('audio', 'aac'),
             ),
           ));
+          
           print('✅ [VoiceMessage] File attached: $filePath');
         } else {
           print('⚠️ [VoiceMessage] File not found, proceeding without voice: $filePath');
