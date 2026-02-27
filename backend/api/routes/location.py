@@ -19,7 +19,9 @@ class LocationRequest(BaseModel):
     heading: Optional[float] = None
     speed: Optional[float] = None
 
-# Save or update location
+
+# ── Save or update my location ────────────────────────────────────────────────
+
 @router.post("/location", response_model=dict)
 def save_my_location(
     data: LocationRequest,
@@ -51,7 +53,7 @@ def save_my_location(
             accuracy=data.accuracy,
             altitude=data.altitude,
             heading=data.heading,
-            speed=data.speed
+            speed=data.speed,
         )
         db.add(loc)
         db.commit()
@@ -64,5 +66,38 @@ def save_my_location(
         "latitude": loc.latitude,
         "longitude": loc.longitude,
         "updated_at": loc.updated_at.isoformat(),
-        "action": action
+        "action": action,
+    }
+
+
+# ── Get live location of a specific user (guardian use) ──────────────────────
+# Called by the SOS alert detail screen to show where the dependent is right now.
+# Flutter polls this every 5 seconds using the dependent_user_id from the SOS event.
+
+@router.get("/live-locations/{user_id}", response_model=dict)
+def get_live_location(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),  # caller must be authenticated
+):
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Invalid authentication")
+
+    loc = db.query(LiveLocation).filter(LiveLocation.user_id == user_id).first()
+
+    if not loc:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No live location found for user {user_id}",
+        )
+
+    return {
+        "user_id": loc.user_id,
+        "latitude": loc.latitude,
+        "longitude": loc.longitude,
+        "accuracy": loc.accuracy,
+        "altitude": loc.altitude,
+        "heading": loc.heading,
+        "speed": loc.speed,
+        "updated_at": loc.updated_at.isoformat(),
     }
