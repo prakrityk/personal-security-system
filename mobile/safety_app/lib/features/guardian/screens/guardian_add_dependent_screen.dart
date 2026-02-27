@@ -40,10 +40,37 @@ class DependentEntry {
   }
 
   bool get isValid {
-    return nameController.text.trim().isNotEmpty &&
-        selectedType != null &&
-        ageController.text.trim().isNotEmpty &&
-        int.tryParse(ageController.text.trim()) != null;
+    if (nameController.text.trim().isEmpty) return false;
+    if (selectedType == null) return false;
+    final ageText = ageController.text.trim();
+    if (ageText.isEmpty) return false;
+    final age = int.tryParse(ageText);
+    if (age == null) return false;
+    if (selectedType == 'child' && age >= 16) return false;
+    if (selectedType == 'elderly' && (age < 60 || age > 120)) return false;
+    return true;
+  }
+
+  /// Returns an error message if the age is invalid for the selected type, null otherwise.
+  String? get ageError {
+    final ageText = ageController.text.trim();
+    if (ageText.isEmpty) return null;
+    final age = int.tryParse(ageText);
+    if (age == null) return 'Please enter a valid age';
+    if (selectedType == 'child' && age >= 16) {
+      return 'Child age must be below 16';
+    }
+    if (selectedType == 'elderly' && (age < 60 || age > 120)) {
+      return 'Elderly age must be between 60 and 120';
+    }
+    return null;
+  }
+
+  /// Returns the appropriate label hint based on selected type.
+  String get ageLabel {
+    if (selectedType == 'child') return 'Age (0–15)';
+    if (selectedType == 'elderly') return 'Age (60–120)';
+    return 'Age';
   }
 
   PendingDependentCreate toModel() {
@@ -83,15 +110,17 @@ class _GuardianAddDependentScreenState
 
   Future<void> _generateQR(DependentEntry dependent, int index) async {
     if (!dependent.isValid) {
+      // Provide a specific error message based on the age issue
+      final ageErr = dependent.ageError;
+      final message = ageErr ?? 'Please fill all fields before generating QR';
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Row(
+          content: Row(
             children: [
-              Icon(Icons.warning, color: Colors.white),
-              SizedBox(width: 8),
-              Expanded(
-                child: Text('Please fill all fields before generating QR'),
-              ),
+              const Icon(Icons.warning, color: Colors.white),
+              const SizedBox(width: 8),
+              Expanded(child: Text(message)),
             ],
           ),
           backgroundColor: Colors.orange,
@@ -311,6 +340,7 @@ class _GuardianAddDependentScreenState
                                   onGenerateQr: () =>
                                       _generateQR(dependent, index),
                                   isLoading: _isLoading,
+                                  onChanged: () => setState(() {}),
                                 ),
 
                                 if (dependent.qrGenerated &&
@@ -388,11 +418,13 @@ class _DependentForm extends StatefulWidget {
   final DependentEntry dependent;
   final VoidCallback onGenerateQr;
   final bool isLoading;
+  final VoidCallback onChanged;
 
   const _DependentForm({
     required this.dependent,
     required this.onGenerateQr,
     required this.isLoading,
+    required this.onChanged,
   });
 
   @override
@@ -403,6 +435,7 @@ class _DependentFormState extends State<_DependentForm> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final ageError = widget.dependent.ageError;
 
     return Column(
       children: [
@@ -421,17 +454,44 @@ class _DependentFormState extends State<_DependentForm> {
               : (value) {
                   setState(() {
                     widget.dependent.selectedType = value;
+                    // Clear age when type changes to avoid stale invalid values
+                    widget.dependent.ageController.clear();
                   });
+                  widget.onChanged();
                 },
           isDark: isDark,
         ),
 
         const SizedBox(height: 16),
-        AppTextField(
-          label: "Age",
-          keyboardType: TextInputType.number,
-          controller: widget.dependent.ageController,
-          enabled: !widget.dependent.qrGenerated,
+
+        /// Age field — label and error change based on selected type
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AppTextField(
+              label: widget.dependent.ageLabel,
+              keyboardType: TextInputType.number,
+              controller: widget.dependent.ageController,
+              enabled: !widget.dependent.qrGenerated,
+              onChanged: (_) => setState(() {}),
+            ),
+            if (ageError != null) ...[
+              const SizedBox(height: 6),
+              Padding(
+                padding: const EdgeInsets.only(left: 3),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline, size: 14, color: Colors.red),
+                    const SizedBox(width: 4),
+                    Text(
+                      ageError,
+                      style: const TextStyle(fontSize: 10, color: Colors.red),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
         ),
 
         const SizedBox(height: 24),

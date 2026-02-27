@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:safety_app/background/motion_background_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'firebase_options.dart';
@@ -20,6 +21,7 @@ import 'package:safety_app/core/network/api_endpoints.dart';
 import 'package:safety_app/features/home/sos/screens/sos_alert_detail_screen.dart';
 import 'package:safety_app/core/network/dio_client.dart';
 import 'package:safety_app/core/storage/secure_storage_service.dart';
+import 'package:safety_app/core/providers/shared_providers.dart';
 
 // ✅ Global navigator key
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -41,17 +43,36 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   debugPrint('🔔 Background message handled: ${message.notification?.title}');
 }
 
+/// Retries Firebase.initializeApp up to [maxAttempts] times.
+/// The platform channel can be temporarily unavailable on cold start
+/// due to a FlutterJNI detach/reattach race, so we back off and retry.
+Future<void> _initializeFirebase({int maxAttempts = 5}) async {
+  for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+      debugPrint('✅ Firebase initialized (attempt $attempt)');
+      return;
+    } catch (e) {
+      debugPrint('⚠️ Firebase init attempt $attempt failed: $e');
+      if (attempt == maxAttempts) rethrow;
+      // Exponential back-off: 300ms, 600ms, 900ms, 1200ms
+      await Future.delayed(Duration(milliseconds: 300 * attempt));
+    }
+  }
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-    debugPrint('✅ Firebase initialized');
+  // Wait for platform channels before touching Firebase.
+  // The FlutterJNI detach/reattach race on cold start causes a brief
+  // window where the pigeon channel is unavailable.
+  await Future.delayed(const Duration(milliseconds: 500));
 
-    // Wait for platform channels to be ready
-    await Future.delayed(const Duration(milliseconds: 300));
+  try {
+    await _initializeFirebase();
     debugPrint('✅ Platform channels ready');
 
     // ── 1. Save base URL (needed for killed-app SOS HTTP call) ──
@@ -88,6 +109,11 @@ Future<void> main() async {
     }
 
     final sharedPreferences = await SharedPreferences.getInstance();
+
+    // ── 4. Configure background motion detection service ──
+    // Must be called once before the service is ever started.
+    await initMotionBackgroundService();
+    debugPrint('✅ Motion background service configured');
 
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
@@ -131,6 +157,21 @@ class _SOSAppState extends ConsumerState<SOSApp> with WidgetsBindingObserver {
 
     _router = AppRouter.createRouter(ref);
     _initNotificationService();
+
+    // ✅ FIXED: Session restore moved here from build() so it runs exactly
+    // once, inside the ProviderScope, guaranteeing the override is applied.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final authState = ref.read(authStateProvider);
+      if (authState.value != null) {
+        debugPrint('🎯 Session restored → evaluating motion gate');
+        final prefs = ref.read(sharedPreferencesProvider);
+        final user = authState.value;
+        final gateUser = user != null
+            ? GateUser(user.roles?.map((r) => r.roleName).toList() ?? [])
+            : null;
+        await MotionDetectionGate.instance.evaluate(prefs, gateUser);
+      }
+    });
   }
 
   Future<void> _initNotificationService() async {
@@ -281,10 +322,9 @@ class _SOSAppState extends ConsumerState<SOSApp> with WidgetsBindingObserver {
       final isLoggedIn = next.value != null;
       if (wasLoggedIn == isLoggedIn) return;
 
+      final prefs = ref.read(sharedPreferencesProvider);
+
       if (isLoggedIn) {
-        // ── Save token for native back-tap ──
-        // (NativeBackTapService itself is already running; we just make
-        //  sure it has the fresh token after login.)
         try {
           final secureStorage = SecureStorageService();
           final token = await secureStorage.getAccessToken();
@@ -296,33 +336,27 @@ class _SOSAppState extends ConsumerState<SOSApp> with WidgetsBindingObserver {
           debugPrint('⚠️ Could not save token after login: $e');
         }
 
-        // ── Motion detection: gated by toggle + DB value ──
         debugPrint('🎯 Auth login detected → evaluating motion gate');
-        await MotionDetectionGate.instance.evaluate(ref);
+        final user = next.value;
+        final gateUser = user != null
+            ? GateUser(user.roles?.map((r) => r.roleName).toList() ?? [])
+            : null;
+        await MotionDetectionGate.instance.evaluate(prefs, gateUser);
       } else {
-        // ── Logout ──
-        // Clear token so Kotlin cannot fire SOS for a logged-out user.
         await NativeBackTapService.instance.clearToken();
         debugPrint('✅ Token cleared from native service on logout');
 
-        // Stop motion detection only (NOT NativeBackTapService).
         debugPrint('🛑 Auth logout → stopping MotionDetectionService');
         MotionDetectionService.instance.stop();
 
-        final prefs = ref.read(sharedPreferencesProvider);
         await prefs.setBool(kMotionDetectionEnabled, false);
         await prefs.setBool(kRemoteMotionDetectionEnabled, false);
       }
     });
 
-    // ── Session restore: evaluate motion gate if already logged in ──
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final authState = ref.read(authStateProvider);
-      if (authState.value != null) {
-        debugPrint('🎯 Session restored → evaluating motion gate');
-        await MotionDetectionGate.instance.evaluate(ref);
-      }
-    });
+    // ✅ REMOVED: addPostFrameCallback that was here before.
+    // It was re-registering on every rebuild, causing the provider
+    // to be read in an inconsistent state. Moved to initState() above.
 
     return MaterialApp.router(
       title: 'SOS App',
