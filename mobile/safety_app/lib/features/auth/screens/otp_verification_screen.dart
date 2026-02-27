@@ -200,7 +200,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
         child: Column(
           children: [
             Expanded(
-              child: Padding(
+              child: SingleChildScrollView(
                 padding: const EdgeInsets.all(24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -236,7 +236,13 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                             textAlign: TextAlign.center,
                             maxLength: 1,
                             enabled: !_isLoading,
-                            style: AppTextStyles.h3,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: isDark
+                                  ? AppColors.darkOnBackground
+                                  : AppColors.lightOnBackground,
+                            ),
                             decoration: InputDecoration(
                               counterText: '',
                               filled: true,
@@ -270,7 +276,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                       }),
                     ),
 
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 10),
 
                     // Timer and Resend
                     Row(
@@ -302,7 +308,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                       ],
                     ),
 
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
 
                     // Info box
                     Container(
